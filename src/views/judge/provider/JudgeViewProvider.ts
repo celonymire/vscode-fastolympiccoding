@@ -115,7 +115,10 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
 
 		const file = vscode.window.activeTextEditor?.document.fileName;
 		if (!file) {
-			super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
+			super._postMessage({
+				type: WebviewMessageType.SHOW,
+				visible: false,
+			});
 			return;
 		}
 		super._postMessage({ type: WebviewMessageType.SHOW, visible: true });

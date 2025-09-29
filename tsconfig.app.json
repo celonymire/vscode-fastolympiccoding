@@ -20,7 +20,7 @@
 		"src/common/**/*.ts",
 		"src/common/**/*.tsx",
 		"src/utils/common.ts",
-    "src/utils/webview.tsx",
+		"src/utils/webview.tsx",
 		"external/observable.ts"
 	]
 }
