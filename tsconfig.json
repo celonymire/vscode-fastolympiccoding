@@ -1,20 +1,21 @@
 {
-	"compilerOptions": {
-		"paths": {
-			"~common/*": ["./src/common/*"],
-			"~utils/*": ["./src/utils/*"],
-			"~external/*": ["./external/*"]
-		},
-		"strict": true,
-		"outDir": "./dist/types"
-	},
-	"references": [
-		{
-			"path": "./tsconfig.node.json"
-		},
-		{
-			"path": "./tsconfig.app.json"
-		}
-	],
-	"exclude": ["node_modules/**/*"]
+  "compilerOptions": {
+    "paths": {
+      "~shared/*": ["./src/shared/*"],
+      "~webview/*": ["./src/webview/*"],
+      "~extension/*": ["./src/extension/*"],
+      "~external/*": ["./src/external/*"]
+    },
+    "strict": true,
+    "outDir": "./dist/types"
+  },
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ],
+  "exclude": ["node_modules/**/*"]
 }

@@ -1,5 +1,5 @@
 export const content = ["./src/views/**/*.tsx"];
 export const theme = {
-	extend: {},
+  extend: {},
 };
 export const plugins = [];

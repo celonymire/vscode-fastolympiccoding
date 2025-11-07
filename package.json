@@ -1,341 +1,348 @@
 {
-	"name": "vscode-fastolympiccoding",
-	"displayName": "Fast Olympic Coding",
-	"version": "1.3.8",
-	"description": "Competitive programming in VSCode made easy",
-	"icon": "./media/icon.png",
-	"categories": [
-		"Programming Languages",
-		"Keymaps",
-		"Testing"
-	],
-	"engines": {
-		"vscode": "^1.104.0"
-	},
-	"publisher": "sam20908",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/sam20908/vscode-fastolympiccoding.git"
-	},
-	"main": "./dist/extension.js",
-	"activationEvents": [
-		"onStartupFinished"
-	],
-	"contributes": {
-		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "fastolympiccoding",
-					"title": "Fast Olympic Coding",
-					"icon": "$(zap)"
-				}
-			]
-		},
-		"views": {
-			"fastolympiccoding": [
-				{
-					"icon": "$(list-selection)",
-					"id": "fastolympiccoding.judge",
-					"type": "webview",
-					"name": "Judge"
-				},
-				{
-					"icon": "$(debug-alt)",
-					"id": "fastolympiccoding.stress",
-					"type": "webview",
-					"name": "Stress"
-				}
-			]
-		},
-		"configuration": [
-			{
-				"title": "Font",
-				"properties": {
-					"fastolympiccoding.font": {
-						"type": "string",
-						"default": "Consolas",
-						"description": "The font family used for text in UI elements (requires restarting VSCode)."
-					}
-				}
-			},
-			{
-				"title": "File Templates",
-				"properties": {
-					"fastolympiccoding.fileTemplatesBaseDirectory": {
-						"type": "string",
-						"default": null,
-						"description": "The base directory of the file templates (empty string to disable this functionality)."
-					},
-					"fastolympiccoding.foldFileTemplate": {
-						"type": "boolean",
-						"default": false,
-						"description": "Controls if the copied content would be folded by VSCode (only the first foldable content is folded)"
-					},
-					"fastolympiccoding.fileTemplatesDependencies": {
-						"type": "object",
-						"patternProperties": {
-							".+": {
-								"type": "array",
-								"items": {
-									"type": "string",
-									"description": "The path (relative to the base directory) to the other template required by this file."
-								}
-							}
-						}
-					}
-				}
-			},
-			{
-				"title": "Stress Tester",
-				"properties": {
-					"fastolympiccoding.goodSolutionFile": {
-						"type": "string",
-						"default": "${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}",
-						"description": "The full path to the good solution file."
-					},
-					"fastolympiccoding.generatorFile": {
-						"type": "string",
-						"default": "${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}",
-						"description": "The full path to the generator file."
-					},
-					"fastolympiccoding.delayBetweenTestcases": {
-						"type": "integer",
-						"default": 5,
-						"description": "Delay (in milliseconds) between each generated testcases",
-						"minimum": 5
-					},
-					"fastolympiccoding.stressTestcaseTimeLimit": {
-						"type": "integer",
-						"default": 0,
-						"description": "Maximum time (in milliseconds) to let each file run a testcase. Use 0 to let it run infinitely.",
-						"minimum": 0
-					},
-					"fastolympiccoding.stressTimeLimit": {
-						"type": "integer",
-						"default": 60000,
-						"description": "Maximum time (in milliseconds) to let the stress tester run. Use 0 to let it run infinitely.",
-						"minimum": 0
-					}
-				}
-			},
-			{
-				"title": "Compile and Run",
-				"properties": {
-					"fastolympiccoding.runSettings": {
-						"type": "object",
-						"patternProperties": {
-							"\\.[a-zA-Z]+": {
-								"type": "object",
-								"properties": {
-									"compileCommand": {
-										"type": "string",
-										"description": "Command to compile the solution (empty to avoid compilation)."
-									},
-									"runCommand": {
-										"type": "string",
-										"description": "Command to run the solution."
-									},
-									"currentWorkingDirectory": {
-										"type": "string",
-										"description": "Current working directory to set for the solution."
-									}
-								},
-								"required": [
-									"runCommand"
-								]
-							}
-						},
-						"additionalProperties": false
-					}
-				}
-			},
-			{
-				"title": "UI Display Limit",
-				"properties": {
-					"fastolympiccoding.maxDisplayCharacters": {
-						"type": "integer",
-						"default": 2000,
-						"description": "Number of characters to limit displayed text to.",
-						"minimum": 3
-					},
-					"fastolympiccoding.maxDisplayLines": {
-						"type": "integer",
-						"default": 30,
-						"description": "Number of lines to limit displayed text to.",
-						"minimum": 3
-					}
-				}
-			},
-			{
-				"title": "Competitive Companion",
-				"properties": {
-					"fastolympiccoding.port": {
-						"type": "number",
-						"default": 1327,
-						"minimum": 1024,
-						"description": "Port number to listen for Competitive Companion"
-					},
-					"fastolympiccoding.openSelectedFiles": {
-						"type": "boolean",
-						"default": true,
-						"description": "Whether to open all the selected files for the testcases."
-					},
-					"fastolympiccoding.askForWhichFile": {
-						"type": "boolean",
-						"default": false,
-						"description": "Ask which file the testcases will go to every time incoming testcases are detected."
-					},
-					"fastolympiccoding.includePattern": {
-						"type": "string",
-						"default": "**/*",
-						"description": "Glob pattern to filter in the files to include when asking for a file for incoming testcase."
-					},
-					"fastolympiccoding.excludePattern": {
-						"type": "string",
-						"default": "",
-						"description": "Glob pattern to filter out the files to include when asking for a file for incoming testcase."
-					}
-				}
-			}
-		],
-		"commands": [
-			{
-				"command": "fastolympiccoding.compile",
-				"title": "Compile",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.runAll",
-				"title": "Run All Testcases",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.stopAll",
-				"title": "Stop All Testcases",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.deleteAll",
-				"title": "Delete All Testcases",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.saveAll",
-				"title": "Save All Testcases",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.startStressTest",
-				"title": "Start Stress Test",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.stopStressTest",
-				"title": "Stop Stress Test",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.clearStressTest",
-				"title": "Clear Stress Test",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.clearData",
-				"title": "Clear Saved Data",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.insertFileTemplate",
-				"title": "Insert File Template",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.listenForCompetitiveCompanion",
-				"title": "Listen for Competitive Companion",
-				"category": "Fast Olympic Coding"
-			},
-			{
-				"command": "fastolympiccoding.stopCompetitiveCompanion",
-				"title": "Stop Competitive Companion",
-				"category": "Fast Olympic Coding"
-			}
-		],
-		"keybindings": [
-			{
-				"command": "fastolympiccoding.compile",
-				"key": "ctrl+alt+c",
-				"when": "editorFocus"
-			},
-			{
-				"command": "fastolympiccoding.runAll",
-				"key": "ctrl+alt+b",
-				"when": "view.fastolympiccoding.judge.visible"
-			},
-			{
-				"command": "fastolympiccoding.stopAll",
-				"key": "ctrl+alt+k",
-				"when": "view.fastolympiccoding.judge.visible"
-			},
-			{
-				"command": "fastolympiccoding.deleteAll",
-				"key": "ctrl+alt+d",
-				"when": "view.fastolympiccoding.judge.visible"
-			},
-			{
-				"command": "fastolympiccoding.saveAll",
-				"key": "ctrl+alt+s",
-				"when": "view.fastolympiccoding.judge.visible"
-			},
-			{
-				"command": "fastolympiccoding.startStressTest",
-				"key": "ctrl+alt+g",
-				"when": "view.fastolympiccoding.stress.visible"
-			},
-			{
-				"command": "fastolympiccoding.stopStressTest",
-				"key": "ctrl+alt+h",
-				"when": "view.fastolympiccoding.stress.visible"
-			},
-			{
-				"command": "fastolympiccoding.insertFileTemplate",
-				"key": "ctrl+alt+i"
-			}
-		]
-	},
-	"scripts": {
-		"vscode:prepublish": "npm run prod",
-		"lint": "npx @biomejs/biome lint",
-		"format": "npx @biomejs/biome format",
-		"check": "npx @biomejs/biome check",
-		"type-build": "tsc --build",
-		"type-check": "tsc --noEmit",
-		"build-js": "node ./esbuild.mjs",
-		"prod-js": "cross-env NODE_ENV=production node ./esbuild.mjs",
-		"watch-js": "node ./esbuild.mjs --watch",
-		"build-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css",
-		"prod-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css --minify",
-		"watch-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css --watch",
-		"build": "npm-run-all --parallel lint build-*",
-		"prod": "npm-run-all --parallel prod-*",
-		"watch": "npm-run-all --parallel watch-*"
-	},
-	"author": "Sam Huang",
-	"license": "MIT",
-	"devDependencies": {
-		"@biomejs/biome": "^2.2.4",
-		"@tailwindcss/cli": "^4.1.13",
-		"@types/node": "^22.18.6",
-		"@types/vscode": "^1.104.0",
-		"@types/vscode-webview": "^1.57.5",
-		"cross-env": "^7.0.3",
-		"esbuild": "^0.25.10",
-		"npm-run-all": "^4.1.5",
-		"tailwindcss": "^4.1.13",
-		"typescript": "^5.9.2"
-	},
-	"dependencies": {
-		"@preact/signals": "^2.3.1",
-		"nu-observables": "^0.0.7",
-		"preact": "^10.27.2"
-	}
+  "name": "vscode-fastolympiccoding",
+  "displayName": "Fast Olympic Coding",
+  "version": "1.3.8",
+  "description": "Competitive programming in VSCode made easy",
+  "icon": "./media/icon.png",
+  "categories": [
+    "Programming Languages",
+    "Keymaps",
+    "Testing"
+  ],
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "publisher": "sam20908",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sam20908/vscode-fastolympiccoding.git"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "fastolympiccoding",
+          "title": "Fast Olympic Coding",
+          "icon": "$(zap)"
+        }
+      ]
+    },
+    "views": {
+      "fastolympiccoding": [
+        {
+          "icon": "$(list-selection)",
+          "id": "fastolympiccoding.judge",
+          "type": "webview",
+          "name": "Judge"
+        },
+        {
+          "icon": "$(debug-alt)",
+          "id": "fastolympiccoding.stress",
+          "type": "webview",
+          "name": "Stress"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Font",
+        "properties": {
+          "fastolympiccoding.font": {
+            "type": "string",
+            "default": "Consolas",
+            "description": "The font family used for text in UI elements (requires restarting VSCode)."
+          }
+        }
+      },
+      {
+        "title": "File Templates",
+        "properties": {
+          "fastolympiccoding.fileTemplatesBaseDirectory": {
+            "type": "string",
+            "default": null,
+            "description": "The base directory of the file templates (empty string to disable this functionality)."
+          },
+          "fastolympiccoding.foldFileTemplate": {
+            "type": "boolean",
+            "default": false,
+            "description": "Controls if the copied content would be folded by VSCode (only the first foldable content is folded)"
+          },
+          "fastolympiccoding.fileTemplatesDependencies": {
+            "type": "object",
+            "patternProperties": {
+              ".+": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "The path (relative to the base directory) to the other template required by this file."
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "title": "Stress Tester",
+        "properties": {
+          "fastolympiccoding.goodSolutionFile": {
+            "type": "string",
+            "default": "${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}",
+            "description": "The full path to the good solution file."
+          },
+          "fastolympiccoding.generatorFile": {
+            "type": "string",
+            "default": "${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}",
+            "description": "The full path to the generator file."
+          },
+          "fastolympiccoding.delayBetweenTestcases": {
+            "type": "integer",
+            "default": 5,
+            "description": "Delay (in milliseconds) between each generated testcases",
+            "minimum": 5
+          },
+          "fastolympiccoding.stressTestcaseTimeLimit": {
+            "type": "integer",
+            "default": 0,
+            "description": "Maximum time (in milliseconds) to let each file run a testcase. Use 0 to let it run infinitely.",
+            "minimum": 0
+          },
+          "fastolympiccoding.stressTimeLimit": {
+            "type": "integer",
+            "default": 60000,
+            "description": "Maximum time (in milliseconds) to let the stress tester run. Use 0 to let it run infinitely.",
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "title": "Compile and Run",
+        "properties": {
+          "fastolympiccoding.runSettings": {
+            "type": "object",
+            "patternProperties": {
+              "\\.[a-zA-Z]+": {
+                "type": "object",
+                "properties": {
+                  "compileCommand": {
+                    "type": "string",
+                    "description": "Command to compile the solution (empty to avoid compilation)."
+                  },
+                  "runCommand": {
+                    "type": "string",
+                    "description": "Command to run the solution."
+                  },
+                  "currentWorkingDirectory": {
+                    "type": "string",
+                    "description": "Current working directory to set for the solution."
+                  }
+                },
+                "required": [
+                  "runCommand"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "title": "UI Display Limit",
+        "properties": {
+          "fastolympiccoding.maxDisplayCharacters": {
+            "type": "integer",
+            "default": 2000,
+            "description": "Number of characters to limit displayed text to.",
+            "minimum": 3
+          },
+          "fastolympiccoding.maxDisplayLines": {
+            "type": "integer",
+            "default": 30,
+            "description": "Number of lines to limit displayed text to.",
+            "minimum": 3
+          }
+        }
+      },
+      {
+        "title": "Competitive Companion",
+        "properties": {
+          "fastolympiccoding.port": {
+            "type": "number",
+            "default": 1327,
+            "minimum": 1024,
+            "description": "Port number to listen for Competitive Companion"
+          },
+          "fastolympiccoding.openSelectedFiles": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to open all the selected files for the testcases."
+          },
+          "fastolympiccoding.askForWhichFile": {
+            "type": "boolean",
+            "default": false,
+            "description": "Ask which file the testcases will go to every time incoming testcases are detected."
+          },
+          "fastolympiccoding.includePattern": {
+            "type": "string",
+            "default": "**/*",
+            "description": "Glob pattern to filter in the files to include when asking for a file for incoming testcase."
+          },
+          "fastolympiccoding.excludePattern": {
+            "type": "string",
+            "default": "",
+            "description": "Glob pattern to filter out the files to include when asking for a file for incoming testcase."
+          }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "fastolympiccoding.compile",
+        "title": "Compile",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.runAll",
+        "title": "Run All Testcases",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.stopAll",
+        "title": "Stop All Testcases",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.deleteAll",
+        "title": "Delete All Testcases",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.saveAll",
+        "title": "Save All Testcases",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.startStressTest",
+        "title": "Start Stress Test",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.stopStressTest",
+        "title": "Stop Stress Test",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.clearStressTest",
+        "title": "Clear Stress Test",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.clearData",
+        "title": "Clear Saved Data",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.insertFileTemplate",
+        "title": "Insert File Template",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.listenForCompetitiveCompanion",
+        "title": "Listen for Competitive Companion",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.stopCompetitiveCompanion",
+        "title": "Stop Competitive Companion",
+        "category": "Fast Olympic Coding"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "fastolympiccoding.compile",
+        "key": "ctrl+alt+c",
+        "when": "editorFocus"
+      },
+      {
+        "command": "fastolympiccoding.runAll",
+        "key": "ctrl+alt+b",
+        "when": "view.fastolympiccoding.judge.visible"
+      },
+      {
+        "command": "fastolympiccoding.stopAll",
+        "key": "ctrl+alt+k",
+        "when": "view.fastolympiccoding.judge.visible"
+      },
+      {
+        "command": "fastolympiccoding.deleteAll",
+        "key": "ctrl+alt+d",
+        "when": "view.fastolympiccoding.judge.visible"
+      },
+      {
+        "command": "fastolympiccoding.saveAll",
+        "key": "ctrl+alt+s",
+        "when": "view.fastolympiccoding.judge.visible"
+      },
+      {
+        "command": "fastolympiccoding.startStressTest",
+        "key": "ctrl+alt+g",
+        "when": "view.fastolympiccoding.stress.visible"
+      },
+      {
+        "command": "fastolympiccoding.stopStressTest",
+        "key": "ctrl+alt+h",
+        "when": "view.fastolympiccoding.stress.visible"
+      },
+      {
+        "command": "fastolympiccoding.insertFileTemplate",
+        "key": "ctrl+alt+i"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run prod",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "type-build": "tsc --build",
+    "type-check": "tsc --noEmit",
+    "build-js": "node ./esbuild.mjs",
+    "prod-js": "cross-env NODE_ENV=production node ./esbuild.mjs",
+    "watch-js": "node ./esbuild.mjs --watch",
+    "build-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css",
+    "prod-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css --minify",
+    "watch-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css --watch",
+    "build": "npm-run-all --parallel lint build-*",
+    "prod": "npm-run-all --parallel prod-*",
+    "watch": "npm-run-all --parallel watch-*"
+  },
+  "author": "Sam Huang",
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.13",
+    "@types/node": "^22.18.6",
+    "@types/vscode": "^1.104.0",
+    "@types/vscode-webview": "^1.57.5",
+    "@typescript-eslint/eslint-plugin": "^8.46.3",
+    "@typescript-eslint/parser": "^8.46.3",
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.25.10",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-preact": "^0.1.0",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^16.5.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.3.1",
+    "nu-observables": "^0.0.7",
+    "preact": "^10.27.2"
+  }
 }
