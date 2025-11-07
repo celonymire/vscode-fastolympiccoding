@@ -6,32 +6,29 @@ on:
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          version: 6.32.9
-
-      - name: Setup Node.js with pnpm cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: "pnpm"
+          bun-version: latest
 
       - name: Install dependencies
-        run: pnpm install
+        run: bun install
 
       - name: Type check project
         run: |
-          pnpm run type-build
-          pnpm run type-check
+          bun run type-build
+          bun run type-check
 
       - name: Lint and check formatting
-        run: pnpm run check
+        run: |
+          bun run lint
+          bun run check
 
       - name: Build project
-        run: pnpm run build
+        run: bun run build

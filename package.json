@@ -306,7 +306,7 @@
     "vscode:prepublish": "npm run prod",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "check": "prettier --check .",
     "type-build": "tsc --build",
     "type-check": "tsc --noEmit",
     "build-js": "node ./esbuild.mjs",
