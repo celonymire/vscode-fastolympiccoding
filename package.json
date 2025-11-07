@@ -312,9 +312,9 @@
     "build-js": "node ./esbuild.mjs",
     "prod-js": "cross-env NODE_ENV=production node ./esbuild.mjs",
     "watch-js": "node ./esbuild.mjs --watch",
-    "build-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css",
-    "prod-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css --minify",
-    "watch-css": "tailwindcss -i ./src/views/styles.css -o ./dist/styles.css --watch",
+    "build-css": "tailwindcss -i ./src/styles/global.css -o ./dist/styles.css",
+    "prod-css": "tailwindcss -i ./src/styles/global.css -o ./dist/styles.css --minify",
+    "watch-css": "tailwindcss -i ./src/styles/global.css -o ./dist/styles.css --watch",
     "build": "npm-run-all --parallel lint build-*",
     "prod": "npm-run-all --parallel prod-*",
     "watch": "npm-run-all --parallel watch-*"
