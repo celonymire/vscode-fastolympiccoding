@@ -101,7 +101,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
 
     vscode.window.onDidChangeActiveTextEditor(
       () => this.loadCurrentFileData(),
-      this
+      this,
     );
   }
 
@@ -124,7 +124,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
     const fileData = coerceToObject(
-      super.readStorage()[file]
+      super.readStorage()[file],
     ) as Partial<IFileData>;
     const testcases = coerceToArray(fileData.testcases);
     this._timeLimit = fileData.timeLimit ?? 0;
@@ -151,7 +151,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         shown: true,
         toggled: false,
         skipped: false,
-      })
+      }),
     );
 
     if (file === vscode.window.activeTextEditor?.document.fileName) {
@@ -184,7 +184,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       this._saveFileData();
     } else {
       const fileData = coerceToObject(
-        super.readStorage()[file]
+        super.readStorage()[file],
       ) as Partial<IFileData>;
       const testcases = coerceToArray(fileData.testcases);
       testcases.push(testcase);
@@ -289,7 +289,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   private _addTestcase(testcase?: Partial<ITestcase>) {
     this._state.set(
       this._newId,
-      this._createTestcaseState(this._newId, testcase)
+      this._createTestcaseState(this._newId, testcase),
     );
     return this._newId++;
   }
@@ -399,7 +399,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     }
 
     const runSettings = vscode.workspace.getConfiguration(
-      "fastolympiccoding.runSettings"
+      "fastolympiccoding.runSettings",
     );
     const extension = path.extname(file);
     const languageSettings = runSettings[extension] as
@@ -407,7 +407,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       | undefined;
     if (!languageSettings) {
       vscode.window.showWarningMessage(
-        `No run setting detected for file extension "${extension}"`
+        `No run setting detected for file extension "${extension}"`,
       );
       return;
     }
@@ -422,7 +422,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       const code = await compile(
         file,
         languageSettings.compileCommand,
-        this._context
+        this._context,
       );
       if (code) {
         super._postMessage({
@@ -470,21 +470,21 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       resolvedArgs[0],
       newTestcase ? undefined : this._timeLimit,
       cwd,
-      ...resolvedArgs.slice(1)
+      ...resolvedArgs.slice(1),
     );
 
     testcase.process.process?.stdin.write(testcase.stdin.data);
     testcase.process.process?.stderr.on("data", (data: string) =>
-      testcase.stderr.write(data, false)
+      testcase.stderr.write(data, false),
     );
     testcase.process.process?.stdout.on("data", (data: string) =>
-      testcase.stdout.write(data, false)
+      testcase.stdout.write(data, false),
     );
     testcase.process.process?.stderr.once("end", () =>
-      testcase.stderr.write("", true)
+      testcase.stderr.write("", true),
     );
     testcase.process.process?.stdout.once("end", () =>
-      testcase.stdout.write("", true)
+      testcase.stdout.write("", true),
     );
     testcase.process.process?.once("error", (data: Error) => {
       super._postMessage({
@@ -636,17 +636,17 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
     const stdout = vscode.Uri.parse(
-      `${ReadonlyStringProvider.SCHEME}:OUTPUT:\n\n${testcase.stdout.data}`
+      `${ReadonlyStringProvider.SCHEME}:OUTPUT:\n\n${testcase.stdout.data}`,
     );
     const acStdout = vscode.Uri.parse(
-      `${ReadonlyStringProvider.SCHEME}:ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
+      `${ReadonlyStringProvider.SCHEME}:ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`,
     );
 
     vscode.commands.executeCommand(
       "vscode.diff",
       stdout,
       acStdout,
-      `Diff: Testcase #${id + 1}`
+      `Diff: Testcase #${id + 1}`,
     );
   }
 

@@ -106,7 +106,7 @@ export default function Testcase({ id, testcase }: Props) {
   const viewStdio = useCallback(
     (stdio: Stdio) =>
       postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
-    [id]
+    [id],
   );
 
   const newStdin = useSignal("");
@@ -116,16 +116,19 @@ export default function Testcase({ id, testcase }: Props) {
     newStdin.value = "";
   }, []);
 
-  const handleNewStdinKeyUp = useCallback((event: KeyboardEvent) => {
-    if (event.key === "Enter") {
-      postProviderMessage({
-        type: ProviderMessageType.STDIN,
-        id,
-        data: newStdin.value,
-      });
-      newStdin.value = "";
-    }
-  }, [id, newStdin]);
+  const handleNewStdinKeyUp = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === "Enter") {
+        postProviderMessage({
+          type: ProviderMessageType.STDIN,
+          id,
+          data: newStdin.value,
+        });
+        newStdin.value = "";
+      }
+    },
+    [id, newStdin],
+  );
 
   const handleSave = useCallback(() => {
     const stdin = testcase.stdin;
@@ -171,7 +174,7 @@ export default function Testcase({ id, testcase }: Props) {
   const AcceptedStdoutRow: FunctionComponent = () => {
     const handleClick = useCallback(
       () => viewStdio(Stdio.ACCEPTED_STDOUT),
-      [viewStdio]
+      [viewStdio],
     );
     return (
       <div class="flex flex-row">
@@ -298,7 +301,10 @@ export default function Testcase({ id, testcase }: Props) {
           <StdinRow />
           <div class="flex flex-row">
             <div class="w-6 shrink-0" />
-            <AutoresizeTextarea input={newStdin} onKeyUp={handleNewStdinKeyUp} />
+            <AutoresizeTextarea
+              input={newStdin}
+              onKeyUp={handleNewStdinKeyUp}
+            />
           </div>
           <StderrRow />
           <StdoutRow />

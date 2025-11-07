@@ -5,8 +5,5 @@
     "lib": []
   },
   "extends": "./tsconfig.json",
-  "include": [
-    "src/extension/**/*.ts",
-    "src/shared/**/*.ts"
-  ]
+  "include": ["src/extension/**/*.ts", "src/shared/**/*.ts"]
 }

@@ -130,12 +130,12 @@ function submitTimeLimit() {
 export default function App() {
   useEffect(
     () => postProviderMessage({ type: ProviderMessageType.LOADED }),
-    []
+    [],
   );
 
   const handleNext = useCallback(
     () => postProviderMessage({ type: ProviderMessageType.NEXT }),
-    []
+    [],
   );
 
   const handleTimeLimitInput = useCallback((event: Event) => {

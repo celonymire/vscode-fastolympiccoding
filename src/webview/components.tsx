@@ -19,9 +19,12 @@ const ArrowSvg: FunctionComponent<ArrowSvgPropsGeneric> = ({
   color,
   onClick,
 }: ArrowSvgPropsGeneric) => {
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === "Enter") onClick?.();
-  }, [onClick]);
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === "Enter") onClick?.();
+    },
+    [onClick],
+  );
 
   return (
     <svg

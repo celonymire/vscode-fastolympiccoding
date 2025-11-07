@@ -88,11 +88,11 @@ export default function App() {
 
   const handleStop = useCallback(
     () => postProviderMessage({ type: ProviderMessageType.STOP }),
-    []
+    [],
   );
   const handleRun = useCallback(
     () => postProviderMessage({ type: ProviderMessageType.RUN }),
-    []
+    [],
   );
   const handleClear = useCallback(() => clear(), []);
   const handleExpand = useCallback((id: number) => expand(id), []);
