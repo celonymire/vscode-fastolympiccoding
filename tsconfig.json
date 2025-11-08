@@ -7,7 +7,9 @@
       "~external/*": ["./src/external/*"]
     },
     "strict": true,
-    "outDir": "./dist/types"
+    "outDir": "./dist/types",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
   "references": [
     {
