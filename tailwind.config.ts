@@ -1,4 +1,4 @@
-export const content = ["./src/views/**/*.tsx"];
+export const content = ["./src/webview/**/*.tsx"];
 export const theme = {
   extend: {},
 };
