@@ -207,7 +207,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
             "fileTemplatesDependencies",
           );
           const baseDirectory = resolveVariables(
-            // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
             config.get("fileTemplatesBaseDirectory")!,
           );
           const files = (
@@ -249,7 +248,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
               }
             },
           );
-          // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
           const foldTemplate = config.get<boolean>("foldFileTemplate")!;
           if (inserted && foldTemplate) {
             vscode.commands.executeCommand("editor.fold");
@@ -315,13 +313,9 @@ function listenForCompetitiveCompanion() {
         const workspace =
           vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
         const config = vscode.workspace.getConfiguration("fastolympiccoding");
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         const openSelectedFiles = config.get<boolean>("openSelectedFiles")!;
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         const askForWhichFile = config.get<boolean>("askForWhichFile")!;
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         const includePattern = config.get<string>("includePattern")!;
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         const excludePattern = config.get<string>("excludePattern")!;
         const files = (
           await vscode.workspace.findFiles(includePattern, excludePattern)
@@ -407,7 +401,6 @@ function listenForCompetitiveCompanion() {
   });
 
   const config = vscode.workspace.getConfiguration("fastolympiccoding");
-  // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
   const port = config.get<number>("port")!;
   competitiveCompanionServer.listen(port);
 }

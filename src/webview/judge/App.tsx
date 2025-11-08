@@ -65,26 +65,21 @@ function handleNew({ id }: INewMessage) {
 }
 
 function handleSet({ id, property, value }: ISetMessage) {
-  // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the provider
   (testcases.get(id)![property] as unknown) = value;
 }
 
 function handleStdio({ id, data, stdio }: IStdioMessage) {
   switch (stdio) {
     case Stdio.STDIN:
-      // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the provider
       testcases.get(id)!.stdin += data;
       break;
     case Stdio.STDERR:
-      // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the provider
       testcases.get(id)!.stderr += data;
       break;
     case Stdio.STDOUT:
-      // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the provider
       testcases.get(id)!.stdout += data;
       break;
     case Stdio.ACCEPTED_STDOUT:
-      // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the provider
       testcases.get(id)!.acceptedStdout += data;
       break;
   }

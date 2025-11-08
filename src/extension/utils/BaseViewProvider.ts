@@ -76,7 +76,6 @@ export default abstract class<ProviderMessageType, WebviewMessageType>
 
   private _getWebviewContent(webview: vscode.Webview): string {
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
-    // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
     const font = config.get<string>("font")!;
     const scriptUri = this._getUri(webview, ["dist", this.view, "index.js"]);
     const stylesUri = this._getUri(webview, ["dist", "styles.css"]);

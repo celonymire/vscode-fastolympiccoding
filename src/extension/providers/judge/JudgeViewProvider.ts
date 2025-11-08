@@ -178,7 +178,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   addTestcaseToFile(file: string, testcase: ITestcase) {
     // used by stress view
 
-    // biome-ignore lint/style/noNonNullAssertion: Caller guarantees there is an active editor and passes a non-empty string
     if (file === vscode.window.activeTextEditor!.document.fileName) {
       this._addTestcase(testcase);
       this._saveFileData();
@@ -387,7 +386,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       return;
     }
 
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     // stop already-running process
@@ -523,7 +521,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _stop(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     this._state.get(id)!.process.process?.kill();
   }
 
@@ -535,7 +532,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _edit(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
     super._postMessage({
       type: WebviewMessageType.SET,
@@ -552,7 +548,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _accept(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     testcase.status = Status.AC;
@@ -575,7 +570,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _decline(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     testcase.status = Status.NA;
@@ -596,7 +590,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _toggleVisibility(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     testcase.shown = testcase.toggled
@@ -619,7 +612,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _toggleSkip(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     testcase.skipped = !testcase.skipped;
@@ -633,7 +625,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _compare(id: number) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
     const stdout = vscode.Uri.parse(
       `${ReadonlyStringProvider.SCHEME}:OUTPUT:\n\n${testcase.stdout.data}`,
@@ -651,7 +642,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _viewStdio({ id, stdio }: IViewMessage) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     switch (stdio) {
@@ -671,14 +661,12 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   private _stdin({ id, data }: IStdinMessage) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
     testcase.process.process?.stdin.write(data);
     testcase.stdin.write(data, false);
   }
 
   private _save({ id, stdin, acceptedStdout }: ISaveMessage) {
-    // biome-ignore lint/style/noNonNullAssertion: Called only if testcase exists
     const testcase = this._state.get(id)!;
 
     super._postMessage({

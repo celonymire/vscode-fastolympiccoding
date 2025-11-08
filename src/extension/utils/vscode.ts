@@ -28,11 +28,9 @@ export class ReadonlyTerminal implements vscode.Pseudoterminal {
 // 2. "shortened" version which respects the specified maximum boundaries from the settings (not condensed like above)
 export class TextHandler {
   private static readonly INTERVAL: number = 30;
-  // biome-ignore lint/style/noNonNullAssertion: Default is enforced by VSCode
   private static _maxDisplayCharacters: number = vscode.workspace
     .getConfiguration("fastolympiccoding")
     .get("maxDisplayCharacters")!;
-  // biome-ignore lint/style/noNonNullAssertion: Default is enforced by VSCode
   private static _maxDisplayLines: number = vscode.workspace
     .getConfiguration("fastolympiccoding")
     .get("maxDisplayLines")!;

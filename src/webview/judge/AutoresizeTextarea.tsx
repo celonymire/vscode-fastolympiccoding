@@ -10,9 +10,7 @@ export default function App({ input, onKeyUp }: Props) {
   const textarea = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
-    // biome-ignore lint/style/noNonNullAssertion: Reference is guaranteed to be set
     textarea.current!.style.height = "inherit";
-    // biome-ignore lint/style/noNonNullAssertion: Reference is guaranteed to be set
     textarea.current!.style.height = `${textarea.current!.scrollHeight}px`;
   }, [input.value]);
 

@@ -328,13 +328,11 @@ export default function Testcase({ id, testcase }: Props) {
           </div>
           <div class="flex flex-row">
             <ArrowSvgInwards color="#FFFFFF" />
-            {/* biome-ignore lint/style/noNonNullAssertion: Guaranteed by the signals library */}
             <AutoresizeTextarea input={testcase.$stdin!} onKeyUp={noopKeyUp} />
           </div>
           <div class="flex flex-row">
             <ArrowSvgOutwards color={GREEN_COLOR} />
             <AutoresizeTextarea
-              // biome-ignore lint/style/noNonNullAssertion: uaranteed by the signals library
               input={testcase.$acceptedStdout!}
               onKeyUp={noopKeyUp}
             />

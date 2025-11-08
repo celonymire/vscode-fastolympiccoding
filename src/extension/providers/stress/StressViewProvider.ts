@@ -136,7 +136,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     const runSettings = vscode.workspace.getConfiguration(
       "fastolympiccoding.runSettings",
     );
-    // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
     const languageSettings = runSettings[extension] as
@@ -166,19 +165,16 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       };
       const promises = [
         compile(
-          // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
           resolveVariables(config.get("generatorFile")!),
           languageSettings.compileCommand,
           this._context,
         ).then(callback.bind(this, 0)),
         compile(
-          // biome-ignore lint/suspicious/noTemplateCurlyInString: for the extension
           resolveVariables("${file}"),
           languageSettings.compileCommand,
           this._context,
         ).then(callback.bind(this, 1)),
         compile(
-          // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
           resolveVariables(config.get("goodSolutionFile")!),
           languageSettings.compileCommand,
           this._context,
@@ -205,9 +201,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     const cwd = languageSettings.currentWorkingDirectory
       ? resolveVariables(languageSettings.currentWorkingDirectory)
       : undefined;
-    // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
     const testcaseTimeLimit = config.get<number>("stressTestcaseTimeLimit")!;
-    // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
     const timeLimit = config.get<number>("stressTimeLimit")!;
     const start = Date.now();
 
@@ -227,7 +221,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       const seed = Math.round(Math.random() * 9007199254740991);
       const generatorRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         config.get("generatorFile")!,
       );
       this._state[0].process.run(
@@ -253,7 +246,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
 
       const solutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: for the extension
         "${file}",
       );
       this._state[1].process.run(
@@ -276,7 +268,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
 
       const goodSolutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         config.get("goodSolutionFile")!,
       );
       this._state[2].process.run(
@@ -383,7 +374,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     let resolvedFile: string;
     if (id === 0) {
       resolvedFile = resolveVariables(
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         vscode.workspace
           .getConfiguration("fastolympiccoding")
           .get("generatorFile")!,
@@ -392,7 +382,6 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       resolvedFile = file;
     } else {
       resolvedFile = resolveVariables(
-        // biome-ignore lint/style/noNonNullAssertion: Default value provided by VSCode
         vscode.workspace
           .getConfiguration("fastolympiccoding")
           .get("goodSolutionFile")!,

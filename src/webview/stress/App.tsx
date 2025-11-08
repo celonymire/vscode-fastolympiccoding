@@ -149,7 +149,6 @@ export default function App() {
             </div>
           </div>
           <State
-            // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the signals library
             data={state[0].$data!}
             status={state[0].status}
             id={0}
@@ -157,7 +156,6 @@ export default function App() {
             onAdd={handleAdd}
           />
           <State
-            // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the signals library
             data={state[1].$data!}
             status={state[1].status}
             id={1}
@@ -165,7 +163,6 @@ export default function App() {
             onAdd={handleAdd}
           />
           <State
-            // biome-ignore lint/style/noNonNullAssertion: Guaranteed by the signals library
             data={state[2].$data!}
             status={state[2].status}
             id={2}
