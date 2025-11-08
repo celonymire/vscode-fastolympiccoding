@@ -3,7 +3,7 @@ import { useCallback, useLayoutEffect, useRef } from "preact/hooks";
 
 interface Props {
   input: Signal<string>;
-  onKeyUp: (event: KeyboardEvent) => void;
+  onKeyUp?: (event: KeyboardEvent) => void;
 }
 
 export default function App({ input, onKeyUp }: Props) {

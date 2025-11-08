@@ -16,8 +16,6 @@ import { Action, ProviderMessageType } from "~shared/judge-messages";
 import AutoresizeTextarea from "./AutoresizeTextarea";
 import { postProviderMessage } from "./message";
 
-const noopKeyUp = () => {};
-
 interface Props {
   id: number;
   testcase: PreactObservable<ITestcase>;
@@ -106,7 +104,7 @@ export default function Testcase({ id, testcase }: Props) {
   const viewStdio = useCallback(
     (stdio: Stdio) =>
       postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
-    [id],
+    [id]
   );
 
   const newStdin = useSignal("");
@@ -127,7 +125,7 @@ export default function Testcase({ id, testcase }: Props) {
         newStdin.value = "";
       }
     },
-    [id, newStdin],
+    [id, newStdin]
   );
 
   const handleSave = useCallback(() => {
@@ -174,7 +172,7 @@ export default function Testcase({ id, testcase }: Props) {
   const AcceptedStdoutRow: FunctionComponent = () => {
     const handleClick = useCallback(
       () => viewStdio(Stdio.ACCEPTED_STDOUT),
-      [viewStdio],
+      [viewStdio]
     );
     return (
       <div class="flex flex-row">
@@ -328,14 +326,11 @@ export default function Testcase({ id, testcase }: Props) {
           </div>
           <div class="flex flex-row">
             <ArrowSvgInwards color="#FFFFFF" />
-            <AutoresizeTextarea input={testcase.$stdin!} onKeyUp={noopKeyUp} />
+            <AutoresizeTextarea input={testcase.$stdin!} />
           </div>
           <div class="flex flex-row">
             <ArrowSvgOutwards color={GREEN_COLOR} />
-            <AutoresizeTextarea
-              input={testcase.$acceptedStdout!}
-              onKeyUp={noopKeyUp}
-            />
+            <AutoresizeTextarea input={testcase.$acceptedStdout!} />
           </div>
         </div>
       );
