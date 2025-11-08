@@ -21,14 +21,12 @@ jobs:
         run: bun install
 
       - name: Type check project
-        run: |
-          bun run type-build
-          bun run type-check
+        run: bun run build-types
 
-      - name: Lint and check formatting
+      - name: Check and lint formatting
         run: |
-          bun run lint
           bun run check
+          bun run lint
 
       - name: Build project
         run: bun run build
