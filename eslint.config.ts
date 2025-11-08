@@ -2,7 +2,7 @@ import * as js from "@eslint/js";
 import * as tseslint from "@typescript-eslint/eslint-plugin";
 import * as tsparser from "@typescript-eslint/parser";
 import * as react from "eslint-plugin-react";
-import * as prettier from "eslint-config-prettier";
+import prettier from "eslint-config-prettier";
 import * as globals from "globals";
 
 // eslint-plugin-preact is CommonJS without types, use require
