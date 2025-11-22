@@ -2,8 +2,9 @@ import * as fs from "node:fs/promises";
 import * as http from "node:http";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import * as v from "valibot";
 
-import type { ILanguageSettings, IProblem } from "~shared/provider";
+import { LanguageSettingsSchema, ProblemSchema } from "~shared/schemas";
 import { compile } from "~extension/utils/runtime";
 import {
   ReadonlyStringProvider,
@@ -11,6 +12,9 @@ import {
 } from "~extension/utils/vscode";
 import JudgeViewProvider from "./providers/judge/JudgeViewProvider";
 import StressViewProvider from "./providers/stress/StressViewProvider";
+
+type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
+type IProblem = v.InferOutput<typeof ProblemSchema>;
 
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
@@ -293,7 +297,16 @@ function listenForCompetitiveCompanion() {
       void (async () => {
         res.end(() => req.socket.unref());
 
-        problemDatas.push(JSON.parse(ccData) as IProblem);
+        try {
+          const problem = v.parse(ProblemSchema, JSON.parse(ccData));
+          problemDatas.push(problem);
+        } catch (error) {
+          console.error(
+            "Invalid data from Competitive Companion received:",
+            error,
+          );
+          return;
+        }
         if (problemDatas.length === 0) {
           return;
         }

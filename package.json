@@ -10,7 +10,7 @@
     "Testing"
   ],
   "engines": {
-    "vscode": "^1.106.0"
+    "vscode": "^1.106.1"
   },
   "publisher": "sam20908",
   "repository": {
@@ -318,13 +318,13 @@
   "author": "Sam Huang",
   "license": "MIT",
   "devDependencies": {
-    "@rspack/cli": "^1.6.3",
+    "@rspack/cli": "^1.6.4",
     "@tailwindcss/cli": "^4.1.17",
     "@types/node": "^22.19.1",
-    "@types/vscode": "^1.106.0",
+    "@types/vscode": "^1.106.1",
     "@types/vscode-webview": "^1.57.5",
-    "@typescript-eslint/eslint-plugin": "^8.46.4",
-    "@typescript-eslint/parser": "^8.46.4",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-preact": "^0.1.0",
@@ -336,8 +336,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@preact/signals": "^2.5.0",
+    "@preact/signals": "^2.5.1",
     "nu-observables": "^0.0.7",
-    "preact": "^10.27.2"
+    "preact": "^10.27.2",
+    "valibot": "^1.1.0"
   }
 }

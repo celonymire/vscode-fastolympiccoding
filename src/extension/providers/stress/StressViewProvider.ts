@@ -1,12 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import * as v from "valibot";
 
-import { Status } from "~shared/types";
-import {
-  coerceToArray,
-  coerceToObject,
-  type ILanguageSettings,
-} from "~shared/provider";
+import { Status } from "~shared/enums";
+import { LanguageSettingsSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/utils/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
@@ -17,13 +14,22 @@ import {
 } from "~extension/utils/vscode";
 import type JudgeViewProvider from "../judge/JudgeViewProvider";
 import {
-  type IAddMessage,
-  type IViewMessage,
-  type ProviderMessage,
+  AddMessageSchema,
+  ProviderMessage,
   ProviderMessageType,
-  type WebviewMessage,
+  ViewMessageSchema,
+  WebviewMessage,
   WebviewMessageType,
 } from "~shared/stress-messages";
+
+type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
+
+const StressDataSchema = v.partial(
+  v.object({
+    data: v.string(),
+    status: v.enum(Status),
+  }),
+);
 
 interface IData {
   data: string;
@@ -111,9 +117,11 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
     const fileData = super.readStorage()[file];
-    const state = coerceToArray(fileData);
+    const arrayDataSchema = v.array(StressDataSchema);
+    const parseResult = v.safeParse(arrayDataSchema, fileData);
+    const state = parseResult.success ? parseResult.output : [];
     for (let id = 0; id < state.length; id++) {
-      const testcase = coerceToObject(state[id]) as Partial<IData>;
+      const testcase = state[id] || {};
 
       this._state[id].data.write(testcase.data ?? "", true);
       this._state[id].status = testcase.status ?? Status.NA;
@@ -361,11 +369,11 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     }
   }
 
-  private _view({ id }: IViewMessage) {
+  private _view({ id }: v.InferOutput<typeof ViewMessageSchema>) {
     void openInNewEditor(this._state[id].data.data);
   }
 
-  private _add({ id }: IAddMessage) {
+  private _add({ id }: v.InferOutput<typeof AddMessageSchema>) {
     const file = vscode.window.activeTextEditor?.document.fileName;
     if (!file) {
       return;

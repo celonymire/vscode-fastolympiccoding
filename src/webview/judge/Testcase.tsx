@@ -1,8 +1,10 @@
 import { useSignal } from "@preact/signals";
 import { useCallback } from "preact/hooks";
 import type { FunctionComponent } from "preact";
+import * as v from "valibot";
 
-import { type ITestcase, Status, Stdio } from "~shared/types";
+import { Status, Stdio } from "~shared/enums";
+import { TestcaseSchema } from "~shared/schemas";
 import {
   ArrowSvgInwards,
   ArrowSvgOutwards,
@@ -15,6 +17,8 @@ import type { PreactObservable } from "../../external/observable";
 import { Action, ProviderMessageType } from "~shared/judge-messages";
 import AutoresizeTextarea from "./AutoresizeTextarea";
 import { postProviderMessage } from "./message";
+
+type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
 interface Props {
   id: number;
