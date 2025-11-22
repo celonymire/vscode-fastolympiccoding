@@ -3,7 +3,8 @@ import { useCallback } from "preact/hooks";
 import type { FunctionComponent } from "preact";
 import * as v from "valibot";
 
-import { Status, Stdio, TestcaseSchema } from "~shared/types";
+import { Status, Stdio } from "~shared/enums";
+import { TestcaseSchema } from "~shared/schemas";
 import {
   ArrowSvgInwards,
   ArrowSvgOutwards,
@@ -107,7 +108,7 @@ export default function Testcase({ id, testcase }: Props) {
   const viewStdio = useCallback(
     (stdio: Stdio) =>
       postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
-    [id]
+    [id],
   );
 
   const newStdin = useSignal("");
@@ -128,7 +129,7 @@ export default function Testcase({ id, testcase }: Props) {
         newStdin.value = "";
       }
     },
-    [id, newStdin]
+    [id, newStdin],
   );
 
   const handleSave = useCallback(() => {
@@ -175,7 +176,7 @@ export default function Testcase({ id, testcase }: Props) {
   const AcceptedStdoutRow: FunctionComponent = () => {
     const handleClick = useCallback(
       () => viewStdio(Stdio.ACCEPTED_STDOUT),
-      [viewStdio]
+      [viewStdio],
     );
     return (
       <div class="flex flex-row">

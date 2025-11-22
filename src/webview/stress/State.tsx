@@ -1,7 +1,7 @@
 import type { Signal } from "@preact/signals";
 import { useCallback } from "preact/hooks";
 
-import { Status } from "~shared/types";
+import { Status } from "~shared/enums";
 import { ArrowSvgOutwards, BLUE_COLOR, RED_COLOR } from "~webview/components";
 
 interface Props {

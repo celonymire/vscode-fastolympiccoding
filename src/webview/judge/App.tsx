@@ -2,7 +2,8 @@ import { signal, useComputed } from "@preact/signals";
 import { useCallback, useEffect } from "preact/hooks";
 import * as v from "valibot";
 
-import { Status, Stdio, TestcaseSchema } from "~shared/types";
+import { Status, Stdio } from "~shared/enums";
+import { TestcaseSchema } from "~shared/schemas";
 import { BLUE_COLOR } from "~webview/components";
 import { observable } from "~external/observable";
 import {

@@ -4,7 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { LanguageSettingsSchema, ProblemSchema } from "~shared/provider";
+import { LanguageSettingsSchema, ProblemSchema } from "~shared/schemas";
 import { compile } from "~extension/utils/runtime";
 import {
   ReadonlyStringProvider,

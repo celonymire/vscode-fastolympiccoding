@@ -2,8 +2,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { Status } from "~shared/types";
-import { LanguageSettingsSchema } from "~shared/provider";
+import { Status } from "~shared/enums";
+import { LanguageSettingsSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/utils/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
@@ -28,7 +28,7 @@ const StressDataSchema = v.partial(
   v.object({
     data: v.string(),
     status: v.enum(Status),
-  })
+  }),
 );
 
 interface IData {
@@ -81,7 +81,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
 
   constructor(
     context: vscode.ExtensionContext,
-    private _testcaseViewProvider: JudgeViewProvider
+    private _testcaseViewProvider: JudgeViewProvider,
   ) {
     super("stress", context);
 
@@ -92,7 +92,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
 
     vscode.window.onDidChangeActiveTextEditor(
       () => this.loadCurrentFileData(),
-      this
+      this,
     );
   }
 
@@ -142,7 +142,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     const extension = path.extname(file);
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
     const runSettings = vscode.workspace.getConfiguration(
-      "fastolympiccoding.runSettings"
+      "fastolympiccoding.runSettings",
     );
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
@@ -151,7 +151,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       | undefined;
     if (!languageSettings) {
       vscode.window.showWarningMessage(
-        `No run setting detected for file extension "${extension}"`
+        `No run setting detected for file extension "${extension}"`,
       );
       return;
     }
@@ -175,17 +175,17 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         compile(
           resolveVariables(config.get("generatorFile")!),
           languageSettings.compileCommand,
-          this._context
+          this._context,
         ).then(callback.bind(this, 0)),
         compile(
           resolveVariables("${file}"),
           languageSettings.compileCommand,
-          this._context
+          this._context,
         ).then(callback.bind(this, 1)),
         compile(
           resolveVariables(config.get("goodSolutionFile")!),
           languageSettings.compileCommand,
-          this._context
+          this._context,
         ).then(callback.bind(this, 2)),
       ];
       const codes = await Promise.all(promises);
@@ -229,13 +229,13 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       const seed = Math.round(Math.random() * 9007199254740991);
       const generatorRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        config.get("generatorFile")!
+        config.get("generatorFile")!,
       );
       this._state[0].process.run(
         generatorRunArguments[0],
         testcaseTimeLimit,
         cwd,
-        ...generatorRunArguments.slice(1)
+        ...generatorRunArguments.slice(1),
       );
       this._state[0].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
@@ -249,18 +249,18 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         this._state[2].process.process?.stdin.write(data);
       });
       this._state[0].process.process?.stdout.once("end", () =>
-        this._state[0].data.write("", true)
+        this._state[0].data.write("", true),
       );
 
       const solutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        "${file}"
+        "${file}",
       );
       this._state[1].process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
         cwd,
-        ...solutionRunArguments.slice(1)
+        ...solutionRunArguments.slice(1),
       );
       this._state[1].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
@@ -268,21 +268,21 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         }
       });
       this._state[1].process.process?.stdout.on("data", (data: string) =>
-        this._state[1].data.write(data, false)
+        this._state[1].data.write(data, false),
       );
       this._state[1].process.process?.stdout.once("end", () =>
-        this._state[1].data.write("", true)
+        this._state[1].data.write("", true),
       );
 
       const goodSolutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        config.get("goodSolutionFile")!
+        config.get("goodSolutionFile")!,
       );
       this._state[2].process.run(
         goodSolutionRunArguments[0],
         testcaseTimeLimit,
         cwd,
-        ...goodSolutionRunArguments.slice(1)
+        ...goodSolutionRunArguments.slice(1),
       );
       this._state[2].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
@@ -290,10 +290,10 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         }
       });
       this._state[2].process.process?.stdout.on("data", (data: string) =>
-        this._state[2].data.write(data, false)
+        this._state[2].data.write(data, false),
       );
       this._state[2].process.process?.stdout.once("end", () =>
-        this._state[2].data.write("", true)
+        this._state[2].data.write("", true),
       );
 
       for (let i = 0; i < 3; i++) {
@@ -310,7 +310,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       }
 
       await Promise.allSettled(
-        this._state.map((value) => value.process.promise)
+        this._state.map((value) => value.process.promise),
       );
       for (let i = 0; i < 3; i++) {
         if (this._state[i].process.timedOut) {
@@ -329,7 +329,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         break;
       }
       await new Promise<void>((resolve) =>
-        setTimeout(() => resolve(), delayBetweenTestcases)
+        setTimeout(() => resolve(), delayBetweenTestcases),
       );
     }
     this._running = false;
@@ -384,7 +384,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       resolvedFile = resolveVariables(
         vscode.workspace
           .getConfiguration("fastolympiccoding")
-          .get("generatorFile")!
+          .get("generatorFile")!,
       );
     } else if (id === 1) {
       resolvedFile = file;
@@ -392,7 +392,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       resolvedFile = resolveVariables(
         vscode.workspace
           .getConfiguration("fastolympiccoding")
-          .get("goodSolutionFile")!
+          .get("goodSolutionFile")!,
       );
     }
 
@@ -442,7 +442,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
         : this._state.map<IData>((value) => ({
             data: value.data.data,
             status: value.status,
-          }))
+          })),
     );
   }
 

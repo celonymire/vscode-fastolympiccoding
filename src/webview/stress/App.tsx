@@ -2,7 +2,7 @@ import { batch, signal, useComputed } from "@preact/signals";
 import { useCallback, useEffect } from "preact/hooks";
 import * as v from "valibot";
 
-import { Status } from "~shared/types";
+import { Status } from "~shared/enums";
 import { BLUE_COLOR, RED_COLOR } from "~webview/components";
 import { observable, type PreactObservable } from "../../external/observable";
 import {

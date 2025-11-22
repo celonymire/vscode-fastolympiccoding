@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { Status } from "./enums";
 
 export const LanguageSettingsSchema = v.object({
   compileCommand: v.optional(v.string()),
@@ -9,6 +10,18 @@ export const LanguageSettingsSchema = v.object({
 export const TestSchema = v.object({
   input: v.string(),
   output: v.string(),
+});
+
+export const TestcaseSchema = v.object({
+  stdin: v.string(),
+  stderr: v.string(),
+  stdout: v.string(),
+  acceptedStdout: v.string(),
+  elapsed: v.number(),
+  status: v.enum(Status),
+  shown: v.boolean(),
+  toggled: v.boolean(),
+  skipped: v.boolean(),
 });
 
 const InputStdinSchema = v.object({
