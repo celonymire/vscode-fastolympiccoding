@@ -21,7 +21,7 @@ import {
 import {
   Action,
   ActionMessageSchema,
-  ProviderMessage,
+  ProviderMessageSchema,
   ProviderMessageType,
   SaveMessageSchema,
   SetTimeLimitSchema,
@@ -73,12 +73,15 @@ function setTestcaseStats(state: IState, timeLimit: number) {
   }
 }
 
-export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
+export default class extends BaseViewProvider<
+  typeof ProviderMessageSchema,
+  WebviewMessage
+> {
   private _state: Map<number, IState> = new Map(); // Map also remembers insertion order :D
   private _timeLimit = 0;
   private _newId = 0;
 
-  onMessage(msg: ProviderMessage) {
+  onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
       case ProviderMessageType.LOADED:
         this.loadCurrentFileData();
@@ -109,7 +112,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   }
 
   constructor(context: vscode.ExtensionContext) {
-    super("judge", context);
+    super("judge", context, ProviderMessageSchema);
 
     vscode.window.onDidChangeActiveTextEditor(
       () => this.loadCurrentFileData(),

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as v from "valibot";
 
 interface IWorkspaceState {
   [key: string]: unknown;
@@ -14,17 +15,20 @@ function getNonce(): string {
   return nonce;
 }
 
-export default abstract class<ProviderMessageType, WebviewMessageType>
-  implements vscode.WebviewViewProvider
+export default abstract class<
+  Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>,
+  WebviewMessageType,
+> implements vscode.WebviewViewProvider
 {
   private _webview?: vscode.Webview = undefined;
 
   constructor(
     readonly view: string,
     protected _context: vscode.ExtensionContext,
+    private _schema: Schema,
   ) {}
 
-  abstract onMessage(msg: ProviderMessageType): void;
+  abstract onMessage(msg: v.InferOutput<Schema>): void;
   abstract onDispose(): void;
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -36,9 +40,14 @@ export default abstract class<ProviderMessageType, WebviewMessageType>
       ],
     };
     webviewView.webview.html = this._getWebviewContent(webviewView.webview);
-    webviewView.webview.onDidReceiveMessage((message: ProviderMessageType) =>
-      this.onMessage(message),
-    );
+    webviewView.webview.onDidReceiveMessage((message: unknown) => {
+      const result = v.safeParse(this._schema, message);
+      if (result.success) {
+        this.onMessage(result.output);
+      } else {
+        console.error("Invalid message received:", result.issues);
+      }
+    });
     webviewView.onDidDispose(() => this.onDispose());
     webviewView.onDidChangeVisibility(() => this.onDispose()); // webviews don't have persistent states
   }

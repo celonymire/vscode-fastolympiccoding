@@ -15,7 +15,7 @@ import {
 import type JudgeViewProvider from "../judge/JudgeViewProvider";
 import {
   AddMessageSchema,
-  ProviderMessage,
+  ProviderMessageSchema,
   ProviderMessageType,
   ViewMessageSchema,
   WebviewMessage,
@@ -42,7 +42,10 @@ interface IState {
   process: Runnable;
 }
 
-export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
+export default class extends BaseViewProvider<
+  typeof ProviderMessageSchema,
+  WebviewMessage
+> {
   private _state: IState[] = [
     { data: new TextHandler(), status: Status.NA, process: new Runnable() },
     { data: new TextHandler(), status: Status.NA, process: new Runnable() },
@@ -52,7 +55,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
   private _clearFlag = false;
   private _running = false;
 
-  onMessage(msg: ProviderMessage): void {
+  onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
       case ProviderMessageType.LOADED:
         this.loadCurrentFileData();
@@ -83,7 +86,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     context: vscode.ExtensionContext,
     private _testcaseViewProvider: JudgeViewProvider,
   ) {
-    super("stress", context);
+    super("stress", context, ProviderMessageSchema);
 
     for (let id = 0; id < 3; id++) {
       this._state[id].data.callback = (data: string) =>
