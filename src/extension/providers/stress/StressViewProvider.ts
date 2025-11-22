@@ -28,7 +28,7 @@ const StressDataSchema = v.partial(
   v.object({
     data: v.string(),
     status: v.enum(Status),
-  }),
+  })
 );
 
 interface IData {
@@ -42,10 +42,7 @@ interface IState {
   process: Runnable;
 }
 
-export default class extends BaseViewProvider<
-  typeof ProviderMessageSchema,
-  WebviewMessage
-> {
+export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
   private _state: IState[] = [
     { data: new TextHandler(), status: Status.NA, process: new Runnable() },
     { data: new TextHandler(), status: Status.NA, process: new Runnable() },
@@ -84,7 +81,7 @@ export default class extends BaseViewProvider<
 
   constructor(
     context: vscode.ExtensionContext,
-    private _testcaseViewProvider: JudgeViewProvider,
+    private _testcaseViewProvider: JudgeViewProvider
   ) {
     super("stress", context, ProviderMessageSchema);
 
@@ -93,10 +90,7 @@ export default class extends BaseViewProvider<
         super._postMessage({ type: WebviewMessageType.STDIO, id, data });
     }
 
-    vscode.window.onDidChangeActiveTextEditor(
-      () => this.loadCurrentFileData(),
-      this,
-    );
+    vscode.window.onDidChangeActiveTextEditor(() => this.loadCurrentFileData(), this);
   }
 
   loadCurrentFileData() {
@@ -144,18 +138,12 @@ export default class extends BaseViewProvider<
 
     const extension = path.extname(file);
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
-    const runSettings = vscode.workspace.getConfiguration(
-      "fastolympiccoding.runSettings",
-    );
+    const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
-    const languageSettings = runSettings[extension] as
-      | ILanguageSettings
-      | undefined;
+    const languageSettings = runSettings[extension] as ILanguageSettings | undefined;
     if (!languageSettings) {
-      vscode.window.showWarningMessage(
-        `No run setting detected for file extension "${extension}"`,
-      );
+      vscode.window.showWarningMessage(`No run setting detected for file extension "${extension}"`);
       return;
     }
 
@@ -178,17 +166,15 @@ export default class extends BaseViewProvider<
         compile(
           resolveVariables(config.get("generatorFile")!),
           languageSettings.compileCommand,
-          this._context,
+          this._context
         ).then(callback.bind(this, 0)),
-        compile(
-          resolveVariables("${file}"),
-          languageSettings.compileCommand,
-          this._context,
-        ).then(callback.bind(this, 1)),
+        compile(resolveVariables("${file}"), languageSettings.compileCommand, this._context).then(
+          callback.bind(this, 1)
+        ),
         compile(
           resolveVariables(config.get("goodSolutionFile")!),
           languageSettings.compileCommand,
-          this._context,
+          this._context
         ).then(callback.bind(this, 2)),
       ];
       const codes = await Promise.all(promises);
@@ -220,10 +206,7 @@ export default class extends BaseViewProvider<
     this._stopFlag = false;
     this._clearFlag = false;
     this._running = true;
-    while (
-      !this._stopFlag &&
-      (timeLimit === 0 || Date.now() - start <= timeLimit)
-    ) {
+    while (!this._stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
       super._postMessage({ type: WebviewMessageType.CLEAR });
       for (let i = 0; i < 3; i++) {
         this._state[i].data.reset();
@@ -232,13 +215,13 @@ export default class extends BaseViewProvider<
       const seed = Math.round(Math.random() * 9007199254740991);
       const generatorRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        config.get("generatorFile")!,
+        config.get("generatorFile")!
       );
       this._state[0].process.run(
         generatorRunArguments[0],
         testcaseTimeLimit,
         cwd,
-        ...generatorRunArguments.slice(1),
+        ...generatorRunArguments.slice(1)
       );
       this._state[0].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
@@ -251,19 +234,17 @@ export default class extends BaseViewProvider<
         this._state[1].process.process?.stdin.write(data);
         this._state[2].process.process?.stdin.write(data);
       });
-      this._state[0].process.process?.stdout.once("end", () =>
-        this._state[0].data.write("", true),
-      );
+      this._state[0].process.process?.stdout.once("end", () => this._state[0].data.write("", true));
 
       const solutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        "${file}",
+        "${file}"
       );
       this._state[1].process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
         cwd,
-        ...solutionRunArguments.slice(1),
+        ...solutionRunArguments.slice(1)
       );
       this._state[1].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
@@ -271,21 +252,19 @@ export default class extends BaseViewProvider<
         }
       });
       this._state[1].process.process?.stdout.on("data", (data: string) =>
-        this._state[1].data.write(data, false),
+        this._state[1].data.write(data, false)
       );
-      this._state[1].process.process?.stdout.once("end", () =>
-        this._state[1].data.write("", true),
-      );
+      this._state[1].process.process?.stdout.once("end", () => this._state[1].data.write("", true));
 
       const goodSolutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
-        config.get("goodSolutionFile")!,
+        config.get("goodSolutionFile")!
       );
       this._state[2].process.run(
         goodSolutionRunArguments[0],
         testcaseTimeLimit,
         cwd,
-        ...goodSolutionRunArguments.slice(1),
+        ...goodSolutionRunArguments.slice(1)
       );
       this._state[2].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
@@ -293,11 +272,9 @@ export default class extends BaseViewProvider<
         }
       });
       this._state[2].process.process?.stdout.on("data", (data: string) =>
-        this._state[2].data.write(data, false),
+        this._state[2].data.write(data, false)
       );
-      this._state[2].process.process?.stdout.once("end", () =>
-        this._state[2].data.write("", true),
-      );
+      this._state[2].process.process?.stdout.once("end", () => this._state[2].data.write("", true));
 
       for (let i = 0; i < 3; i++) {
         // if any process fails then the other 2 should be gracefully closed
@@ -312,9 +289,7 @@ export default class extends BaseViewProvider<
         });
       }
 
-      await Promise.allSettled(
-        this._state.map((value) => value.process.promise),
-      );
+      await Promise.allSettled(this._state.map((value) => value.process.promise));
       for (let i = 0; i < 3; i++) {
         if (this._state[i].process.timedOut) {
           anyFailed = true;
@@ -331,9 +306,7 @@ export default class extends BaseViewProvider<
       if (anyFailed || this._state[1].data.data !== this._state[2].data.data) {
         break;
       }
-      await new Promise<void>((resolve) =>
-        setTimeout(() => resolve(), delayBetweenTestcases),
-      );
+      await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
     }
     this._running = false;
     super._postMessage({ type: WebviewMessageType.RUNNING, value: false });
@@ -345,10 +318,7 @@ export default class extends BaseViewProvider<
       }
 
       super._postMessage({ type: WebviewMessageType.CLEAR });
-    } else if (
-      !anyFailed &&
-      this._state[1].data.data !== this._state[2].data.data
-    ) {
+    } else if (!anyFailed && this._state[1].data.data !== this._state[2].data.data) {
       this._state[1].status = Status.WA;
     }
     this._clearFlag = false;
@@ -385,17 +355,13 @@ export default class extends BaseViewProvider<
     let resolvedFile: string;
     if (id === 0) {
       resolvedFile = resolveVariables(
-        vscode.workspace
-          .getConfiguration("fastolympiccoding")
-          .get("generatorFile")!,
+        vscode.workspace.getConfiguration("fastolympiccoding").get("generatorFile")!
       );
     } else if (id === 1) {
       resolvedFile = file;
     } else {
       resolvedFile = resolveVariables(
-        vscode.workspace
-          .getConfiguration("fastolympiccoding")
-          .get("goodSolutionFile")!,
+        vscode.workspace.getConfiguration("fastolympiccoding").get("goodSolutionFile")!
       );
     }
 
@@ -445,7 +411,7 @@ export default class extends BaseViewProvider<
         : this._state.map<IData>((value) => ({
             data: value.data.data,
             status: value.status,
-          })),
+          }))
     );
   }
 

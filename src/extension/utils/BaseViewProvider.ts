@@ -6,8 +6,7 @@ interface IWorkspaceState {
 }
 
 function getNonce(): string {
-  const CHOICES =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const CHOICES = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let nonce = "";
   for (let i = 0; i < 32; i++) {
     nonce += CHOICES.charAt(Math.floor(Math.random() * CHOICES.length));
@@ -25,7 +24,7 @@ export default abstract class<
   constructor(
     readonly view: string,
     protected _context: vscode.ExtensionContext,
-    private _schema: Schema,
+    private _schema: Schema
   ) {}
 
   abstract onMessage(msg: v.InferOutput<Schema>): void;
@@ -35,9 +34,7 @@ export default abstract class<
     this._webview = webviewView.webview;
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this._context.extensionUri, "dist"),
-      ],
+      localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, "dist")],
     };
     webviewView.webview.html = this._getWebviewContent(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((message: unknown) => {
@@ -57,10 +54,7 @@ export default abstract class<
   }
 
   readStorage(): IWorkspaceState {
-    const data = this._context.workspaceState.get(
-      this.view,
-      {} as IWorkspaceState,
-    );
+    const data = this._context.workspaceState.get(this.view, {} as IWorkspaceState);
     if (!data || typeof data !== "object") {
       return {};
     }

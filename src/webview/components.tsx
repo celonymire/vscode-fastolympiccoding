@@ -23,7 +23,7 @@ const ArrowSvg: FunctionComponent<ArrowSvgPropsGeneric> = ({
     (event: KeyboardEvent) => {
       if (event.key === "Enter") onClick?.();
     },
-    [onClick],
+    [onClick]
   );
 
   return (

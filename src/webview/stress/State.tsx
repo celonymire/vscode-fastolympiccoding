@@ -25,12 +25,8 @@ export default function State({ data, status, id, onView, onAdd }: Props) {
           <div class="flex flex-row">
             <div class="w-6 shrink-0" />
             <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                {from[id]}
-              </p>
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                compiling
-              </p>
+              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">{from[id]}</p>
+              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">compiling</p>
             </div>
           </div>
         </div>
@@ -41,9 +37,7 @@ export default function State({ data, status, id, onView, onAdd }: Props) {
           <div class="flex flex-row">
             <ArrowSvgOutwards color="#FFFFFF" />
             <div class="grow">
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                {from[id]}
-              </p>
+              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">{from[id]}</p>
               <pre class="text-base display-font">{data}</pre>
             </div>
           </div>
@@ -55,12 +49,8 @@ export default function State({ data, status, id, onView, onAdd }: Props) {
           <div class="flex flex-row">
             <div class="w-6 shrink-0" />
             <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                {from[id]}
-              </p>
-              {[Status.RE, Status.CE, Status.WA, Status.TL].includes(
-                status,
-              ) && (
+              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">{from[id]}</p>
+              {[Status.RE, Status.CE, Status.WA, Status.TL].includes(status) && (
                 <p
                   class="text-base leading-tight px-3 w-fit display-font"
                   style={{ backgroundColor: RED_COLOR }}

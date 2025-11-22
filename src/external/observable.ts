@@ -16,29 +16,20 @@ import {
 
 export { isObservable } from "nu-observables";
 
-class PreactObjectAdministration<
-  T extends object,
-> extends ObjectAdministration<T> {
-  static proxyTraps: ProxyHandler<object> = Object.assign(
-    {},
-    ObjectAdministration.proxyTraps,
-    {
-      get(target, prop, proxy) {
-        if (
-          !(prop in target) &&
-          (typeof prop === "string" || typeof prop === "number") &&
-          String(prop)[0] === "$"
-        ) {
-          return getSignal(proxy, prop.substring(1) as keyof typeof target);
-        }
+class PreactObjectAdministration<T extends object> extends ObjectAdministration<T> {
+  static proxyTraps: ProxyHandler<object> = Object.assign({}, ObjectAdministration.proxyTraps, {
+    get(target, prop, proxy) {
+      if (
+        !(prop in target) &&
+        (typeof prop === "string" || typeof prop === "number") &&
+        String(prop)[0] === "$"
+      ) {
+        return getSignal(proxy, prop.substring(1) as keyof typeof target);
+      }
 
-        return ObjectAdministration.proxyTraps.get?.apply(
-          null,
-          arguments as any,
-        );
-      },
-    } as ProxyHandler<object>,
-  );
+      return ObjectAdministration.proxyTraps.get?.apply(null, arguments as any);
+    },
+  } as ProxyHandler<object>);
 }
 
 export const graph = createGraph({
@@ -85,9 +76,7 @@ export type PreactObservable<T> = T extends Function
           : T extends WeakMap<infer K, infer V>
             ? WeakMap<K, PreactObservable<V>>
             : {
-                [key in keyof T]: T[key] extends object
-                  ? PreactObservable<T[key]>
-                  : T[key];
+                [key in keyof T]: T[key] extends object ? PreactObservable<T[key]> : T[key];
               } & {
                 readonly [key in keyof T as T[key] extends object
                   ? never
@@ -115,10 +104,7 @@ export function reportChanged<T extends object>(obj: T): T {
   return obj;
 }
 
-export function reportObserved<T extends object>(
-  obj: T,
-  opts?: { deep?: boolean },
-): T {
+export function reportObserved<T extends object>(obj: T, opts?: { deep?: boolean }): T {
   const adm = getAdministration(obj);
 
   adm.reportObserved(opts?.deep);
@@ -128,10 +114,7 @@ export function reportObserved<T extends object>(
 
 const signalMap: WeakMap<Signal, Signal> = new WeakMap();
 
-export function getSignal<T extends object>(
-  obj: T,
-  key: keyof T,
-): Signal<T[keyof T]> {
+export function getSignal<T extends object>(obj: T, key: keyof T): Signal<T[keyof T]> {
   const node = getInternalNode(obj, key);
 
   if (node instanceof Signal) {

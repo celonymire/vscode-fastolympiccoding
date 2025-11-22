@@ -7,8 +7,7 @@ import * as vscode from "vscode";
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
 
 export class Runnable {
-  private _process: childProcess.ChildProcessWithoutNullStreams | undefined =
-    undefined;
+  private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
   private _promise: Promise<void> | undefined = undefined;
   private _startTime = 0;
   private _endTime = 0;
@@ -82,7 +81,7 @@ const compilePromise: Map<string, Promise<number>> = new Map();
 export async function compile(
   file: string,
   compileCommand: string,
-  context: vscode.ExtensionContext,
+  context: vscode.ExtensionContext
 ): Promise<number> {
   errorTerminal.get(file)?.dispose();
 
@@ -104,23 +103,18 @@ export async function compile(
     promise = (async () => {
       const compilationStatusItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
-        10000,
+        10000
       );
       compilationStatusItem.name = "Compilation Status";
       compilationStatusItem.text = `$(zap) ${path.basename(file)}`;
       compilationStatusItem.backgroundColor = new vscode.ThemeColor(
-        "statusBarItem.warningBackground",
+        "statusBarItem.warningBackground"
       );
       compilationStatusItem.show();
       context.subscriptions.push(compilationStatusItem);
 
       const process = new Runnable();
-      process.run(
-        resolvedArgs[0],
-        undefined,
-        undefined,
-        ...resolvedArgs.slice(1),
-      );
+      process.run(resolvedArgs[0], undefined, undefined, ...resolvedArgs.slice(1));
 
       let err = "";
       process.process?.stderr.on("data", (data: string) => {

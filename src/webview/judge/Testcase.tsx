@@ -61,10 +61,7 @@ const ActionButton: FunctionComponent<ActionButtonProps> = ({
     </button>
   );
 };
-const StatusButton: FunctionComponent<StatusButtonProps> = ({
-  status,
-  id,
-}: StatusButtonProps) => {
+const StatusButton: FunctionComponent<StatusButtonProps> = ({ status, id }: StatusButtonProps) => {
   let color: string;
   let text: string;
   switch (status) {
@@ -95,20 +92,14 @@ const StatusButton: FunctionComponent<StatusButtonProps> = ({
   }
 
   return (
-    <ActionButton
-      id={id}
-      action={Action.TOGGLE_VISIBILITY}
-      backgroundColor={color}
-      text={text}
-    />
+    <ActionButton id={id} action={Action.TOGGLE_VISIBILITY} backgroundColor={color} text={text} />
   );
 };
 
 export default function Testcase({ id, testcase }: Props) {
   const viewStdio = useCallback(
-    (stdio: Stdio) =>
-      postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
-    [id],
+    (stdio: Stdio) => postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
+    [id]
   );
 
   const newStdin = useSignal("");
@@ -129,7 +120,7 @@ export default function Testcase({ id, testcase }: Props) {
         newStdin.value = "";
       }
     },
-    [id, newStdin],
+    [id, newStdin]
   );
 
   const handleSave = useCallback(() => {
@@ -174,10 +165,7 @@ export default function Testcase({ id, testcase }: Props) {
     );
   };
   const AcceptedStdoutRow: FunctionComponent = () => {
-    const handleClick = useCallback(
-      () => viewStdio(Stdio.ACCEPTED_STDOUT),
-      [viewStdio],
-    );
+    const handleClick = useCallback(() => viewStdio(Stdio.ACCEPTED_STDOUT), [viewStdio]);
     return (
       <div class="flex flex-row">
         <ArrowSvgOutwards color={GREEN_COLOR} onClick={handleClick} />
@@ -199,12 +187,7 @@ export default function Testcase({ id, testcase }: Props) {
             <div class="w-6 shrink-0" />
             <div class="flex justify-start gap-x-2 bg-zinc-800 grow unfade">
               <StatusButton id={id} status={testcase.status} />
-              <ActionButton
-                id={id}
-                action={Action.EDIT}
-                backgroundColor={GRAY_COLOR}
-                text="edit"
-              />
+              <ActionButton id={id} action={Action.EDIT} backgroundColor={GRAY_COLOR} text="edit" />
               <ActionButton
                 id={id}
                 action={Action.RUN}
@@ -238,8 +221,7 @@ export default function Testcase({ id, testcase }: Props) {
                 <StderrRow />
                 <StdoutRow />
                 {testcase.status === Status.WA && <AcceptedStdoutRow />}
-                {(testcase.status === Status.WA ||
-                  testcase.status === Status.NA) && (
+                {(testcase.status === Status.WA || testcase.status === Status.NA) && (
                   <div class="flex flex-row gap-x-2">
                     <div class="w-4 shrink-0" />
                     <ActionButton
@@ -279,9 +261,7 @@ export default function Testcase({ id, testcase }: Props) {
           <div class="flex flex-row">
             <div class="w-6 shrink-0" />
             <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                compiling
-              </p>
+              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">compiling</p>
             </div>
           </div>
         </div>
@@ -292,21 +272,13 @@ export default function Testcase({ id, testcase }: Props) {
           <div class="flex flex-row">
             <div class="w-6 shrink-0" />
             <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <ActionButton
-                id={id}
-                action={Action.STOP}
-                backgroundColor={RED_COLOR}
-                text="stop"
-              />
+              <ActionButton id={id} action={Action.STOP} backgroundColor={RED_COLOR} text="stop" />
             </div>
           </div>
           <StdinRow />
           <div class="flex flex-row">
             <div class="w-6 shrink-0" />
-            <AutoresizeTextarea
-              input={newStdin}
-              onKeyUp={handleNewStdinKeyUp}
-            />
+            <AutoresizeTextarea input={newStdin} onKeyUp={handleNewStdinKeyUp} />
           </div>
           <StderrRow />
           <StdoutRow />

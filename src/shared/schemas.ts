@@ -38,11 +38,7 @@ const InputRegexSchema = v.object({
   pattern: v.string(),
 });
 
-const InputSchema = v.union([
-  InputStdinSchema,
-  InputFileSchema,
-  InputRegexSchema,
-]);
+const InputSchema = v.union([InputStdinSchema, InputFileSchema, InputRegexSchema]);
 
 const OutputStdoutSchema = v.object({
   type: v.literal("stdout"),

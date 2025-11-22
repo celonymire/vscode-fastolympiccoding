@@ -3,10 +3,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
-  private _writeEmitter: vscode.EventEmitter<string> =
-    new vscode.EventEmitter();
-  private _closeEmitter: vscode.EventEmitter<number> =
-    new vscode.EventEmitter();
+  private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
+  private _closeEmitter: vscode.EventEmitter<number> = new vscode.EventEmitter();
 
   onDidWrite: vscode.Event<string> = this._writeEmitter.event;
   onDidClose: vscode.Event<number> = this._closeEmitter.event;
@@ -126,28 +124,19 @@ export async function getDefaultBuildTaskName() {
   return "";
 }
 
-export class ReadonlyStringProvider
-  implements vscode.TextDocumentContentProvider
-{
+export class ReadonlyStringProvider implements vscode.TextDocumentContentProvider {
   static SCHEME = "fastolympiccoding";
   provideTextDocumentContent(uri: vscode.Uri): vscode.ProviderResult<string> {
     return uri.path;
   }
 }
 
-export function resolveVariables(
-  string: string,
-  inContextOfFile?: string,
-): string {
+export function resolveVariables(string: string, inContextOfFile?: string): string {
   const workspaces = vscode.workspace.workspaceFolders;
   const workspace = vscode.workspace.workspaceFolders?.at(0);
-  const activeEditor = inContextOfFile
-    ? undefined
-    : vscode.window.activeTextEditor;
+  const activeEditor = inContextOfFile ? undefined : vscode.window.activeTextEditor;
   const absoluteFilePath = inContextOfFile ?? activeEditor?.document.uri.fsPath;
-  const parsedPath = absoluteFilePath
-    ? path.parse(absoluteFilePath)
-    : undefined;
+  const parsedPath = absoluteFilePath ? path.parse(absoluteFilePath) : undefined;
 
   let activeWorkspace = workspace;
   let relativeFilePath = absoluteFilePath;
@@ -184,10 +173,7 @@ export function resolveVariables(
     "${lineNumber}": `${activeEditor?.selection.start.line ? +1 : ""}`,
     "${selectedText}":
       activeEditor?.document.getText(
-        new vscode.Range(
-          activeEditor.selection.start,
-          activeEditor.selection.end,
-        ),
+        new vscode.Range(activeEditor.selection.start, activeEditor.selection.end)
       ) ?? "",
     "${execPath}": process.execPath,
     "${pathSeparator}": path.sep,
@@ -200,17 +186,16 @@ export function resolveVariables(
     Object.keys(vscodeSubstitutions)
       .map((variable) => `\\${variable}`)
       .join("|"),
-    "g",
+    "g"
   );
   const vscodeResolvedString = string.replace(
     vscodeVariableRgex,
-    (variable) => vscodeSubstitutions[variable],
+    (variable) => vscodeSubstitutions[variable]
   );
 
   // Resolve ${path:...} last
-  const resolved = vscodeResolvedString.replace(
-    /\${path:(.*?)}/g,
-    (_, group: string) => path.normalize(group),
+  const resolved = vscodeResolvedString.replace(/\${path:(.*?)}/g, (_, group: string) =>
+    path.normalize(group)
   );
   return resolved;
 }

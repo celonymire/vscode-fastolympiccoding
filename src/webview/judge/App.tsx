@@ -70,11 +70,7 @@ function handleNew({ id }: v.InferOutput<typeof NewMessageSchema>) {
   }
 }
 
-function handleSet({
-  id,
-  property,
-  value,
-}: v.InferOutput<typeof SetMessageSchema>) {
+function handleSet({ id, property, value }: v.InferOutput<typeof SetMessageSchema>) {
   (testcases.get(id)![property] as unknown) = value;
 }
 
@@ -121,9 +117,7 @@ function handleShow({ visible }: IShowMessage) {
   show.value = visible;
 }
 
-function handleInitialState({
-  timeLimit,
-}: v.InferOutput<typeof InitialStateSchema>) {
+function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSchema>) {
   newTimeLimit.value = timeLimit;
 }
 
@@ -135,15 +129,9 @@ function submitTimeLimit() {
 }
 
 export default function App() {
-  useEffect(
-    () => postProviderMessage({ type: ProviderMessageType.LOADED }),
-    [],
-  );
+  useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
-  const handleNext = useCallback(
-    () => postProviderMessage({ type: ProviderMessageType.NEXT }),
-    [],
-  );
+  const handleNext = useCallback(() => postProviderMessage({ type: ProviderMessageType.NEXT }), []);
 
   const handleTimeLimitInput = useCallback((event: Event) => {
     const target = event.currentTarget as HTMLInputElement;

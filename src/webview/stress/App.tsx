@@ -33,10 +33,8 @@ const state: PreactObservable<IState[]> = observable([
 const showView = signal(true);
 const running = signal(false);
 
-const expand = (id: number) =>
-  postProviderMessage({ type: ProviderMessageType.VIEW, id });
-const add = (id: number) =>
-  postProviderMessage({ type: ProviderMessageType.ADD, id });
+const expand = (id: number) => postProviderMessage({ type: ProviderMessageType.VIEW, id });
+const add = (id: number) => postProviderMessage({ type: ProviderMessageType.ADD, id });
 const clear = () => postProviderMessage({ type: ProviderMessageType.CLEAR });
 
 window.addEventListener("message", (event: MessageEvent<WebviewMessage>) => {
@@ -59,10 +57,7 @@ window.addEventListener("message", (event: MessageEvent<WebviewMessage>) => {
   }
 });
 
-function handleStatus({
-  id,
-  status,
-}: v.InferOutput<typeof StatusMessageSchema>) {
+function handleStatus({ id, status }: v.InferOutput<typeof StatusMessageSchema>) {
   state[id].status = status;
 }
 
@@ -88,19 +83,10 @@ function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
 }
 
 export default function App() {
-  useEffect(
-    () => postProviderMessage({ type: ProviderMessageType.LOADED }),
-    [],
-  );
+  useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
-  const handleStop = useCallback(
-    () => postProviderMessage({ type: ProviderMessageType.STOP }),
-    [],
-  );
-  const handleRun = useCallback(
-    () => postProviderMessage({ type: ProviderMessageType.RUN }),
-    [],
-  );
+  const handleStop = useCallback(() => postProviderMessage({ type: ProviderMessageType.STOP }), []);
+  const handleRun = useCallback(() => postProviderMessage({ type: ProviderMessageType.RUN }), []);
   const handleClear = useCallback(() => clear(), []);
   const handleExpand = useCallback((id: number) => expand(id), []);
   const handleAdd = useCallback((id: number) => add(id), []);

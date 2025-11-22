@@ -3,12 +3,7 @@ import * as vscode from "vscode";
 import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
-import {
-  LanguageSettingsSchema,
-  ProblemSchema,
-  TestSchema,
-  TestcaseSchema,
-} from "~shared/schemas";
+import { LanguageSettingsSchema, ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/utils/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
@@ -40,15 +35,14 @@ const FileDataSchema = v.partial(
   v.object({
     timeLimit: v.number(),
     testcases: v.array(v.unknown()),
-  }),
+  })
 );
 
 interface IFileData {
   timeLimit: number;
   testcases: ITestcase[] | unknown;
 }
-interface IState
-  extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> {
+interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> {
   stdin: TextHandler;
   stderr: TextHandler;
   stdout: TextHandler;
@@ -73,10 +67,7 @@ function setTestcaseStats(state: IState, timeLimit: number) {
   }
 }
 
-export default class extends BaseViewProvider<
-  typeof ProviderMessageSchema,
-  WebviewMessage
-> {
+export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
   private _state: Map<number, IState> = new Map(); // Map also remembers insertion order :D
   private _timeLimit = 0;
   private _newId = 0;
@@ -114,10 +105,7 @@ export default class extends BaseViewProvider<
   constructor(context: vscode.ExtensionContext) {
     super("judge", context, ProviderMessageSchema);
 
-    vscode.window.onDidChangeActiveTextEditor(
-      () => this.loadCurrentFileData(),
-      this,
-    );
+    vscode.window.onDidChangeActiveTextEditor(() => this.loadCurrentFileData(), this);
   }
 
   loadCurrentFileData() {
@@ -177,7 +165,7 @@ export default class extends BaseViewProvider<
         shown: true,
         toggled: false,
         skipped: false,
-      }),
+      })
     );
 
     if (file === vscode.window.activeTextEditor?.document.fileName) {
@@ -210,9 +198,7 @@ export default class extends BaseViewProvider<
     } else {
       const storageData = super.readStorage()[file];
       const parseResult = v.safeParse(FileDataSchema, storageData);
-      const fileData = parseResult.success
-        ? parseResult.output
-        : { timeLimit: 0, testcases: [] };
+      const fileData = parseResult.success ? parseResult.output : { timeLimit: 0, testcases: [] };
       const testcases = fileData.testcases || [];
       testcases.push(testcase);
       const data: IFileData = {
@@ -314,10 +300,7 @@ export default class extends BaseViewProvider<
   }
 
   private _addTestcase(testcase?: Partial<ITestcase>) {
-    this._state.set(
-      this._newId,
-      this._createTestcaseState(this._newId, testcase),
-    );
+    this._state.set(this._newId, this._createTestcaseState(this._newId, testcase));
     return this._newId++;
   }
 
@@ -424,17 +407,11 @@ export default class extends BaseViewProvider<
       return;
     }
 
-    const runSettings = vscode.workspace.getConfiguration(
-      "fastolympiccoding.runSettings",
-    );
+    const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
     const extension = path.extname(file);
-    const languageSettings = runSettings[extension] as
-      | ILanguageSettings
-      | undefined;
+    const languageSettings = runSettings[extension] as ILanguageSettings | undefined;
     if (!languageSettings) {
-      vscode.window.showWarningMessage(
-        `No run setting detected for file extension "${extension}"`,
-      );
+      vscode.window.showWarningMessage(`No run setting detected for file extension "${extension}"`);
       return;
     }
 
@@ -445,11 +422,7 @@ export default class extends BaseViewProvider<
         property: "status",
         value: Status.COMPILING,
       });
-      const code = await compile(
-        file,
-        languageSettings.compileCommand,
-        this._context,
-      );
+      const code = await compile(file, languageSettings.compileCommand, this._context);
       if (code) {
         super._postMessage({
           type: WebviewMessageType.SET,
@@ -496,22 +469,18 @@ export default class extends BaseViewProvider<
       resolvedArgs[0],
       newTestcase ? undefined : this._timeLimit,
       cwd,
-      ...resolvedArgs.slice(1),
+      ...resolvedArgs.slice(1)
     );
 
     testcase.process.process?.stdin.write(testcase.stdin.data);
     testcase.process.process?.stderr.on("data", (data: string) =>
-      testcase.stderr.write(data, false),
+      testcase.stderr.write(data, false)
     );
     testcase.process.process?.stdout.on("data", (data: string) =>
-      testcase.stdout.write(data, false),
+      testcase.stdout.write(data, false)
     );
-    testcase.process.process?.stderr.once("end", () =>
-      testcase.stderr.write("", true),
-    );
-    testcase.process.process?.stdout.once("end", () =>
-      testcase.stdout.write("", true),
-    );
+    testcase.process.process?.stderr.once("end", () => testcase.stderr.write("", true));
+    testcase.process.process?.stdout.once("end", () => testcase.stdout.write("", true));
     testcase.process.process?.once("error", (data: Error) => {
       super._postMessage({
         type: WebviewMessageType.STDIO,
@@ -620,9 +589,7 @@ export default class extends BaseViewProvider<
   private _toggleVisibility(id: number) {
     const testcase = this._state.get(id)!;
 
-    testcase.shown = testcase.toggled
-      ? !testcase.shown
-      : testcase.status === Status.AC;
+    testcase.shown = testcase.toggled ? !testcase.shown : testcase.status === Status.AC;
     testcase.toggled = true;
     super._postMessage({
       type: WebviewMessageType.SET,
@@ -655,18 +622,13 @@ export default class extends BaseViewProvider<
   private _compare(id: number) {
     const testcase = this._state.get(id)!;
     const stdout = vscode.Uri.parse(
-      `${ReadonlyStringProvider.SCHEME}:OUTPUT:\n\n${testcase.stdout.data}`,
+      `${ReadonlyStringProvider.SCHEME}:OUTPUT:\n\n${testcase.stdout.data}`
     );
     const acStdout = vscode.Uri.parse(
-      `${ReadonlyStringProvider.SCHEME}:ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`,
+      `${ReadonlyStringProvider.SCHEME}:ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
     );
 
-    vscode.commands.executeCommand(
-      "vscode.diff",
-      stdout,
-      acStdout,
-      `Diff: Testcase #${id + 1}`,
-    );
+    vscode.commands.executeCommand("vscode.diff", stdout, acStdout, `Diff: Testcase #${id + 1}`);
   }
 
   private _viewStdio({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
@@ -694,11 +656,7 @@ export default class extends BaseViewProvider<
     testcase.stdin.write(data, false);
   }
 
-  private _save({
-    id,
-    stdin,
-    acceptedStdout,
-  }: v.InferOutput<typeof SaveMessageSchema>) {
+  private _save({ id, stdin, acceptedStdout }: v.InferOutput<typeof SaveMessageSchema>) {
     const testcase = this._state.get(id)!;
 
     super._postMessage({
