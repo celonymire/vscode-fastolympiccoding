@@ -1,71 +1,72 @@
-export interface ILanguageSettings {
-  compileCommand?: string;
-  runCommand: string;
-  currentWorkingDirectory?: string;
-}
+import * as v from "valibot";
 
-export interface ITest {
-  input: string;
-  output: string;
-}
+export const LanguageSettingsSchema = v.object({
+  compileCommand: v.optional(v.string()),
+  runCommand: v.string(),
+  currentWorkingDirectory: v.optional(v.string()),
+});
 
-export interface IProblem {
-  name: string;
-  group: string;
-  url: string;
-  interactive: boolean;
-  memoryLimit: number;
-  timeLimit: number;
-  tests: ITest[];
-  testType: "single" | "multiNumber";
-  input:
-    | {
-        type: "stdin";
-      }
-    | {
-        type: "file";
-        fileName: string;
-      }
-    | {
-        type: "regex";
-        pattern: string;
-      };
-  output:
-    | {
-        type: "stdout";
-      }
-    | {
-        type: "file";
-        fileName: string;
-      };
-  languages:
-    | {
-        [key: string]: string;
-      }
-    | {
-        java: {
-          mainClass: string;
-          taskClass: string;
-        };
-      };
-  batch: {
-    id: number;
-    size: number;
-  };
-}
+export const TestSchema = v.object({
+  input: v.string(),
+  output: v.string(),
+});
 
-export function coerceToObject(data: unknown): object {
-  if (typeof data === "object" && data !== null) {
-    return data;
-  }
-  return {};
-}
-export function coerceToArray(data: unknown): object[] {
-  const arr = [];
-  if (Array.isArray(data)) {
-    for (const obj of data) {
-      arr.push(coerceToObject(obj));
-    }
-  }
-  return arr;
-}
+const InputStdinSchema = v.object({
+  type: v.literal("stdin"),
+});
+
+const InputFileSchema = v.object({
+  type: v.literal("file"),
+  fileName: v.string(),
+});
+
+const InputRegexSchema = v.object({
+  type: v.literal("regex"),
+  pattern: v.string(),
+});
+
+const InputSchema = v.union([
+  InputStdinSchema,
+  InputFileSchema,
+  InputRegexSchema,
+]);
+
+const OutputStdoutSchema = v.object({
+  type: v.literal("stdout"),
+});
+
+const OutputFileSchema = v.object({
+  type: v.literal("file"),
+  fileName: v.string(),
+});
+
+const OutputSchema = v.union([OutputStdoutSchema, OutputFileSchema]);
+
+const LanguagesStringSchema = v.record(v.string(), v.string());
+
+const LanguagesJavaSchema = v.object({
+  java: v.object({
+    mainClass: v.string(),
+    taskClass: v.string(),
+  }),
+});
+
+const LanguagesSchema = v.union([LanguagesStringSchema, LanguagesJavaSchema]);
+
+export const ProblemSchema = v.object({
+  name: v.string(),
+  group: v.string(),
+  url: v.string(),
+  interactive: v.boolean(),
+  memoryLimit: v.number(),
+  timeLimit: v.number(),
+  tests: v.array(TestSchema),
+  testType: v.picklist(["single", "multiNumber"]),
+  input: InputSchema,
+  output: OutputSchema,
+  languages: LanguagesSchema,
+  batch: v.object({
+    id: v.number(),
+    size: v.number(),
+  }),
+});

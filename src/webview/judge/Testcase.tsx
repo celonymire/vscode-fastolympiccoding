@@ -1,8 +1,9 @@
 import { useSignal } from "@preact/signals";
 import { useCallback } from "preact/hooks";
 import type { FunctionComponent } from "preact";
+import * as v from "valibot";
 
-import { type ITestcase, Status, Stdio } from "~shared/types";
+import { Status, Stdio, TestcaseSchema } from "~shared/types";
 import {
   ArrowSvgInwards,
   ArrowSvgOutwards,
@@ -12,6 +13,8 @@ import {
   RED_COLOR,
 } from "~webview/components";
 import type { PreactObservable } from "../../external/observable";
+
+type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 import { Action, ProviderMessageType } from "~shared/judge-messages";
 import AutoresizeTextarea from "./AutoresizeTextarea";
 import { postProviderMessage } from "./message";

@@ -1,3 +1,5 @@
+import * as v from "valibot";
+
 export enum Status {
   CE = 0,
   RE = 1,
@@ -17,14 +19,14 @@ export enum Stdio {
   ACCEPTED_STDOUT = 3,
 }
 
-export interface ITestcase {
-  stdin: string;
-  stderr: string;
-  stdout: string;
-  acceptedStdout: string;
-  elapsed: number;
-  status: Status;
-  shown: boolean;
-  toggled: boolean;
-  skipped: boolean;
-}
+export const TestcaseSchema = v.object({
+  stdin: v.string(),
+  stderr: v.string(),
+  stdout: v.string(),
+  acceptedStdout: v.string(),
+  elapsed: v.number(),
+  status: v.enum(Status),
+  shown: v.boolean(),
+  toggled: v.boolean(),
+  skipped: v.boolean(),
+});

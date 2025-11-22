@@ -1,13 +1,12 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import * as v from "valibot";
 
-import { type ITestcase, Status, Stdio } from "~shared/types";
+import { Status, Stdio, TestcaseSchema } from "~shared/types";
 import {
-  coerceToArray,
-  coerceToObject,
-  type ILanguageSettings,
-  type IProblem,
-  type ITest,
+  LanguageSettingsSchema,
+  ProblemSchema,
+  TestSchema,
 } from "~shared/provider";
 import BaseViewProvider from "~extension/utils/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
@@ -20,16 +19,28 @@ import {
 } from "~extension/utils/vscode";
 import {
   Action,
-  type IActionMessage,
-  type ISaveMessage,
-  type ISetTimeLimit,
-  type IStdinMessage,
-  type IViewMessage,
-  type ProviderMessage,
+  ActionMessageSchema,
+  ProviderMessage,
   ProviderMessageType,
-  type WebviewMessage,
+  SaveMessageSchema,
+  SetTimeLimitSchema,
+  StdinMessageSchema,
+  ViewMessageSchema,
+  WebviewMessage,
   WebviewMessageType,
 } from "~shared/judge-messages";
+
+type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
+type IProblem = v.InferOutput<typeof ProblemSchema>;
+type ITest = v.InferOutput<typeof TestSchema>;
+type ITestcase = v.InferOutput<typeof TestcaseSchema>;
+
+const FileDataSchema = v.partial(
+  v.object({
+    timeLimit: v.number(),
+    testcases: v.array(v.unknown()),
+  }),
+);
 
 interface IFileData {
   timeLimit: number;
@@ -123,13 +134,26 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     }
     super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
-    const fileData = coerceToObject(
-      super.readStorage()[file],
-    ) as Partial<IFileData>;
-    const testcases = coerceToArray(fileData.testcases);
+    const storageData = super.readStorage()[file];
+    const parseResult = v.safeParse(FileDataSchema, storageData);
+    if (!parseResult.success) {
+      // If invalid, use defaults
+      this._timeLimit = 0;
+      super._postMessage({
+        type: WebviewMessageType.INITIAL_STATE,
+        timeLimit: this._timeLimit,
+      });
+      return;
+    }
+    const fileData = parseResult.output;
+    const testcases = fileData.testcases || [];
     this._timeLimit = fileData.timeLimit ?? 0;
     for (let i = 0; i < testcases.length; i++) {
-      const testcase = coerceToObject(testcases[i]) as Partial<ITestcase>;
+      const parseTestcase = v.safeParse(
+        v.partial(TestcaseSchema),
+        testcases[i],
+      );
+      const testcase = parseTestcase.success ? parseTestcase.output : {};
       this._addTestcase(testcase);
     }
 
@@ -182,10 +206,12 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
       this._addTestcase(testcase);
       this._saveFileData();
     } else {
-      const fileData = coerceToObject(
-        super.readStorage()[file],
-      ) as Partial<IFileData>;
-      const testcases = coerceToArray(fileData.testcases);
+      const storageData = super.readStorage()[file];
+      const parseResult = v.safeParse(FileDataSchema, storageData);
+      const fileData = parseResult.success
+        ? parseResult.output
+        : { timeLimit: 0, testcases: [] };
+      const testcases = fileData.testcases || [];
       testcases.push(testcase);
       const data: IFileData = {
         timeLimit: fileData.timeLimit ?? 0,
@@ -221,7 +247,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     void this._run(this._addTestcase(), true);
   }
 
-  private _action({ id, action }: IActionMessage) {
+  private _action({ id, action }: v.InferOutput<typeof ActionMessageSchema>) {
     switch (action) {
       case Action.RUN:
         void this._run(id, false);
@@ -641,7 +667,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     );
   }
 
-  private _viewStdio({ id, stdio }: IViewMessage) {
+  private _viewStdio({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
     const testcase = this._state.get(id)!;
 
     switch (stdio) {
@@ -660,13 +686,17 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     }
   }
 
-  private _stdin({ id, data }: IStdinMessage) {
+  private _stdin({ id, data }: v.InferOutput<typeof StdinMessageSchema>) {
     const testcase = this._state.get(id)!;
     testcase.process.process?.stdin.write(data);
     testcase.stdin.write(data, false);
   }
 
-  private _save({ id, stdin, acceptedStdout }: ISaveMessage) {
+  private _save({
+    id,
+    stdin,
+    acceptedStdout,
+  }: v.InferOutput<typeof SaveMessageSchema>) {
     const testcase = this._state.get(id)!;
 
     super._postMessage({
@@ -698,7 +728,7 @@ export default class extends BaseViewProvider<ProviderMessage, WebviewMessage> {
     this._saveFileData();
   }
 
-  private _setTimeLimit({ limit }: ISetTimeLimit) {
+  private _setTimeLimit({ limit }: v.InferOutput<typeof SetTimeLimitSchema>) {
     this._timeLimit = limit;
     this._saveFileData();
   }

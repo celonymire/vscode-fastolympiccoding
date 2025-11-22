@@ -1,20 +1,24 @@
 import { batch, signal, useComputed } from "@preact/signals";
 import { useCallback, useEffect } from "preact/hooks";
+import * as v from "valibot";
 
 import { Status } from "~shared/types";
 import { BLUE_COLOR, RED_COLOR } from "~webview/components";
 import { observable, type PreactObservable } from "../../external/observable";
 import {
-  type IRunningMessage,
-  type IShowMessage,
-  type IStatusMessage,
-  type IStdioMessage,
   ProviderMessageType,
-  type WebviewMessage,
+  RunningMessageSchema,
+  ShowMessageSchema,
+  StatusMessageSchema,
+  StdioMessageSchema,
+  WebviewMessage,
   WebviewMessageType,
 } from "~shared/stress-messages";
 import { postProviderMessage } from "./message";
 import State from "./State";
+
+type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
+type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
 
 interface IState {
   data: string;
@@ -55,7 +59,10 @@ window.addEventListener("message", (event: MessageEvent<WebviewMessage>) => {
   }
 });
 
-function handleStatus({ id, status }: IStatusMessage) {
+function handleStatus({
+  id,
+  status,
+}: v.InferOutput<typeof StatusMessageSchema>) {
   state[id].status = status;
 }
 
@@ -76,7 +83,7 @@ function handleShow({ visible }: IShowMessage) {
   showView.value = visible;
 }
 
-function handleRunning({ value }: IRunningMessage) {
+function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
   running.value = value;
 }
 

@@ -1,22 +1,27 @@
 import { signal, useComputed } from "@preact/signals";
 import { useCallback, useEffect } from "preact/hooks";
+import * as v from "valibot";
 
-import { type ITestcase, Status, Stdio } from "~shared/types";
+import { Status, Stdio, TestcaseSchema } from "~shared/types";
 import { BLUE_COLOR } from "~webview/components";
 import { observable } from "~external/observable";
 import {
-  type IDeleteMessage,
-  type IInitialState,
-  type INewMessage,
-  type ISetMessage,
-  type IShowMessage,
-  type IStdioMessage,
+  DeleteMessageSchema,
+  InitialStateSchema,
+  NewMessageSchema,
   ProviderMessageType,
-  type WebviewMessage,
+  SetMessageSchema,
+  ShowMessageSchema,
+  StdioMessageSchema,
+  WebviewMessage,
   WebviewMessageType,
 } from "~shared/judge-messages";
 import { postProviderMessage } from "./message";
 import Testcase from "./Testcase";
+
+type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
+type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
+type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
 const testcases = observable(new Map<number, ITestcase>());
 const newTimeLimit = signal(0);
@@ -48,7 +53,7 @@ window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
   }
 });
 
-function handleNew({ id }: INewMessage) {
+function handleNew({ id }: v.InferOutput<typeof NewMessageSchema>) {
   if (!testcases.get(id)) {
     testcases.set(id, {
       stdin: "",
@@ -64,7 +69,11 @@ function handleNew({ id }: INewMessage) {
   }
 }
 
-function handleSet({ id, property, value }: ISetMessage) {
+function handleSet({
+  id,
+  property,
+  value,
+}: v.InferOutput<typeof SetMessageSchema>) {
   (testcases.get(id)![property] as unknown) = value;
 }
 
@@ -85,7 +94,7 @@ function handleStdio({ id, data, stdio }: IStdioMessage) {
   }
 }
 
-function handleDelete({ id }: IDeleteMessage) {
+function handleDelete({ id }: v.InferOutput<typeof DeleteMessageSchema>) {
   testcases.delete(id);
 }
 
@@ -111,7 +120,9 @@ function handleShow({ visible }: IShowMessage) {
   show.value = visible;
 }
 
-function handleInitialState({ timeLimit }: IInitialState) {
+function handleInitialState({
+  timeLimit,
+}: v.InferOutput<typeof InitialStateSchema>) {
   newTimeLimit.value = timeLimit;
 }
 
