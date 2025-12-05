@@ -71,6 +71,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _state: Map<number, IState> = new Map(); // Map also remembers insertion order :D
   private _timeLimit = 0;
   private _newId = 0;
+  private _fileCancellation?: vscode.CancellationTokenSource;
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
@@ -99,6 +100,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   onDispose() {
+    this._fileCancellation?.cancel();
+    this._fileCancellation?.dispose();
     this.stopAll();
   }
 
@@ -109,6 +112,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   loadCurrentFileData() {
+    // Cancel any in-flight operations for the previous file
+    this._fileCancellation?.cancel();
+    this._fileCancellation?.dispose();
+    this._fileCancellation = new vscode.CancellationTokenSource();
+
     this.stopAll();
     for (const id of this._state.keys()) {
       super._postMessage({ type: WebviewMessageType.DELETE, id });
@@ -392,6 +400,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _run(id: number, newTestcase: boolean): Promise<void> {
+    const token = this._fileCancellation?.token;
+    if (!token || token.isCancellationRequested) {
+      return;
+    }
+
     const file = vscode.window.activeTextEditor?.document.fileName;
     if (!file) {
       return;
@@ -403,7 +416,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._stop(id);
     await testcase.process.promise;
 
-    if (testcase.skipped) {
+    if (token.isCancellationRequested || testcase.skipped) {
       return;
     }
 
@@ -423,6 +436,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         value: Status.COMPILING,
       });
       const code = await compile(file, languageSettings.compileCommand, this._context);
+
+      // Check if file changed during compilation
+      if (token.isCancellationRequested) {
+        return;
+      }
+
       if (code) {
         super._postMessage({
           type: WebviewMessageType.SET,
@@ -430,12 +449,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           property: "status",
           value: Status.CE,
         });
-        return;
-      }
-
-      // the user switched to a different file during compilation, so double check we're on the same file
-      // FIXME: rethink this because it doesn't seem reliable enough...
-      if (vscode.window.activeTextEditor?.document.fileName !== file) {
         return;
       }
     }
