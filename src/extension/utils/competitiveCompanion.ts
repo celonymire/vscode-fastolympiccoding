@@ -202,4 +202,5 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
  */
 export function stopCompetitiveCompanion(): void {
   server?.close();
+  server = undefined;
 }
