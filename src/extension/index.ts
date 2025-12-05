@@ -1,23 +1,23 @@
 import * as fs from "node:fs/promises";
-import * as http from "node:http";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { LanguageSettingsSchema, ProblemSchema } from "~shared/schemas";
+import { LanguageSettingsSchema } from "~shared/schemas";
 import { compile } from "~extension/utils/runtime";
+import {
+  createStatusBarItem,
+  createListener,
+  stopCompetitiveCompanion,
+} from "~extension/utils/competitiveCompanion";
 import { ReadonlyStringProvider, resolveVariables } from "~extension/utils/vscode";
 import JudgeViewProvider from "./providers/judge/JudgeViewProvider";
 import StressViewProvider from "./providers/stress/StressViewProvider";
 
 type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
-type IProblem = v.InferOutput<typeof ProblemSchema>;
 
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
-let competitiveCompanionServer: http.Server | undefined;
-
-let competitiveCompanionStatusItem: vscode.StatusBarItem;
 
 interface IDependencies {
   [file: string]: string[];
@@ -218,7 +218,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("fastolympiccoding.listenForCompetitiveCompanion", () =>
-      listenForCompetitiveCompanion()
+      createListener(judgeViewProvider)
     )
   );
   context.subscriptions.push(
@@ -228,160 +228,11 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 }
 
-function listenForCompetitiveCompanion() {
-  if (competitiveCompanionServer !== undefined) {
-    return;
-  }
-
-  let problemDatas: IProblem[] = [];
-  let cnt = 0;
-  competitiveCompanionServer = http.createServer((req, res) => {
-    if (req.method !== "POST") {
-      res.end();
-      return;
-    }
-
-    let ccData = "";
-    req.setEncoding("utf-8");
-    req.on("data", (data) => {
-      ccData += data;
-    });
-    req.on("end", () => {
-      void (async () => {
-        res.end(() => req.socket.unref());
-
-        try {
-          const problem = v.parse(ProblemSchema, JSON.parse(ccData));
-          problemDatas.push(problem);
-        } catch (error) {
-          console.error("Invalid data from Competitive Companion received:", error);
-          return;
-        }
-        if (problemDatas.length === 0) {
-          return;
-        }
-
-        vscode.window.showInformationMessage(
-          `Received data for "${problemDatas[problemDatas.length - 1].name}"`
-        );
-
-        if (cnt === 0) {
-          cnt = problemDatas[0].batch.size;
-        }
-        if (--cnt > 0) {
-          return;
-        }
-
-        const file = vscode.window.activeTextEditor?.document.fileName;
-        const workspace = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
-        const config = vscode.workspace.getConfiguration("fastolympiccoding");
-        const openSelectedFiles = config.get<boolean>("openSelectedFiles")!;
-        const askForWhichFile = config.get<boolean>("askForWhichFile")!;
-        const includePattern = config.get<string>("includePattern")!;
-        const excludePattern = config.get<string>("excludePattern")!;
-        const files = (await vscode.workspace.findFiles(includePattern, excludePattern)).map(
-          (file) => ({
-            label: path.parse(file.fsPath).base,
-            description: path.parse(path.relative(workspace, file.fsPath)).dir,
-          })
-        );
-        const filePaths: string[] = [];
-        for (let i = 0; i < problemDatas.length; i++) {
-          let fileTo =
-            problemDatas[i].batch.size === 1 && file ? path.relative(workspace, file) : "";
-          if (askForWhichFile || problemDatas[i].batch.size > 1 || !file) {
-            const pick = vscode.window.createQuickPick();
-            pick.title = `Testcases for "${problemDatas[i].name}"`;
-            pick.placeholder = "Full file path to put testcases onto";
-            pick.value = fileTo;
-            pick.ignoreFocusOut = true;
-            pick.items = files;
-            pick.totalSteps = problemDatas[0].batch.size;
-            pick.step = i + 1;
-            pick.show();
-            fileTo = await new Promise((resolve) => {
-              pick.onDidAccept(() => {
-                if (pick.selectedItems.length === 0) {
-                  resolve(pick.value);
-                } else {
-                  resolve(
-                    path.join(pick.selectedItems[0].description ?? "", pick.selectedItems[0].label)
-                  );
-                }
-                pick.hide();
-              });
-              pick.onDidHide(() => resolve(""));
-            });
-          }
-          if (fileTo === "") {
-            vscode.window.showWarningMessage(
-              `No file to write testcases for "${problemDatas[i].name}"`
-            );
-            continue;
-          }
-          fileTo = path.join(workspace, fileTo);
-          await fs.writeFile(fileTo, "", { flag: "a" });
-
-          judgeViewProvider.addFromCompetitiveCompanion(fileTo, problemDatas[i]);
-          filePaths.push(fileTo);
-        }
-        if (openSelectedFiles) {
-          for (const filePath of filePaths) {
-            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-            await vscode.window.showTextDocument(document);
-          }
-        }
-        problemDatas = [];
-      })();
-    });
-  });
-
-  competitiveCompanionServer.once("connection", (socket) => {
-    socket.unref();
-  });
-  competitiveCompanionServer.once("listening", () => {
-    competitiveCompanionStatusItem.show();
-  });
-  competitiveCompanionServer.once("error", (error) =>
-    vscode.window.showErrorMessage(`Competitive Companion listener error: ${error}`)
-  );
-  competitiveCompanionServer.once("close", () => {
-    competitiveCompanionServer = undefined;
-    competitiveCompanionStatusItem.hide();
-  });
-
-  const config = vscode.workspace.getConfiguration("fastolympiccoding");
-  const port = config.get<number>("port")!;
-  competitiveCompanionServer.listen(port);
-}
-
-function stopCompetitiveCompanion() {
-  if (competitiveCompanionServer === undefined) {
-    return;
-  }
-
-  competitiveCompanionServer.close();
-}
-
-function createCompetitiveCompanionStatus(context: vscode.ExtensionContext) {
-  const competitiveCompanionStatus = vscode.window.createStatusBarItem(
-    "fastolympiccoding.listeningForCompetitiveCompanion",
-    vscode.StatusBarAlignment.Left
-  );
-  competitiveCompanionStatus.name = "Competitive Companion Indicator";
-  competitiveCompanionStatus.text = "$(zap)";
-  competitiveCompanionStatus.tooltip = "Listening For Competitive Companion";
-  competitiveCompanionStatus.hide();
-  context.subscriptions.push(competitiveCompanionStatus);
-
-  return competitiveCompanionStatus;
-}
-
 export function activate(context: vscode.ExtensionContext): void {
   registerViewProviders(context);
   registerCommands(context);
   registerDocumentContentProviders(context);
-  listenForCompetitiveCompanion();
 
-  competitiveCompanionStatusItem = createCompetitiveCompanionStatus(context);
+  createListener(judgeViewProvider);
+  createStatusBarItem(context);
 }
