@@ -437,12 +437,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
       const code = await compile(file, languageSettings.compileCommand, this._context);
 
-      // Check if file changed during compilation
-      if (token.isCancellationRequested) {
-        return;
-      }
-
-      if (code) {
+      if (!token.isCancellationRequested && code) {
         super._postMessage({
           type: WebviewMessageType.SET,
           id,
@@ -451,6 +446,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         });
         return;
       }
+    }
+
+    if (token.isCancellationRequested) {
+      return;
     }
 
     super._postMessage({
