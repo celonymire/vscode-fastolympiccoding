@@ -279,6 +279,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       for (let i = 0; i < 3; i++) {
         // if any process fails then the other 2 should be gracefully closed
         this._state[i].process.process?.once("close", (code) => {
+          // Clean up all listeners to prevent accumulation
+          this._state[i].process.process?.removeAllListeners("error");
+          this._state[i].process.process?.stdout.removeAllListeners("data");
+
           if (code === null || code) {
             for (let j = 0; j < 3; j++) {
               if (j !== i) {
