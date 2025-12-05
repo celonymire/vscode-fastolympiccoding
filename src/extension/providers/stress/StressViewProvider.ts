@@ -51,6 +51,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _stopFlag = false;
   private _clearFlag = false;
   private _running = false;
+  private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
@@ -76,6 +77,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   onDispose() {
+    this._onDidChangeActiveTextEditorDisposable?.dispose();
     this.stop();
   }
 
@@ -90,7 +92,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         super._postMessage({ type: WebviewMessageType.STDIO, id, data });
     }
 
-    vscode.window.onDidChangeActiveTextEditor(() => this.loadCurrentFileData(), this);
+    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
+      () => this.loadCurrentFileData(),
+      this
+    );
   }
 
   loadCurrentFileData() {

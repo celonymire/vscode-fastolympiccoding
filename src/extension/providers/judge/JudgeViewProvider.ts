@@ -72,6 +72,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _timeLimit = 0;
   private _newId = 0;
   private _fileCancellation?: vscode.CancellationTokenSource;
+  private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
@@ -100,6 +101,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   onDispose() {
+    this._onDidChangeActiveTextEditorDisposable?.dispose();
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
     this.stopAll();
@@ -108,7 +110,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   constructor(context: vscode.ExtensionContext) {
     super("judge", context, ProviderMessageSchema);
 
-    vscode.window.onDidChangeActiveTextEditor(() => this.loadCurrentFileData(), this);
+    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
+      () => this.loadCurrentFileData(),
+      this
+    );
   }
 
   loadCurrentFileData() {
