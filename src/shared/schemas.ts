@@ -66,7 +66,7 @@ export const ProblemSchema = v.object({
   name: v.string(),
   group: v.string(),
   url: v.string(),
-  interactive: v.boolean(),
+  interactive: v.optional(v.boolean()),
   memoryLimit: v.number(),
   timeLimit: v.number(),
   tests: v.array(TestSchema),
@@ -75,7 +75,7 @@ export const ProblemSchema = v.object({
   output: OutputSchema,
   languages: LanguagesSchema,
   batch: v.object({
-    id: v.number(),
+    id: v.string(),
     size: v.number(),
   }),
 });
