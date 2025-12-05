@@ -14,7 +14,7 @@ function getNonce(): string {
   return nonce;
 }
 
-export default abstract class<
+export default abstract class BaseViewProvider<
   Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>,
   WebviewMessageType,
 > implements vscode.WebviewViewProvider
