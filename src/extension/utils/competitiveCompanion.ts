@@ -11,7 +11,6 @@ type Problem = v.InferOutput<typeof ProblemSchema>;
 
 // Module state
 let server: http.Server | undefined;
-let serverPort: number | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 
 /**
