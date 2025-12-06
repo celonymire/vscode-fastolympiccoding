@@ -1,7 +1,7 @@
 import { defineConfig } from "@rspack/cli";
-import type { Configuration } from "@rspack/core";
+import { type Configuration } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
-import path from "node:path";
+import * as path from "node:path";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -12,6 +12,7 @@ const sharedResolve: Configuration["resolve"] = {
     "~webview": path.resolve("./src/webview"),
     "~extension": path.resolve("./src/extension"),
     "~external": path.resolve("./src/external"),
+    "~styles": path.resolve("./src/styles"),
   },
 };
 
@@ -68,6 +69,9 @@ const extensionConfig: Configuration = {
 
 const webviewsConfig: Configuration = {
   ...sharedConfig,
+  experiments: {
+    css: true,
+  },
   entry: {
     "judge/index": "./src/webview/judge/index.tsx",
     "stress/index": "./src/webview/stress/index.tsx",
@@ -75,6 +79,7 @@ const webviewsConfig: Configuration = {
   output: {
     path: path.resolve("./dist"),
     filename: "[name].js",
+    cssFilename: "styles.css",
   },
   target: ["web", "es2015"],
   resolve: sharedResolve,
@@ -93,6 +98,11 @@ const webviewsConfig: Configuration = {
             },
           },
         },
+      },
+      {
+        test: /\.css$/,
+        use: ["postcss-loader"],
+        type: "css",
       },
     ],
   },
