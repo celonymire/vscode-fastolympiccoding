@@ -6,21 +6,50 @@ import * as v from "valibot";
 
 import { ProblemSchema } from "~shared/schemas";
 import type JudgeViewProvider from "~extension/providers/JudgeViewProvider";
-import { AsyncQueue } from "./asyncQueue";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
+
+/**
+ * Queue that processes problems sequentially as they arrive from Competitive Companion.
+ * Gathers workspace files once before processing a batch of problems.
+ */
+class ProblemQueue {
+  private queue: Problem[] = [];
+  private processing = false;
+
+  constructor(private processor: (problem: Problem, files: vscode.Uri[]) => Promise<void>) {}
+
+  enqueue(problem: Problem): void {
+    this.queue.push(problem);
+    void this.processNext();
+  }
+
+  private async processNext(): Promise<void> {
+    if (this.processing || this.queue.length === 0) return;
+
+    this.processing = true;
+    const files = await gatherWorkspaceFiles();
+    while (this.queue.length > 0) {
+      const problem = this.queue.shift()!;
+      await this.processor(problem, files);
+    }
+    this.processing = false;
+  }
+}
 
 // Module state
 let server: http.Server | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 
 /**
- * Shows a QuickPick to let the user select a target file for testcases.
+ * Shows a QuickPick to let the user select a target file for testcases,
+ * with the files provided.
  */
 async function promptForTargetFile(
   problem: Problem,
   workspaceRoot: string,
-  defaultValue: string
+  defaultValue: string,
+  files: vscode.Uri[]
 ): Promise<string> {
   const config = vscode.workspace.getConfiguration("fastolympiccoding");
   const includePattern = config.get<string>("includePattern")!;
@@ -32,10 +61,15 @@ async function promptForTargetFile(
     description: path.parse(path.relative(workspaceRoot, file.fsPath)).dir,
   }));
 
+  const options = files.map((file) => ({
+    label: path.parse(file.fsPath).base,
+    description: path.parse(path.relative(workspaceRoot, file.fsPath)).dir,
+  }));
+
   const pick = vscode.window.createQuickPick();
   pick.title = `Testcases for "${problem.name}"`;
   pick.placeholder = "Full file path to put testcases onto";
-  pick.value = defaultValue;
+  pick.items = options;
   pick.ignoreFocusOut = true;
   pick.items = items;
   pick.show();
@@ -53,7 +87,11 @@ async function promptForTargetFile(
 /**
  * Processes a single problem received from Competitive Companion.
  */
-async function processProblem(problem: Problem, judge: JudgeViewProvider): Promise<void> {
+async function processProblem(
+  problem: Problem,
+  judge: JudgeViewProvider,
+  files: vscode.Uri[]
+): Promise<void> {
   const activeFile = vscode.window.activeTextEditor?.document.fileName;
   const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
   const config = vscode.workspace.getConfiguration("fastolympiccoding");
@@ -66,7 +104,7 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
   let relativePath = isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
 
   if (needsPrompt) {
-    relativePath = await promptForTargetFile(problem, workspaceRoot, relativePath);
+    relativePath = await promptForTargetFile(problem, workspaceRoot, relativePath, files);
   }
 
   if (relativePath === "") {
@@ -86,10 +124,20 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
 }
 
 /**
+ * Gather files using VSCode's API with include and exclude patterns from settings.
+ */
+async function gatherWorkspaceFiles(): Promise<vscode.Uri[]> {
+  const config = vscode.workspace.getConfiguration("fastolympiccoding");
+  const includePattern = config.get<string>("includePattern")!;
+  const excludePattern = config.get<string>("excludePattern")!;
+  return vscode.workspace.findFiles(includePattern, excludePattern);
+}
+
+/**
  * Creates the request handler for the Competitive Companion HTTP server.
  */
 function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
-  const problemQueue = new AsyncQueue<Problem>((problem) => processProblem(problem, judge));
+  const problemQueue = new ProblemQueue((problem, files) => processProblem(problem, judge, files));
 
   return (req, res) => {
     if (req.method !== "POST") {
