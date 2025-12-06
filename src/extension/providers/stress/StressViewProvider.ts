@@ -1,12 +1,11 @@
-import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
 import { Status } from "~shared/enums";
-import { LanguageSettingsSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/utils/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
+  getLanguageSettings,
   openInNewEditor,
   resolveCommand,
   resolveVariables,
@@ -21,8 +20,6 @@ import {
   WebviewMessage,
   WebviewMessageType,
 } from "~shared/stress-messages";
-
-type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
 const StressDataSchema = v.partial(
   v.object({
@@ -141,14 +138,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const extension = path.extname(file);
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
-    const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
-    const languageSettings = runSettings[extension] as ILanguageSettings | undefined;
+    const languageSettings = getLanguageSettings(file);
     if (!languageSettings) {
-      vscode.window.showWarningMessage(`No run setting detected for file extension "${extension}"`);
       return;
     }
 

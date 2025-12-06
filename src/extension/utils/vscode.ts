@@ -1,6 +1,11 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import * as v from "valibot";
+
+import { LanguageSettingsSchema } from "~shared/schemas";
+
+export type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
   private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
@@ -208,4 +213,22 @@ export function resolveCommand(command: string, inContextOfFile?: string) {
 export async function openInNewEditor(content: string): Promise<void> {
   const document = await vscode.workspace.openTextDocument({ content });
   vscode.window.showTextDocument(document);
+}
+
+/**
+ * Retrieves and validates language settings for a file extension.
+ * Shows a warning if settings are invalid or missing.
+ * @returns The validated language settings, or undefined if invalid/missing.
+ */
+export function getLanguageSettings(file: string): ILanguageSettings | undefined {
+  const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
+  const extension = path.extname(file);
+  const parseResult = v.safeParse(LanguageSettingsSchema, runSettings[extension]);
+  if (!parseResult.success) {
+    vscode.window.showWarningMessage(
+      `Invalid or missing run setting for file extension "${extension}"`
+    );
+    return undefined;
+  }
+  return parseResult.output;
 }

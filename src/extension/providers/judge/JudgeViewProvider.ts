@@ -3,10 +3,11 @@ import * as vscode from "vscode";
 import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
-import { LanguageSettingsSchema, ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
+import { ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/utils/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
+  getLanguageSettings,
   openInNewEditor,
   ReadonlyStringProvider,
   resolveCommand,
@@ -26,7 +27,6 @@ import {
   WebviewMessageType,
 } from "~shared/judge-messages";
 
-type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 type IProblem = v.InferOutput<typeof ProblemSchema>;
 type ITest = v.InferOutput<typeof TestSchema>;
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
@@ -425,11 +425,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
-    const extension = path.extname(file);
-    const languageSettings = runSettings[extension] as ILanguageSettings | undefined;
+    const languageSettings = getLanguageSettings(file);
     if (!languageSettings) {
-      vscode.window.showWarningMessage(`No run setting detected for file extension "${extension}"`);
       return;
     }
 
