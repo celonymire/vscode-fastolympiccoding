@@ -180,9 +180,11 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
 
   server.once("connection", (socket) => socket.unref());
   server.once("listening", () => statusBarItem?.show());
-  server.once("error", (error) =>
-    vscode.window.showErrorMessage(`Competitive Companion listener error: ${error}`)
-  );
+  server.once("error", (error) => {
+    vscode.window.showErrorMessage(`Competitive Companion listener error: ${error}`);
+    server?.close();
+    server = undefined;
+  });
   server.once("close", () => {
     server = undefined;
     statusBarItem?.hide();
