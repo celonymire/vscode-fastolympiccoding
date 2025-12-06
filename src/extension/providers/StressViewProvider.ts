@@ -11,7 +11,7 @@ import {
   resolveVariables,
   TextHandler,
 } from "~extension/utils/vscode";
-import type JudgeViewProvider from "../judge/JudgeViewProvider";
+import type JudgeViewProvider from "~extension/providers/JudgeViewProvider";
 import {
   AddMessageSchema,
   ProviderMessageSchema,

@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import * as v from "valibot";
 
 import { ProblemSchema } from "~shared/schemas";
-import type JudgeViewProvider from "~extension/providers/judge/JudgeViewProvider";
+import type JudgeViewProvider from "~extension/providers/JudgeViewProvider";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 

@@ -11,8 +11,8 @@ import {
   stopCompetitiveCompanion,
 } from "~extension/utils/competitiveCompanion";
 import { ReadonlyStringProvider, resolveVariables } from "~extension/utils/vscode";
-import JudgeViewProvider from "./providers/judge/JudgeViewProvider";
-import StressViewProvider from "./providers/stress/StressViewProvider";
+import JudgeViewProvider from "~extension/providers/JudgeViewProvider";
+import StressViewProvider from "~extension/providers/StressViewProvider";
 
 type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
