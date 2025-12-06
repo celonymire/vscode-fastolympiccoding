@@ -6,6 +6,7 @@ import * as v from "valibot";
 
 import { ProblemSchema } from "~shared/schemas";
 import type JudgeViewProvider from "~extension/providers/JudgeViewProvider";
+import { AsyncQueue } from "./asyncQueue";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 
@@ -18,8 +19,6 @@ let statusBarItem: vscode.StatusBarItem | undefined;
  */
 async function promptForTargetFile(
   problem: Problem,
-  stepIndex: number,
-  totalSteps: number,
   workspaceRoot: string,
   defaultValue: string
 ): Promise<string> {
@@ -39,8 +38,6 @@ async function promptForTargetFile(
   pick.value = defaultValue;
   pick.ignoreFocusOut = true;
   pick.items = items;
-  pick.totalSteps = totalSteps;
-  pick.step = stepIndex + 1;
   pick.show();
 
   return new Promise((resolve) => {
@@ -54,52 +51,37 @@ async function promptForTargetFile(
 }
 
 /**
- * Processes a batch of problems received from Competitive Companion.
+ * Processes a single problem received from Competitive Companion.
  */
-async function processProblems(problems: Problem[], judge: JudgeViewProvider): Promise<void> {
+async function processProblem(problem: Problem, judge: JudgeViewProvider): Promise<void> {
   const activeFile = vscode.window.activeTextEditor?.document.fileName;
   const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
   const config = vscode.workspace.getConfiguration("fastolympiccoding");
   const openSelectedFiles = config.get<boolean>("openSelectedFiles")!;
   const askForWhichFile = config.get<boolean>("askForWhichFile")!;
 
-  const processedFilePaths: string[] = [];
+  const isSingleProblem = problem.batch.size === 1;
+  const needsPrompt = askForWhichFile || !isSingleProblem || !activeFile;
 
-  for (let i = 0; i < problems.length; i++) {
-    const problem = problems[i];
-    const isSingleProblem = problem.batch.size === 1;
-    const needsPrompt = askForWhichFile || !isSingleProblem || !activeFile;
+  let relativePath = isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
 
-    let relativePath =
-      isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
-
-    if (needsPrompt) {
-      relativePath = await promptForTargetFile(
-        problem,
-        i,
-        problems[0].batch.size,
-        workspaceRoot,
-        relativePath
-      );
-    }
-
-    if (relativePath === "") {
-      vscode.window.showWarningMessage(`No file to write testcases for "${problem.name}"`);
-      continue;
-    }
-
-    const absolutePath = path.join(workspaceRoot, relativePath);
-    await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
-
-    judge.addFromCompetitiveCompanion(absolutePath, problem);
-    processedFilePaths.push(absolutePath);
+  if (needsPrompt) {
+    relativePath = await promptForTargetFile(problem, workspaceRoot, relativePath);
   }
 
+  if (relativePath === "") {
+    vscode.window.showWarningMessage(`No file to write testcases for "${problem.name}"`);
+    return;
+  }
+
+  const absolutePath = path.join(workspaceRoot, relativePath);
+  await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
+
+  judge.addFromCompetitiveCompanion(absolutePath, problem);
+
   if (openSelectedFiles) {
-    for (const filePath of processedFilePaths) {
-      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-      await vscode.window.showTextDocument(document);
-    }
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
+    await vscode.window.showTextDocument(document);
   }
 }
 
@@ -107,8 +89,7 @@ async function processProblems(problems: Problem[], judge: JudgeViewProvider): P
  * Creates the request handler for the Competitive Companion HTTP server.
  */
 function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
-  let pendingProblems: Problem[] = [];
-  let remainingInBatch = 0;
+  const problemQueue = new AsyncQueue<Problem>((problem) => processProblem(problem, judge));
 
   return (req, res) => {
     if (req.method !== "POST") {
@@ -120,33 +101,19 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
     req.setEncoding("utf-8");
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
-      void (async () => {
-        res.end(() => req.socket.unref());
+      res.end(() => req.socket.unref());
 
-        // Parse and validate the problem data
-        let problem: Problem;
-        try {
-          problem = v.parse(ProblemSchema, JSON.parse(body));
-        } catch (error) {
-          console.error("Invalid data from Competitive Companion received:", error);
-          return;
-        }
+      // Parse and validate the problem data
+      let problem: Problem;
+      try {
+        problem = v.parse(ProblemSchema, JSON.parse(body));
+      } catch (error) {
+        console.error("Invalid data from Competitive Companion received:", error);
+        return;
+      }
 
-        pendingProblems.push(problem);
-        vscode.window.showInformationMessage(`Received data for "${problem.name}"`);
-
-        // Track batch progress
-        if (remainingInBatch === 0) {
-          remainingInBatch = problem.batch.size;
-        }
-        remainingInBatch--;
-
-        // Process once all problems in batch are received
-        if (remainingInBatch === 0) {
-          await processProblems(pendingProblems, judge);
-          pendingProblems = [];
-        }
-      })();
+      vscode.window.showInformationMessage(`Received data for "${problem.name}"`);
+      problemQueue.enqueue(problem);
     });
   };
 }
