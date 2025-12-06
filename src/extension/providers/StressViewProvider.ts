@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as v from "valibot";
 
 import { Status } from "~shared/enums";
-import BaseViewProvider from "~extension/utils/BaseViewProvider";
+import BaseViewProvider from "~extension/providers/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
   getLanguageSettings,

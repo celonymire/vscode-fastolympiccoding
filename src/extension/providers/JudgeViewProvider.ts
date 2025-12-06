@@ -3,7 +3,7 @@ import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
 import { ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
-import BaseViewProvider from "~extension/utils/BaseViewProvider";
+import BaseViewProvider from "~extension/providers/BaseViewProvider";
 import { compile, Runnable } from "~extension/utils/runtime";
 import {
   getLanguageSettings,
