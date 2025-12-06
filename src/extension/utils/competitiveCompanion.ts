@@ -48,20 +48,9 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 async function promptForTargetFile(
   problem: Problem,
   workspaceRoot: string,
-  defaultValue: string,
   files: vscode.Uri[]
 ): Promise<string> {
-  const config = vscode.workspace.getConfiguration("fastolympiccoding");
-  const includePattern = config.get<string>("includePattern")!;
-  const excludePattern = config.get<string>("excludePattern")!;
-
-  const workspaceFiles = await vscode.workspace.findFiles(includePattern, excludePattern);
-  const items = workspaceFiles.map((file) => ({
-    label: path.parse(file.fsPath).base,
-    description: path.parse(path.relative(workspaceRoot, file.fsPath)).dir,
-  }));
-
-  const options = files.map((file) => ({
+  const options: vscode.QuickPickItem[] = files.map((file) => ({
     label: path.parse(file.fsPath).base,
     description: path.parse(path.relative(workspaceRoot, file.fsPath)).dir,
   }));
@@ -71,7 +60,6 @@ async function promptForTargetFile(
   pick.placeholder = "Full file path to put testcases onto";
   pick.items = options;
   pick.ignoreFocusOut = true;
-  pick.items = items;
   pick.show();
 
   return new Promise((resolve) => {
@@ -104,7 +92,7 @@ async function processProblem(
   let relativePath = isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
 
   if (needsPrompt) {
-    relativePath = await promptForTargetFile(problem, workspaceRoot, relativePath, files);
+    relativePath = await promptForTargetFile(problem, workspaceRoot, files);
   }
 
   if (relativePath === "") {
