@@ -305,8 +305,8 @@
   "scripts": {
     "vscode:prepublish": "npm run prod",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "check": "prettier --check .",
+    "format": "prettier --write src",
+    "check": "prettier --check src",
     "build:css": "tailwindcss --input src/styles/global.css --output dist/styles.css",
     "build:js": "rspack build",
     "build": "bun run build:css && bun run build:js",

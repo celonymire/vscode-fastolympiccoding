@@ -57,10 +57,7 @@ async function promptForTargetFile(
 /**
  * Processes a batch of problems received from Competitive Companion.
  */
-async function processProblems(
-  problems: Problem[],
-  judge: JudgeViewProvider
-): Promise<void> {
+async function processProblems(problems: Problem[], judge: JudgeViewProvider): Promise<void> {
   const activeFile = vscode.window.activeTextEditor?.document.fileName;
   const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
   const config = vscode.workspace.getConfiguration("fastolympiccoding");

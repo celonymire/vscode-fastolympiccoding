@@ -1,4 +1,6 @@
-export default {
+import { type Config } from "prettier";
+
+const config: Config = {
   semi: true,
   trailingComma: "es5",
   singleQuote: false,
@@ -6,3 +8,5 @@ export default {
   tabWidth: 2,
   useTabs: false,
 };
+
+export default config;
