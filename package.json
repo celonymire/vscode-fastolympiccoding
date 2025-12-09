@@ -314,13 +314,13 @@
   "author": "Sam Huang",
   "license": "MIT",
   "devDependencies": {
-    "@rspack/cli": "^1.6.4",
+    "@rspack/cli": "^1.6.7",
     "@tailwindcss/postcss": "^4.1.17",
-    "@types/node": "^22.19.1",
+    "@types/node": "^22.19.2",
     "@types/vscode": "^1.106.1",
     "@types/vscode-webview": "^1.57.5",
-    "@typescript-eslint/eslint-plugin": "^8.47.0",
-    "@typescript-eslint/parser": "^8.47.0",
+    "@typescript-eslint/eslint-plugin": "^8.49.0",
+    "@typescript-eslint/parser": "^8.49.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-preact": "^0.1.0",
@@ -337,7 +337,7 @@
   "dependencies": {
     "@preact/signals": "^2.5.1",
     "nu-observables": "^0.0.7",
-    "preact": "^10.27.2",
-    "valibot": "^1.1.0"
+    "preact": "^10.28.0",
+    "valibot": "^1.2.0"
   }
 }
