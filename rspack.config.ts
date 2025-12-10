@@ -11,7 +11,6 @@ const sharedResolve: Configuration["resolve"] = {
     "~shared": path.resolve("./src/shared"),
     "~webview": path.resolve("./src/webview"),
     "~extension": path.resolve("./src/extension"),
-    "~external": path.resolve("./src/external"),
     "~styles": path.resolve("./src/styles"),
   },
 };
