@@ -1,5 +1,6 @@
-import { signal, useComputed } from "@preact/signals";
-import { useCallback, useEffect } from "preact/hooks";
+import { signal, useComputed } from "@preact/signals-react";
+import { useSignals } from "@preact/signals-react/runtime";
+import { useCallback, useEffect } from "react";
 import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
@@ -129,16 +130,16 @@ function submitTimeLimit() {
 }
 
 export default function App() {
+  useSignals();
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
   const handleNext = useCallback(() => postProviderMessage({ type: ProviderMessageType.NEXT }), []);
 
-  const handleTimeLimitInput = useCallback((event: Event) => {
-    const target = event.currentTarget as HTMLInputElement;
-    newTimeLimit.value = Number(target.value);
+  const handleTimeLimitChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    newTimeLimit.value = Number(event.target.value);
   }, []);
 
-  const handleTimeLimitKeyUp = useCallback((event: KeyboardEvent) => {
+  const handleTimeLimitKeyUp = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       submitTimeLimit();
     }
@@ -154,36 +155,36 @@ export default function App() {
 
   return (
     show.value && (
-      <div class="flex flex-col h-screen">
-        <div class="flex-1 overflow-auto">
+      <div className="flex flex-col h-screen">
+        <div className="flex-1 overflow-auto">
           {testcaseComponents}
           <button
             type="button"
-            class="ml-6 text-base leading-tight bg-zinc-600 px-3 shrink-0 display-font"
+            className="ml-6 text-base leading-tight bg-zinc-600 px-3 shrink-0 display-font"
             onClick={handleNext}
           >
             next test
           </button>
         </div>
-        <div class="m-6 flex gap-x-2 items-center my-3 bg-zinc-800">
+        <div className="m-6 flex gap-x-2 items-center my-3 bg-zinc-800">
           <button
             type="button"
-            class="text-base leading-tight px-3 w-fit display-font"
+            className="text-base leading-tight px-3 w-fit display-font"
             style={{ backgroundColor: BLUE_COLOR }}
           >
             time limit
           </button>
           <input
             type="number"
-            class="appearance-none bg-transparent border-none focus:outline-none text-base leading-tight display-font w-fit"
+            className="appearance-none bg-transparent border-none focus:outline-none text-base leading-tight display-font w-fit"
             value={newTimeLimit.value}
-            onInput={handleTimeLimitInput}
+            onChange={handleTimeLimitChange}
             onKeyUp={handleTimeLimitKeyUp}
           />
-          <span class="text-base leading-tight display-font w-fit">ms</span>
+          <span className="text-base leading-tight display-font w-fit">ms</span>
           <button
             type="button"
-            class="text-base leading-tight px-3 w-fit display-font"
+            className="text-base leading-tight px-3 w-fit display-font"
             style={{ backgroundColor: BLUE_COLOR }}
             onClick={submitTimeLimit}
           >

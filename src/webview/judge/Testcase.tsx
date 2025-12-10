@@ -1,6 +1,7 @@
-import { useSignal } from "@preact/signals";
-import { useCallback } from "preact/hooks";
-import type { FunctionComponent } from "preact";
+import { useSignal } from "@preact/signals-react";
+import { useSignals } from "@preact/signals-react/runtime";
+import { useCallback } from "react";
+import type { FC } from "react";
 import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
@@ -37,7 +38,7 @@ interface StatusButtonProps {
   status: Status;
 }
 
-const ActionButton: FunctionComponent<ActionButtonProps> = ({
+const ActionButton: FC<ActionButtonProps> = ({
   id,
   action,
   backgroundColor,
@@ -53,7 +54,7 @@ const ActionButton: FunctionComponent<ActionButtonProps> = ({
   return (
     <button
       type="button"
-      class={`text-base leading-tight px-3 w-fit display-font ${className}`}
+      className={`text-base leading-tight px-3 w-fit display-font ${className}`}
       style={{ backgroundColor }}
       onClick={handleClick}
     >
@@ -61,7 +62,7 @@ const ActionButton: FunctionComponent<ActionButtonProps> = ({
     </button>
   );
 };
-const StatusButton: FunctionComponent<StatusButtonProps> = ({ status, id }: StatusButtonProps) => {
+const StatusButton: FC<StatusButtonProps> = ({ status, id }: StatusButtonProps) => {
   let color: string;
   let text: string;
   switch (status) {
@@ -97,6 +98,7 @@ const StatusButton: FunctionComponent<StatusButtonProps> = ({ status, id }: Stat
 };
 
 export default function Testcase({ id, testcase }: Props) {
+  useSignals();
   const viewStdio = useCallback(
     (stdio: Stdio) => postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
     [id]
@@ -107,7 +109,7 @@ export default function Testcase({ id, testcase }: Props) {
   const handlePreRun = useCallback(() => {
     // may be adding additional inputs, so clear out previous inputs
     newStdin.value = "";
-  }, []);
+  }, [newStdin]);
 
   const handleNewStdinKeyUp = useCallback(
     (event: KeyboardEvent) => {
@@ -137,39 +139,39 @@ export default function Testcase({ id, testcase }: Props) {
     });
   }, [id, testcase]);
 
-  const StdinRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.STDIN), [viewStdio]);
+  const StdinRow: FC = () => {
+    const handleClick = useCallback(() => viewStdio(Stdio.STDIN), []);
     return (
-      <div class="flex flex-row">
+      <div className="flex flex-row">
         <ArrowSvgInwards color="#FFFFFF" onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$stdin}</pre>
+        <pre className="text-base display-font">{testcase.$stdin}</pre>
       </div>
     );
   };
-  const StderrRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.STDERR), [viewStdio]);
+  const StderrRow: FC = () => {
+    const handleClick = useCallback(() => viewStdio(Stdio.STDERR), []);
     return (
-      <div class="flex flex-row">
+      <div className="flex flex-row">
         <ArrowSvgOutwards color={RED_COLOR} onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$stderr}</pre>
+        <pre className="text-base display-font">{testcase.$stderr}</pre>
       </div>
     );
   };
-  const StdoutRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.STDOUT), [viewStdio]);
+  const StdoutRow: FC = () => {
+    const handleClick = useCallback(() => viewStdio(Stdio.STDOUT), []);
     return (
-      <div class="flex flex-row">
+      <div className="flex flex-row">
         <ArrowSvgOutwards color="#FFFFFF" onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$stdout}</pre>
+        <pre className="text-base display-font">{testcase.$stdout}</pre>
       </div>
     );
   };
-  const AcceptedStdoutRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.ACCEPTED_STDOUT), [viewStdio]);
+  const AcceptedStdoutRow: FC = () => {
+    const handleClick = useCallback(() => viewStdio(Stdio.ACCEPTED_STDOUT), []);
     return (
-      <div class="flex flex-row">
+      <div className="flex flex-row">
         <ArrowSvgOutwards color={GREEN_COLOR} onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$acceptedStdout}</pre>
+        <pre className="text-base display-font">{testcase.$acceptedStdout}</pre>
       </div>
     );
   };
@@ -183,9 +185,9 @@ export default function Testcase({ id, testcase }: Props) {
     case Status.TL:
       return (
         <div className={`container mx-auto mb-6 ${testcase.skipped && "fade"}`}>
-          <div class="flex flex-row unfade">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow unfade">
+          <div className="flex flex-row unfade">
+            <div className="w-6 shrink-0" />
+            <div className="flex justify-start gap-x-2 bg-zinc-800 grow unfade">
               <StatusButton id={id} status={testcase.status} />
               <ActionButton id={id} action={Action.EDIT} backgroundColor={GRAY_COLOR} text="edit" />
               <ActionButton
@@ -201,7 +203,7 @@ export default function Testcase({ id, testcase }: Props) {
                 backgroundColor={RED_COLOR}
                 text="delete"
               />
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
+              <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
                 {testcase.$elapsed}ms
               </p>
               <ActionButton
@@ -222,8 +224,8 @@ export default function Testcase({ id, testcase }: Props) {
                 <StdoutRow />
                 {testcase.status === Status.WA && <AcceptedStdoutRow />}
                 {(testcase.status === Status.WA || testcase.status === Status.NA) && (
-                  <div class="flex flex-row gap-x-2">
-                    <div class="w-4 shrink-0" />
+                  <div className="flex flex-row gap-x-2">
+                    <div className="w-4 shrink-0" />
                     <ActionButton
                       id={id}
                       action={Action.ACCEPT}
@@ -241,8 +243,8 @@ export default function Testcase({ id, testcase }: Props) {
                   </div>
                 )}
                 {testcase.status === Status.AC && (
-                  <div class="flex flex-row">
-                    <div class="w-6 shrink-0" />
+                  <div className="flex flex-row">
+                    <div className="w-6 shrink-0" />
                     <ActionButton
                       id={id}
                       action={Action.DECLINE}
@@ -257,27 +259,29 @@ export default function Testcase({ id, testcase }: Props) {
       );
     case Status.COMPILING:
       return (
-        <div class="container mx-auto mb-6">
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">compiling</p>
+        <div className="container mx-auto mb-6">
+          <div className="flex flex-row">
+            <div className="w-6 shrink-0" />
+            <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
+              <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
+                compiling
+              </p>
             </div>
           </div>
         </div>
       );
     case Status.RUNNING:
       return (
-        <div class="container mx-auto mb-6">
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
+        <div className="container mx-auto mb-6">
+          <div className="flex flex-row">
+            <div className="w-6 shrink-0" />
+            <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
               <ActionButton id={id} action={Action.STOP} backgroundColor={RED_COLOR} text="stop" />
             </div>
           </div>
           <StdinRow />
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
+          <div className="flex flex-row">
+            <div className="w-6 shrink-0" />
             <AutoresizeTextarea input={newStdin} onKeyUp={handleNewStdinKeyUp} />
           </div>
           <StderrRow />
@@ -286,13 +290,13 @@ export default function Testcase({ id, testcase }: Props) {
       );
     case Status.EDITING:
       return (
-        <div class="container mx-auto mb-6">
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
+        <div className="container mx-auto mb-6">
+          <div className="flex flex-row">
+            <div className="w-6 shrink-0" />
+            <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
               <button
                 type="button"
-                class="text-base leading-tight px-3 w-fit display-font"
+                className="text-base leading-tight px-3 w-fit display-font"
                 style={{ backgroundColor: BLUE_COLOR }}
                 onClick={handleSave}
               >
@@ -300,11 +304,11 @@ export default function Testcase({ id, testcase }: Props) {
               </button>
             </div>
           </div>
-          <div class="flex flex-row">
+          <div className="flex flex-row">
             <ArrowSvgInwards color="#FFFFFF" />
             <AutoresizeTextarea input={testcase.$stdin!} />
           </div>
-          <div class="flex flex-row">
+          <div className="flex flex-row">
             <ArrowSvgOutwards color={GREEN_COLOR} />
             <AutoresizeTextarea input={testcase.$acceptedStdout!} />
           </div>

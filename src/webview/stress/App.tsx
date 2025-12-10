@@ -1,5 +1,6 @@
-import { batch, signal, useComputed } from "@preact/signals";
-import { useCallback, useEffect } from "preact/hooks";
+import { batch, signal, useComputed } from "@preact/signals-react";
+import { useSignals } from "@preact/signals-react/runtime";
+import { useCallback, useEffect } from "react";
 import * as v from "valibot";
 
 import { Status } from "~shared/enums";
@@ -83,6 +84,7 @@ function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
 }
 
 export default function App() {
+  useSignals();
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
   const handleStop = useCallback(() => postProviderMessage({ type: ProviderMessageType.STOP }), []);
@@ -96,7 +98,7 @@ export default function App() {
       return (
         <button
           type="button"
-          class="text-base leading-tight px-3 w-fit display-font"
+          className="text-base leading-tight px-3 w-fit display-font"
           style={{ backgroundColor: RED_COLOR }}
           onClick={handleStop}
         >
@@ -112,7 +114,7 @@ export default function App() {
     return (
       <button
         type="button"
-        class="text-base leading-tight px-3 w-fit display-font"
+        className="text-base leading-tight px-3 w-fit display-font"
         style={{ backgroundColor: BLUE_COLOR }}
         onClick={handleRun}
       >
@@ -125,14 +127,14 @@ export default function App() {
     <>
       {showView.value && (
         <>
-          <div class="container mx-auto mb-6">
-            <div class="flex flex-row">
-              <div class="w-6 shrink-0" />
-              <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
+          <div className="container mx-auto mb-6">
+            <div className="flex flex-row">
+              <div className="w-6 shrink-0" />
+              <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
                 {button}
                 <button
                   type="button"
-                  class="text-base leading-tight px-3 w-fit display-font"
+                  className="text-base leading-tight px-3 w-fit display-font"
                   style={{ backgroundColor: BLUE_COLOR }}
                   onClick={handleClear}
                 >

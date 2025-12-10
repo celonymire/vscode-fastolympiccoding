@@ -6,7 +6,7 @@ import * as path from "node:path";
 const isProd = process.env.NODE_ENV === "production";
 
 const sharedResolve: Configuration["resolve"] = {
-  extensions: [".ts", ".tsx"],
+  extensions: [".ts", ".tsx", ".js", ".jsx"],
   alias: {
     "~shared": path.resolve("./src/shared"),
     "~webview": path.resolve("./src/webview"),
@@ -93,7 +93,7 @@ const webviewsConfig: Configuration = {
             jsc: {
               parser: { syntax: "typescript", tsx: true },
               transform: {
-                react: { runtime: "automatic", importSource: "preact" },
+                react: { runtime: "automatic" },
               },
             },
           },

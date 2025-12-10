@@ -1,5 +1,5 @@
-import type { FunctionComponent } from "preact";
-import { useCallback } from "preact/hooks";
+import type { FC } from "react";
+import { useCallback } from "react";
 
 export const GRAY_COLOR = "#52525C";
 export const GREEN_COLOR = "#475B45";
@@ -14,13 +14,9 @@ interface ArrowSvgProps {
   onClick?: () => unknown;
 }
 
-const ArrowSvg: FunctionComponent<ArrowSvgPropsGeneric> = ({
-  d,
-  color,
-  onClick,
-}: ArrowSvgPropsGeneric) => {
+const ArrowSvg: FC<ArrowSvgPropsGeneric> = ({ d, color, onClick }: ArrowSvgPropsGeneric) => {
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+    (event: React.KeyboardEvent) => {
       if (event.key === "Enter") onClick?.();
     },
     [onClick]
@@ -31,7 +27,7 @@ const ArrowSvg: FunctionComponent<ArrowSvgPropsGeneric> = ({
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       fill="currentColor"
-      class="w-4 h-4 mr-2 mt-1 shrink-0"
+      className="w-4 h-4 mr-2 mt-1 shrink-0"
       onClick={onClick}
       onKeyDown={handleKeyDown}
     >
