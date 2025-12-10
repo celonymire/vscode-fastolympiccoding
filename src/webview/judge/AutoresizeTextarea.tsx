@@ -1,26 +1,26 @@
-import type { Signal } from "@preact/signals-react";
-import { useSignals } from "@preact/signals-react/runtime";
+import type { Observable } from "@legendapp/state";
+import { observer } from "@legendapp/state/react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 
 interface Props {
-  input: Signal<string>;
+  input$: Observable<string>;
   onKeyUp?: (event: KeyboardEvent) => void;
 }
 
-export default function AutoresizeTextarea({ input, onKeyUp }: Props) {
-  useSignals();
+const AutoresizeTextarea = observer(function AutoresizeTextarea({ input$, onKeyUp }: Props) {
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const value = input$.get();
 
   useLayoutEffect(() => {
     textarea.current!.style.height = "inherit";
     textarea.current!.style.height = `${textarea.current!.scrollHeight}px`;
-  }, [input.value]);
+  }, [value]);
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      input.value = event.target.value;
+      input$.set(event.target.value);
     },
-    [input]
+    [input$]
   );
 
   const handleKeyUp = useCallback(
@@ -43,10 +43,12 @@ export default function AutoresizeTextarea({ input, onKeyUp }: Props) {
         width: "100%",
         overflowY: "hidden",
       }}
-      value={input.value}
+      value={value}
       onChange={handleChange}
       onKeyUp={handleKeyUp}
       placeholder="Input here..."
     />
   );
-}
+});
+
+export default AutoresizeTextarea;

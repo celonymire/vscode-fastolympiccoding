@@ -1,12 +1,11 @@
-import { signal, useComputed } from "@preact/signals-react";
-import { useSignals } from "@preact/signals-react/runtime";
+import { observable } from "@legendapp/state";
+import { observer } from "@legendapp/state/react";
 import { useCallback, useEffect } from "react";
 import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
 import { TestcaseSchema } from "~shared/schemas";
 import { BLUE_COLOR } from "~webview/components";
-import { observable } from "~external/observable";
 import {
   DeleteMessageSchema,
   InitialStateSchema,
@@ -25,9 +24,11 @@ type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
 type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
-const testcases = observable(new Map<number, ITestcase>());
-const newTimeLimit = signal(0);
-const show = signal(true);
+const state$ = observable({
+  testcases: new Map<number, ITestcase>(),
+  newTimeLimit: 0,
+  show: true,
+});
 
 window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
   switch (msg.data.type) {
@@ -56,8 +57,9 @@ window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
 });
 
 function handleNew({ id }: v.InferOutput<typeof NewMessageSchema>) {
-  if (!testcases.get(id)) {
-    testcases.set(id, {
+  const testcases = state$.testcases.get();
+  if (!testcases.has(id)) {
+    state$.testcases.set(id, {
       stdin: "",
       stderr: "",
       stdout: "",
@@ -72,38 +74,46 @@ function handleNew({ id }: v.InferOutput<typeof NewMessageSchema>) {
 }
 
 function handleSet({ id, property, value }: v.InferOutput<typeof SetMessageSchema>) {
-  (testcases.get(id)![property] as unknown) = value;
+  const testcase$ = state$.testcases.get(id);
+  if (testcase$) {
+    (testcase$ as unknown as Record<string, { set: (v: unknown) => void }>)[property].set(value);
+  }
 }
 
 function handleStdio({ id, data, stdio }: IStdioMessage) {
+  const testcase$ = state$.testcases.get(id);
+  if (!testcase$) return;
   switch (stdio) {
     case Stdio.STDIN:
-      testcases.get(id)!.stdin += data;
+      testcase$.stdin.set((prev) => prev + data);
       break;
     case Stdio.STDERR:
-      testcases.get(id)!.stderr += data;
+      testcase$.stderr.set((prev) => prev + data);
       break;
     case Stdio.STDOUT:
-      testcases.get(id)!.stdout += data;
+      testcase$.stdout.set((prev) => prev + data);
       break;
     case Stdio.ACCEPTED_STDOUT:
-      testcases.get(id)!.acceptedStdout += data;
+      testcase$.acceptedStdout.set((prev) => prev + data);
       break;
   }
 }
 
 function handleDelete({ id }: v.InferOutput<typeof DeleteMessageSchema>) {
-  testcases.delete(id);
+  state$.testcases.delete(id);
 }
 
 function handleSaveAll() {
-  for (const [id, testcase] of testcases) {
+  for (const [id, testcase] of state$.testcases.get()) {
     if (testcase.status === Status.EDITING) {
       const stdin = testcase.stdin;
       const acceptedStdout = testcase.acceptedStdout;
       // the extension host will send shortened version of both of these
-      testcase.stdin = "";
-      testcase.acceptedStdout = "";
+      const testcase$ = state$.testcases.get(id);
+      if (testcase$) {
+        testcase$.stdin.set("");
+        testcase$.acceptedStdout.set("");
+      }
       postProviderMessage({
         type: ProviderMessageType.SAVE,
         id,
@@ -115,28 +125,27 @@ function handleSaveAll() {
 }
 
 function handleShow({ visible }: IShowMessage) {
-  show.value = visible;
+  state$.show.set(visible);
 }
 
 function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSchema>) {
-  newTimeLimit.value = timeLimit;
+  state$.newTimeLimit.set(timeLimit);
 }
 
 function submitTimeLimit() {
   postProviderMessage({
     type: ProviderMessageType.TL,
-    limit: Number(newTimeLimit.value),
+    limit: Number(state$.newTimeLimit.get()),
   });
 }
 
-export default function App() {
-  useSignals();
+const App = observer(function App() {
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
   const handleNext = useCallback(() => postProviderMessage({ type: ProviderMessageType.NEXT }), []);
 
   const handleTimeLimitChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    newTimeLimit.value = Number(event.target.value);
+    state$.newTimeLimit.set(Number(event.target.value));
   }, []);
 
   const handleTimeLimitKeyUp = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -145,19 +154,13 @@ export default function App() {
     }
   }, []);
 
-  const testcaseComponents = useComputed(() => {
-    const components = [];
-    for (const [id, testcase] of testcases.entries()) {
-      components.push(<Testcase key={id} id={id} testcase={testcase} />);
-    }
-    return components;
-  });
-
   return (
-    show.value && (
+    state$.show.get() && (
       <div className="flex flex-col h-screen">
         <div className="flex-1 overflow-auto">
-          {testcaseComponents}
+          {Array.from(state$.testcases.get().entries()).map(([id]) => (
+            <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
+          ))}
           <button
             type="button"
             className="ml-6 text-base leading-tight bg-zinc-600 px-3 shrink-0 display-font"
@@ -177,7 +180,7 @@ export default function App() {
           <input
             type="number"
             className="appearance-none bg-transparent border-none focus:outline-none text-base leading-tight display-font w-fit"
-            value={newTimeLimit.value}
+            value={state$.newTimeLimit.get()}
             onChange={handleTimeLimitChange}
             onKeyUp={handleTimeLimitKeyUp}
           />
@@ -194,4 +197,6 @@ export default function App() {
       </div>
     )
   );
-}
+});
+
+export default App;

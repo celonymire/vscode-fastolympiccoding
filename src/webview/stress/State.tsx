@@ -1,12 +1,12 @@
-import type { Signal } from "@preact/signals-react";
-import { useSignals } from "@preact/signals-react/runtime";
+import type { Observable } from "@legendapp/state";
+import { observer, Memo } from "@legendapp/state/react";
 import { useCallback } from "react";
 
 import { Status } from "~shared/enums";
 import { ArrowSvgOutwards, BLUE_COLOR, RED_COLOR } from "~webview/components";
 
 interface Props {
-  data: Signal<string>;
+  data$: Observable<string>;
   status: Status;
   id: number;
   onView: (id: number) => void;
@@ -15,8 +15,7 @@ interface Props {
 
 const from = ["Generator", "Solution", "Good Solution"];
 
-export default function State({ data, status, id, onView, onAdd }: Props) {
-  useSignals();
+const State = observer(function State({ data$, status, id, onView, onAdd }: Props) {
   const handleAdd = useCallback(() => onAdd(id), [id, onAdd]);
   const handleView = useCallback(() => onView(id), [id, onView]);
 
@@ -46,7 +45,9 @@ export default function State({ data, status, id, onView, onAdd }: Props) {
               <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
                 {from[id]}
               </p>
-              <pre className="text-base display-font">{data}</pre>
+              <pre className="text-base display-font">
+                <Memo>{() => data$.get()}</Memo>
+              </pre>
             </div>
           </div>
         </div>
@@ -88,9 +89,13 @@ export default function State({ data, status, id, onView, onAdd }: Props) {
           </div>
           <div className="flex flex-row">
             <ArrowSvgOutwards color="#FFFFFF" onClick={handleView} />
-            <pre className="text-base display-font">{data}</pre>
+            <pre className="text-base display-font">
+              <Memo>{() => data$.get()}</Memo>
+            </pre>
           </div>
         </div>
       );
   }
-}
+});
+
+export default State;

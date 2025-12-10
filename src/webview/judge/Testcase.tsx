@@ -1,5 +1,5 @@
-import { useSignal } from "@preact/signals-react";
-import { useSignals } from "@preact/signals-react/runtime";
+import { useObservable, observer, Memo } from "@legendapp/state/react";
+import type { Observable } from "@legendapp/state";
 import { useCallback } from "react";
 import type { FC } from "react";
 import * as v from "valibot";
@@ -14,7 +14,6 @@ import {
   GREEN_COLOR,
   RED_COLOR,
 } from "~webview/components";
-import type { PreactObservable } from "../../external/observable";
 import { Action, ProviderMessageType } from "~shared/judge-messages";
 import AutoresizeTextarea from "./AutoresizeTextarea";
 import { postProviderMessage } from "./message";
@@ -23,7 +22,7 @@ type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
 interface Props {
   id: number;
-  testcase: PreactObservable<ITestcase>;
+  testcase$: Observable<ITestcase>;
 }
 interface ActionButtonProps {
   id: number;
@@ -97,19 +96,18 @@ const StatusButton: FC<StatusButtonProps> = ({ status, id }: StatusButtonProps) 
   );
 };
 
-export default function Testcase({ id, testcase }: Props) {
-  useSignals();
+const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
   const viewStdio = useCallback(
     (stdio: Stdio) => postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
     [id]
   );
 
-  const newStdin = useSignal("");
+  const newStdin$ = useObservable("");
 
   const handlePreRun = useCallback(() => {
     // may be adding additional inputs, so clear out previous inputs
-    newStdin.value = "";
-  }, [newStdin]);
+    newStdin$.set("");
+  }, [newStdin$]);
 
   const handleNewStdinKeyUp = useCallback(
     (event: KeyboardEvent) => {
@@ -117,34 +115,36 @@ export default function Testcase({ id, testcase }: Props) {
         postProviderMessage({
           type: ProviderMessageType.STDIN,
           id,
-          data: newStdin.value,
+          data: newStdin$.get(),
         });
-        newStdin.value = "";
+        newStdin$.set("");
       }
     },
-    [id, newStdin]
+    [id, newStdin$]
   );
 
   const handleSave = useCallback(() => {
-    const stdin = testcase.stdin;
-    const acceptedStdout = testcase.acceptedStdout;
+    const stdin = testcase$.stdin.get();
+    const acceptedStdout = testcase$.acceptedStdout.get();
     // the extension host will send shortened version of both of these
-    testcase.stdin = "";
-    testcase.acceptedStdout = "";
+    testcase$.stdin.set("");
+    testcase$.acceptedStdout.set("");
     postProviderMessage({
       type: ProviderMessageType.SAVE,
       id,
       stdin,
       acceptedStdout,
     });
-  }, [id, testcase]);
+  }, [id, testcase$]);
 
   const StdinRow: FC = () => {
     const handleClick = useCallback(() => viewStdio(Stdio.STDIN), []);
     return (
       <div className="flex flex-row">
         <ArrowSvgInwards color="#FFFFFF" onClick={handleClick} />
-        <pre className="text-base display-font">{testcase.$stdin}</pre>
+        <pre className="text-base display-font">
+          <Memo>{() => testcase$.stdin.get()}</Memo>
+        </pre>
       </div>
     );
   };
@@ -153,7 +153,9 @@ export default function Testcase({ id, testcase }: Props) {
     return (
       <div className="flex flex-row">
         <ArrowSvgOutwards color={RED_COLOR} onClick={handleClick} />
-        <pre className="text-base display-font">{testcase.$stderr}</pre>
+        <pre className="text-base display-font">
+          <Memo>{() => testcase$.stderr.get()}</Memo>
+        </pre>
       </div>
     );
   };
@@ -162,7 +164,9 @@ export default function Testcase({ id, testcase }: Props) {
     return (
       <div className="flex flex-row">
         <ArrowSvgOutwards color="#FFFFFF" onClick={handleClick} />
-        <pre className="text-base display-font">{testcase.$stdout}</pre>
+        <pre className="text-base display-font">
+          <Memo>{() => testcase$.stdout.get()}</Memo>
+        </pre>
       </div>
     );
   };
@@ -171,12 +175,19 @@ export default function Testcase({ id, testcase }: Props) {
     return (
       <div className="flex flex-row">
         <ArrowSvgOutwards color={GREEN_COLOR} onClick={handleClick} />
-        <pre className="text-base display-font">{testcase.$acceptedStdout}</pre>
+        <pre className="text-base display-font">
+          <Memo>{() => testcase$.acceptedStdout.get()}</Memo>
+        </pre>
       </div>
     );
   };
 
-  switch (testcase.status) {
+  const status = testcase$.status.get();
+  const skipped = testcase$.skipped.get();
+  const shown = testcase$.shown.get();
+  const toggled = testcase$.toggled.get();
+
+  switch (status) {
     case Status.NA:
     case Status.WA:
     case Status.AC:
@@ -184,11 +195,11 @@ export default function Testcase({ id, testcase }: Props) {
     case Status.CE:
     case Status.TL:
       return (
-        <div className={`container mx-auto mb-6 ${testcase.skipped && "fade"}`}>
+        <div className={`container mx-auto mb-6 ${skipped && "fade"}`}>
           <div className="flex flex-row unfade">
             <div className="w-6 shrink-0" />
             <div className="flex justify-start gap-x-2 bg-zinc-800 grow unfade">
-              <StatusButton id={id} status={testcase.status} />
+              <StatusButton id={id} status={status} />
               <ActionButton id={id} action={Action.EDIT} backgroundColor={GRAY_COLOR} text="edit" />
               <ActionButton
                 id={id}
@@ -204,57 +215,55 @@ export default function Testcase({ id, testcase }: Props) {
                 text="delete"
               />
               <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                {testcase.$elapsed}ms
+                <Memo>{() => testcase$.elapsed.get()}</Memo>ms
               </p>
               <ActionButton
                 id={id}
                 action={Action.TOGGLE_SKIP}
                 backgroundColor="#000000"
-                text={testcase.skipped ? "unskip" : "skip"}
+                text={skipped ? "unskip" : "skip"}
                 className="unfade"
               />
             </div>
           </div>
-          {!testcase.skipped &&
-            testcase.shown &&
-            !(testcase.status === Status.AC && !testcase.toggled) && (
-              <>
-                <StdinRow />
-                <StderrRow />
-                <StdoutRow />
-                {testcase.status === Status.WA && <AcceptedStdoutRow />}
-                {(testcase.status === Status.WA || testcase.status === Status.NA) && (
-                  <div className="flex flex-row gap-x-2">
-                    <div className="w-4 shrink-0" />
+          {!skipped && shown && !(status === Status.AC && !toggled) && (
+            <>
+              <StdinRow />
+              <StderrRow />
+              <StdoutRow />
+              {status === Status.WA && <AcceptedStdoutRow />}
+              {(status === Status.WA || status === Status.NA) && (
+                <div className="flex flex-row gap-x-2">
+                  <div className="w-4 shrink-0" />
+                  <ActionButton
+                    id={id}
+                    action={Action.ACCEPT}
+                    backgroundColor={GREEN_COLOR}
+                    text="accept"
+                  />
+                  {status === Status.WA && (
                     <ActionButton
                       id={id}
-                      action={Action.ACCEPT}
-                      backgroundColor={GREEN_COLOR}
-                      text="accept"
+                      action={Action.COMPARE}
+                      backgroundColor={BLUE_COLOR}
+                      text="compare"
                     />
-                    {testcase.status === Status.WA && (
-                      <ActionButton
-                        id={id}
-                        action={Action.COMPARE}
-                        backgroundColor={BLUE_COLOR}
-                        text="compare"
-                      />
-                    )}
-                  </div>
-                )}
-                {testcase.status === Status.AC && (
-                  <div className="flex flex-row">
-                    <div className="w-6 shrink-0" />
-                    <ActionButton
-                      id={id}
-                      action={Action.DECLINE}
-                      backgroundColor={RED_COLOR}
-                      text="decline"
-                    />
-                  </div>
-                )}
-              </>
-            )}
+                  )}
+                </div>
+              )}
+              {status === Status.AC && (
+                <div className="flex flex-row">
+                  <div className="w-6 shrink-0" />
+                  <ActionButton
+                    id={id}
+                    action={Action.DECLINE}
+                    backgroundColor={RED_COLOR}
+                    text="decline"
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
       );
     case Status.COMPILING:
@@ -282,7 +291,7 @@ export default function Testcase({ id, testcase }: Props) {
           <StdinRow />
           <div className="flex flex-row">
             <div className="w-6 shrink-0" />
-            <AutoresizeTextarea input={newStdin} onKeyUp={handleNewStdinKeyUp} />
+            <AutoresizeTextarea input$={newStdin$} onKeyUp={handleNewStdinKeyUp} />
           </div>
           <StderrRow />
           <StdoutRow />
@@ -306,13 +315,15 @@ export default function Testcase({ id, testcase }: Props) {
           </div>
           <div className="flex flex-row">
             <ArrowSvgInwards color="#FFFFFF" />
-            <AutoresizeTextarea input={testcase.$stdin!} />
+            <AutoresizeTextarea input$={testcase$.stdin} />
           </div>
           <div className="flex flex-row">
             <ArrowSvgOutwards color={GREEN_COLOR} />
-            <AutoresizeTextarea input={testcase.$acceptedStdout!} />
+            <AutoresizeTextarea input$={testcase$.acceptedStdout} />
           </div>
         </div>
       );
   }
-}
+});
+
+export default Testcase;

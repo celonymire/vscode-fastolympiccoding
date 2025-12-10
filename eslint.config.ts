@@ -9,7 +9,7 @@ import * as globals from "globals";
 export default [
   js.configs.recommended,
   {
-    ignores: ["dist/**", "node_modules/**", "src/external/**"],
+    ignores: ["dist/**", "node_modules/**"],
   },
   {
     files: ["src/**/*.ts", "src/**/*.tsx"],
