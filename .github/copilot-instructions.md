@@ -9,7 +9,7 @@ This repository contains a VS Code extension that provides two webview-based too
 Build and tooling:
 
 - Use `bun install` to install dependencies.
-- Use `bun run watch` during development and `bun run prod` for production builds. The build is two-stage: Tailwind CLI compiles `src/styles/global.css` to `dist/styles.css`, then Rspack bundles the extension and webviews into `dist/`.
+- Use `bun run watch` during development and `bun run prod` for production builds. Rspack bundles the extension and webviews into `dist/`. Each webview has its own `index.css` stylesheet that is bundled alongside its JavaScript.
 - Run `bun run lint` and `bun run format` to apply ESLint (TypeScript + React) and Prettier rules.
 
 Design and implementation guidelines:
