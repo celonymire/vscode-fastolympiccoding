@@ -1,5 +1,5 @@
 import { defineConfig } from "@rspack/cli";
-import { type Configuration } from "@rspack/core";
+import { type Configuration, DefinePlugin } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import * as path from "node:path";
 
@@ -81,7 +81,15 @@ const webviewsConfig: Configuration = {
     cssFilename: "styles.css",
   },
   target: ["web", "es2015"],
-  resolve: sharedResolve,
+  resolve: {
+    ...sharedResolve,
+    alias: {
+      ...sharedResolve.alias,
+      // Ensure single React instance for all imports
+      react: path.resolve("./node_modules/react"),
+      "react-dom": path.resolve("./node_modules/react-dom"),
+    },
+  },
   module: {
     rules: [
       {
@@ -98,14 +106,12 @@ const webviewsConfig: Configuration = {
           },
         },
       },
-      {
-        test: /\.css$/,
-        use: ["postcss-loader"],
-        type: "css",
-      },
     ],
   },
   plugins: [
+    new DefinePlugin({
+      "process.env.NODE_ENV": JSON.stringify(isProd ? "production" : "development"),
+    }),
     new ForkTsCheckerWebpackPlugin({
       typescript: {
         configFile: "tsconfig.app.json",
