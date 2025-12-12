@@ -2,7 +2,7 @@
 applyTo: "src/webview/**/*.ts,src/webview/**/*.tsx"
 ---
 
-The `src/webview/**` tree contains the Preact-based frontend code for the Judge and Stress webviews. These run in an isolated browser-like environment, not in the VS Code extension host.
+The `src/webview/**` tree contains the React-based frontend code for the Judge and Stress webviews. These run in an isolated browser-like environment, not in the VS Code extension host.
 
 When changing files under `src/webview/**`:
 

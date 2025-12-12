@@ -11,7 +11,7 @@ When working on the build, config, or tooling files matched by this pattern:
 - The build is two-stage:
   - `build:css`: Tailwind CLI reads from `src/styles/global.css` and writes `dist/styles.css`.
   - `build:js`: Rspack bundles the extension backend and webview frontends into `dist/`.
-- The Rspack configuration (`rspack.config.ts`) exports two configs: one targeting Node.js/CommonJS for the extension, and one targeting the web/ES modules for the webviews (TypeScript/TSX with Preact). Keep this separation intact when modifying the config.
+- The Rspack configuration (`rspack.config.ts`) exports two configs: one targeting Node.js/CommonJS for the extension, and one targeting the web/ES modules for the webviews (TypeScript/TSX with React). Keep this separation intact when modifying the config.
 - Type-checking is handled by ForkTsCheckerWebpackPlugin, using `tsconfig.node.json` for the extension and `tsconfig.app.json` for the webviews. Keep these project files aligned with the respective code trees.
-- For quality gates, use `bun run lint` (ESLint with TypeScript + Preact rules) and `bun run format` (Prettier). Avoid adding overlapping or conflicting linters/formatters.
+- For quality gates, use `bun run lint` (ESLint with TypeScript + React rules) and `bun run format` (Prettier). Avoid adding overlapping or conflicting linters/formatters.
 - Prefer minimal, focused config changes. Avoid introducing large new toolchains or build systems; extend the existing Rspack + Tailwind + Bun setup instead.
