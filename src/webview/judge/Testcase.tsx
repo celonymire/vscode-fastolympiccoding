@@ -117,12 +117,11 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               </div>
             </div>
             <div className="testcase-toolbar-right">
-              {status === Status.NA ||
-                (status === Status.WA && (
-                  <div className="testcase-toolbar-icon" onClick={handleAccept}>
-                    <div className="codicon codicon-pass"></div>
-                  </div>
-                ))}
+              {(status === Status.NA || status === Status.WA) && (
+                <div className="testcase-toolbar-icon" onClick={handleAccept}>
+                  <div className="codicon codicon-pass"></div>
+                </div>
+              )}
               {status === Status.AC && (
                 <div className="testcase-toolbar-icon" onClick={handleDecline}>
                   <div className="codicon codicon-close"></div>
