@@ -26,9 +26,14 @@ export class ReadonlyTerminal implements vscode.Pseudoterminal {
   }
 }
 
-// keeps 2 versions of input:
-// 1. "condensed" version which all of 2 or more consecutive whitespaces are removed
-// 2. "shortened" version which respects the specified maximum boundaries from the settings (not condensed like above)
+/**
+ * Handles text data with constraints on maximum display characters and lines.
+ *
+ * We need to keep the full data internally for answer checking, but only display
+ * a shortened version in the UI.
+ *
+ * Competitive Companion states the inputs and outputs must end with a newline!
+ */
 export class TextHandler {
   private static readonly INTERVAL: number = 30;
   private static _maxDisplayCharacters: number = vscode.workspace
@@ -37,6 +42,7 @@ export class TextHandler {
   private static _maxDisplayLines: number = vscode.workspace
     .getConfiguration("fastolympiccoding")
     .get("maxDisplayLines")!;
+
   private _data = "";
   private _shortDataLength = 0;
   private _pending = "";
@@ -44,6 +50,17 @@ export class TextHandler {
   private _newlineCount = 0;
   private _lastWrite = Number.NEGATIVE_INFINITY;
   private _callback: ((data: string) => void) | undefined = undefined;
+
+  private _appendPendingCharacter(char: string) {
+    if (
+      this._shortDataLength >= TextHandler._maxDisplayCharacters ||
+      this._newlineCount >= TextHandler._maxDisplayLines
+    ) {
+      return;
+    }
+    this._pending += char;
+    this._shortDataLength++;
+  }
 
   get data() {
     return this._data;
@@ -56,38 +73,32 @@ export class TextHandler {
   write(_data: string, last: boolean) {
     const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
 
-    // Competitive Companion removes trailing spaces for every line
+    // Update the "full" version
     for (let i = 0; i < data.length; i++) {
       if (data[i] === " ") {
         this._spacesCount++;
       } else if (data[i] === "\n") {
+        this._appendPendingCharacter("\n");
         this._data += "\n";
         this._spacesCount = 0;
       } else {
+        for (let j = 0; j < this._spacesCount; j++) {
+          this._appendPendingCharacter(" ");
+        }
+        this._appendPendingCharacter(data[i]);
+
         this._data += " ".repeat(this._spacesCount);
         this._data += data[i];
         this._spacesCount = 0;
       }
     }
+
     if (last && this._data.at(-1) !== "\n") {
+      this._appendPendingCharacter("\n");
       this._data += "\n";
     }
     if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
       return;
-    }
-
-    for (
-      let i = 0;
-      i < data.length &&
-      this._shortDataLength < TextHandler._maxDisplayCharacters &&
-      this._newlineCount < TextHandler._maxDisplayLines;
-      i++
-    ) {
-      if (data[i] === "\n") {
-        this._newlineCount++;
-      }
-      this._shortDataLength++;
-      this._pending += data[i];
     }
 
     const now = Date.now();
@@ -101,7 +112,7 @@ export class TextHandler {
       this._newlineCount === TextHandler._maxDisplayLines
     ) {
       this._pending += "...";
-      this._shortDataLength = TextHandler._maxDisplayCharacters + 1;
+      this._shortDataLength = TextHandler._maxDisplayCharacters + 1; // prevent further appends
     }
     if (this._callback) {
       this._callback(this._pending);
