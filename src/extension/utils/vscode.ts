@@ -10,15 +10,38 @@ export type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
   private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
   private _closeEmitter: vscode.EventEmitter<number> = new vscode.EventEmitter();
+  private _readyResolver: (() => void) | undefined = undefined;
+  private _ready: Promise<void>;
+  private _buffer: string[] = [];
+  private _opened = false;
 
   onDidWrite: vscode.Event<string> = this._writeEmitter.event;
   onDidClose: vscode.Event<number> = this._closeEmitter.event;
+  get ready(): Promise<void> {
+    return this._ready;
+  }
 
-  open(): void {}
+  constructor() {
+    this._ready = new Promise<void>((resolve) => {
+      this._readyResolver = resolve;
+    });
+  }
+
+  open(): void {
+    this._opened = true;
+    this._readyResolver?.();
+    this._buffer.forEach((text) => this._writeEmitter.fire(text));
+    this._buffer = [];
+  }
 
   write(text: string): void {
     // VSCode requires \r\n for newline, but keep existing \r\n
-    this._writeEmitter.fire(text.replace(/\n/g, "\r\n"));
+    const normalized = text.replace(/\n/g, "\r\n");
+    if (!this._opened) {
+      this._buffer.push(normalized);
+      return;
+    }
+    this._writeEmitter.fire(normalized);
   }
 
   close(): void {
@@ -26,9 +49,16 @@ export class ReadonlyTerminal implements vscode.Pseudoterminal {
   }
 }
 
-// keeps 2 versions of input:
-// 1. "condensed" version which all of 2 or more consecutive whitespaces are removed
-// 2. "shortened" version which respects the specified maximum boundaries from the settings (not condensed like above)
+/**
+ * Handles text data with constraints on maximum display characters and lines.
+ *
+ * The primary purpose of this class is to truncate text for UI display limits,
+ * while always preserving the full data internally for any downstream usage,
+ * such as answer checking (e.g., comparison with accepted stdout) or other logic
+ * that requires the complete, untruncated output.
+ *
+ * Competitive Companion states the inputs and outputs must end with a newline!
+ */
 export class TextHandler {
   private static readonly INTERVAL: number = 30;
   private static _maxDisplayCharacters: number = vscode.workspace
@@ -37,6 +67,7 @@ export class TextHandler {
   private static _maxDisplayLines: number = vscode.workspace
     .getConfiguration("fastolympiccoding")
     .get("maxDisplayLines")!;
+
   private _data = "";
   private _shortDataLength = 0;
   private _pending = "";
@@ -45,49 +76,21 @@ export class TextHandler {
   private _lastWrite = Number.NEGATIVE_INFINITY;
   private _callback: ((data: string) => void) | undefined = undefined;
 
-  get data() {
-    return this._data;
-  }
-
-  set callback(callback: (data: string) => void) {
-    this._callback = callback;
-  }
-
-  write(_data: string, last: boolean) {
-    const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
-
-    // Competitive Companion removes trailing spaces for every line
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] === " ") {
-        this._spacesCount++;
-      } else if (data[i] === "\n") {
-        this._data += "\n";
-        this._spacesCount = 0;
-      } else {
-        this._data += " ".repeat(this._spacesCount);
-        this._data += data[i];
-        this._spacesCount = 0;
-      }
-    }
-    if (last && this._data.at(-1) !== "\n") {
-      this._data += "\n";
-    }
-    if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
+  private _appendPendingCharacter(char: string) {
+    if (
+      this._shortDataLength >= TextHandler._maxDisplayCharacters ||
+      this._newlineCount >= TextHandler._maxDisplayLines
+    ) {
       return;
     }
+    this._pending += char;
+    this._shortDataLength++;
+    this._newlineCount += char === "\n" ? 1 : 0;
+  }
 
-    for (
-      let i = 0;
-      i < data.length &&
-      this._shortDataLength < TextHandler._maxDisplayCharacters &&
-      this._newlineCount < TextHandler._maxDisplayLines;
-      i++
-    ) {
-      if (data[i] === "\n") {
-        this._newlineCount++;
-      }
-      this._shortDataLength++;
-      this._pending += data[i];
+  private _sendPendingIfNeeded(last: boolean) {
+    if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
+      return;
     }
 
     const now = Date.now();
@@ -101,12 +104,50 @@ export class TextHandler {
       this._newlineCount === TextHandler._maxDisplayLines
     ) {
       this._pending += "...";
-      this._shortDataLength = TextHandler._maxDisplayCharacters + 1;
+      this._shortDataLength = TextHandler._maxDisplayCharacters + 1; // prevent further appends
     }
     if (this._callback) {
       this._callback(this._pending);
     }
     this._pending = "";
+  }
+
+  get data() {
+    return this._data;
+  }
+
+  set callback(callback: (data: string) => void) {
+    this._callback = callback;
+  }
+
+  write(_data: string, last: boolean) {
+    const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
+
+    // Update the "full" version
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] === " ") {
+        this._spacesCount++;
+      } else if (data[i] === "\n") {
+        this._appendPendingCharacter("\n");
+        this._data += "\n";
+        this._spacesCount = 0;
+      } else {
+        for (let j = 0; j < this._spacesCount; j++) {
+          this._appendPendingCharacter(" ");
+        }
+        this._appendPendingCharacter(data[i]);
+
+        this._data += " ".repeat(this._spacesCount);
+        this._data += data[i];
+        this._spacesCount = 0;
+      }
+    }
+
+    if (last && this._data.at(-1) !== "\n") {
+      this._appendPendingCharacter("\n");
+      this._data += "\n";
+    }
+    this._sendPendingIfNeeded(last);
   }
 
   reset() {

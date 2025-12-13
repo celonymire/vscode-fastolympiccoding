@@ -1,314 +1,299 @@
-import { useSignal } from "@preact/signals";
-import { useCallback } from "preact/hooks";
-import type { FunctionComponent } from "preact";
+import { observer, useObservable } from "@legendapp/state/react";
+import type { Observable } from "@legendapp/state";
 import * as v from "valibot";
 
-import { Status, Stdio } from "~shared/enums";
 import { TestcaseSchema } from "~shared/schemas";
-import {
-  ArrowSvgInwards,
-  ArrowSvgOutwards,
-  BLUE_COLOR,
-  GRAY_COLOR,
-  GREEN_COLOR,
-  RED_COLOR,
-} from "~webview/components";
-import type { PreactObservable } from "../../external/observable";
+import { Status, Stdio } from "~shared/enums";
+import AutoresizeTextarea from "../AutoresizeTextarea";
+import { useCallback } from "react";
 import { Action, ProviderMessageType } from "~shared/judge-messages";
-import AutoresizeTextarea from "./AutoresizeTextarea";
 import { postProviderMessage } from "./message";
+import { getStatusColor } from "~webview/utils";
 
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
 interface Props {
   id: number;
-  testcase: PreactObservable<ITestcase>;
-}
-interface ActionButtonProps {
-  id: number;
-  action: Action;
-  backgroundColor: string;
-  text: string;
-  className?: string;
-  onClickPrePost?: () => unknown;
-}
-interface StatusButtonProps {
-  id: number;
-  status: Status;
+  testcase$: Observable<ITestcase>;
 }
 
-const ActionButton: FunctionComponent<ActionButtonProps> = ({
-  id,
-  action,
-  backgroundColor,
-  text,
-  className,
-  onClickPrePost,
-}: ActionButtonProps) => {
-  const handleClick = useCallback(() => {
-    onClickPrePost?.();
-    postProviderMessage({ type: ProviderMessageType.ACTION, id, action });
-  }, [id, action, onClickPrePost]);
-
-  return (
-    <button
-      type="button"
-      class={`text-base leading-tight px-3 w-fit display-font ${className}`}
-      style={{ backgroundColor }}
-      onClick={handleClick}
-    >
-      {text}
-    </button>
-  );
-};
-const StatusButton: FunctionComponent<StatusButtonProps> = ({ status, id }: StatusButtonProps) => {
-  let color: string;
-  let text: string;
-  switch (status) {
-    case Status.CE:
-      color = RED_COLOR;
-      text = "CE";
-      break;
-    case Status.RE:
-      color = RED_COLOR;
-      text = "RE";
-      break;
-    case Status.WA:
-      color = RED_COLOR;
-      text = "WA";
-      break;
-    case Status.AC:
-      color = GREEN_COLOR;
-      text = "AC";
-      break;
-    case Status.TL:
-      color = RED_COLOR;
-      text = "TL";
-      break;
-    default:
-      color = GRAY_COLOR;
-      text = "NA";
-      break;
-  }
-
-  return (
-    <ActionButton id={id} action={Action.TOGGLE_VISIBILITY} backgroundColor={color} text={text} />
-  );
-};
-
-export default function Testcase({ id, testcase }: Props) {
-  const viewStdio = useCallback(
-    (stdio: Stdio) => postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
-    [id]
-  );
-
-  const newStdin = useSignal("");
-
-  const handlePreRun = useCallback(() => {
-    // may be adding additional inputs, so clear out previous inputs
-    newStdin.value = "";
-  }, []);
-
-  const handleNewStdinKeyUp = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key === "Enter") {
-        postProviderMessage({
-          type: ProviderMessageType.STDIN,
-          id,
-          data: newStdin.value,
-        });
-        newStdin.value = "";
-      }
-    },
-    [id, newStdin]
-  );
+const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
+  const newStdin$ = useObservable("");
 
   const handleSave = useCallback(() => {
-    const stdin = testcase.stdin;
-    const acceptedStdout = testcase.acceptedStdout;
-    // the extension host will send shortened version of both of these
-    testcase.stdin = "";
-    testcase.acceptedStdout = "";
+    const stdin = testcase$.stdin.get();
+    const acceptedStdout = testcase$.acceptedStdout.get();
+    // the extension host will send back shortened version of both of these
+    testcase$.stdin.set("");
+    testcase$.acceptedStdout.set("");
     postProviderMessage({
       type: ProviderMessageType.SAVE,
       id,
       stdin,
       acceptedStdout,
     });
-  }, [id, testcase]);
+  }, [testcase$, id]);
 
-  const StdinRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.STDIN), [viewStdio]);
-    return (
-      <div class="flex flex-row">
-        <ArrowSvgInwards color="#FFFFFF" onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$stdin}</pre>
-      </div>
-    );
-  };
-  const StderrRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.STDERR), [viewStdio]);
-    return (
-      <div class="flex flex-row">
-        <ArrowSvgOutwards color={RED_COLOR} onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$stderr}</pre>
-      </div>
-    );
-  };
-  const StdoutRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.STDOUT), [viewStdio]);
-    return (
-      <div class="flex flex-row">
-        <ArrowSvgOutwards color="#FFFFFF" onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$stdout}</pre>
-      </div>
-    );
-  };
-  const AcceptedStdoutRow: FunctionComponent = () => {
-    const handleClick = useCallback(() => viewStdio(Stdio.ACCEPTED_STDOUT), [viewStdio]);
-    return (
-      <div class="flex flex-row">
-        <ArrowSvgOutwards color={GREEN_COLOR} onClick={handleClick} />
-        <pre class="text-base display-font">{testcase.$acceptedStdout}</pre>
-      </div>
-    );
-  };
+  const handleExpandStdio = useCallback(
+    (stdio: Stdio) => postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
+    [id]
+  );
 
-  switch (testcase.status) {
-    case Status.NA:
-    case Status.WA:
-    case Status.AC:
-    case Status.RE:
+  const handleNewStdinKeyUp = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter") {
+        postProviderMessage({
+          type: ProviderMessageType.STDIN,
+          id,
+          data: newStdin$.peek(),
+        });
+        newStdin$.set("");
+      }
+    },
+    [id, newStdin$]
+  );
+
+  const handleAction = useCallback(
+    (action: Action) => {
+      postProviderMessage({ type: ProviderMessageType.ACTION, id, action });
+    },
+    [id]
+  );
+
+  const handleRun = useCallback(() => {
+    newStdin$.set("");
+    handleAction(Action.RUN);
+  }, [handleAction, newStdin$]);
+
+  const handleEdit = useCallback(() => handleAction(Action.EDIT), [handleAction]);
+  const handleDelete = useCallback(() => handleAction(Action.DELETE), [handleAction]);
+  const handleAccept = useCallback(() => handleAction(Action.ACCEPT), [handleAction]);
+  const handleDecline = useCallback(() => handleAction(Action.DECLINE), [handleAction]);
+  const handleToggleVisibility = useCallback(
+    () => handleAction(Action.TOGGLE_VISIBILITY),
+    [handleAction]
+  );
+  const handleToggleSkip = useCallback(() => handleAction(Action.TOGGLE_SKIP), [handleAction]);
+  const handleStop = useCallback(() => handleAction(Action.STOP), [handleAction]);
+  const handleCompare = useCallback(() => handleAction(Action.COMPARE), [handleAction]);
+
+  const status = testcase$.status.get();
+  const visible = testcase$.shown.get();
+  const skipped = testcase$.skipped.get();
+  const toggled = testcase$.toggled.get();
+
+  const statusColor = getStatusColor(status);
+
+  switch (status) {
     case Status.CE:
-    case Status.TL:
       return (
-        <div className={`container mx-auto mb-6 ${testcase.skipped && "fade"}`}>
-          <div class="flex flex-row unfade">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow unfade">
-              <StatusButton id={id} status={testcase.status} />
-              <ActionButton id={id} action={Action.EDIT} backgroundColor={GRAY_COLOR} text="edit" />
-              <ActionButton
-                id={id}
-                action={Action.RUN}
-                backgroundColor={BLUE_COLOR}
-                text="run"
-                onClickPrePost={handlePreRun}
-              />
-              <ActionButton
-                id={id}
-                action={Action.DELETE}
-                backgroundColor={RED_COLOR}
-                text="delete"
-              />
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                {testcase.$elapsed}ms
-              </p>
-              <ActionButton
-                id={id}
-                action={Action.TOGGLE_SKIP}
-                backgroundColor="#000000"
-                text={testcase.skipped ? "unskip" : "skip"}
-                className="unfade"
-              />
+        <div className="testcase-container">
+          <div className={`testcase-toolbar ${skipped ? "testcase-toolbar--hidden" : ""}`}>
+            <div className="testcase-toolbar-left">
+              <strong className="testcase-elapsed" style={{ backgroundColor: statusColor }}>
+                CE
+              </strong>
+              <div className="testcase-toolbar-icon" onClick={handleRun}>
+                <div className="codicon codicon-run-below"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleEdit}>
+                <div className="codicon codicon-edit"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleDelete}>
+                <div className="codicon codicon-trash"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleToggleVisibility}>
+                <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
+              </div>
+              <div
+                className="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+                onClick={handleToggleSkip}
+              >
+                <div
+                  className={`codicon ${skipped ? "codicon-debug-connected" : "codicon-debug-disconnect"}`}
+                ></div>
+              </div>
             </div>
           </div>
-          {!testcase.skipped &&
-            testcase.shown &&
-            !(testcase.status === Status.AC && !testcase.toggled) && (
-              <>
-                <StdinRow />
-                <StderrRow />
-                <StdoutRow />
-                {testcase.status === Status.WA && <AcceptedStdoutRow />}
-                {(testcase.status === Status.WA || testcase.status === Status.NA) && (
-                  <div class="flex flex-row gap-x-2">
-                    <div class="w-4 shrink-0" />
-                    <ActionButton
-                      id={id}
-                      action={Action.ACCEPT}
-                      backgroundColor={GREEN_COLOR}
-                      text="accept"
-                    />
-                    {testcase.status === Status.WA && (
-                      <ActionButton
-                        id={id}
-                        action={Action.COMPARE}
-                        backgroundColor={BLUE_COLOR}
-                        text="compare"
-                      />
-                    )}
-                  </div>
-                )}
-                {testcase.status === Status.AC && (
-                  <div class="flex flex-row">
-                    <div class="w-6 shrink-0" />
-                    <ActionButton
-                      id={id}
-                      action={Action.DECLINE}
-                      backgroundColor={RED_COLOR}
-                      text="decline"
-                    />
-                  </div>
-                )}
-              </>
-            )}
+        </div>
+      );
+    case Status.NA:
+    case Status.AC:
+    case Status.WA:
+    case Status.RE:
+    case Status.TL:
+      return (
+        <div className="testcase-container">
+          <div className={`testcase-toolbar ${skipped ? "testcase-toolbar--hidden" : ""}`}>
+            <div className="testcase-toolbar-left">
+              <strong className="testcase-elapsed" style={{ backgroundColor: statusColor }}>
+                {testcase$.elapsed.get()}ms
+              </strong>
+              <div className="testcase-toolbar-icon" onClick={handleRun}>
+                <div className="codicon codicon-run-below"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleEdit}>
+                <div className="codicon codicon-edit"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleDelete}>
+                <div className="codicon codicon-trash"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleToggleVisibility}>
+                <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
+              </div>
+              <div
+                className="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+                onClick={handleToggleSkip}
+              >
+                <div
+                  className={`codicon ${skipped ? "codicon-debug-connected" : "codicon-debug-disconnect"}`}
+                ></div>
+              </div>
+            </div>
+            <div className="testcase-toolbar-right">
+              {(status === Status.NA || status === Status.WA) && (
+                <div className="testcase-toolbar-icon" onClick={handleAccept}>
+                  <div className="codicon codicon-pass"></div>
+                </div>
+              )}
+              {status === Status.AC && (
+                <div className="testcase-toolbar-icon" onClick={handleDecline}>
+                  <div className="codicon codicon-close"></div>
+                </div>
+              )}
+              {status === Status.WA && (
+                <div className="testcase-toolbar-icon" onClick={handleCompare}>
+                  <div className="codicon codicon-diff-single"></div>
+                </div>
+              )}
+            </div>
+          </div>
+          {!skipped && visible && !(status === Status.AC && !toggled) && (
+            <>
+              <AutoresizeTextarea
+                input$={testcase$.stdin}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stdin..."
+                onExpand={() => handleExpandStdio(Stdio.STDIN)}
+              />
+              <AutoresizeTextarea
+                input$={testcase$.stderr}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stderr..."
+                variant="stderr"
+                onExpand={() => handleExpandStdio(Stdio.STDERR)}
+              />
+              <AutoresizeTextarea
+                input$={testcase$.stdout}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stdout..."
+                onExpand={() => handleExpandStdio(Stdio.STDOUT)}
+              />
+              {status === Status.WA && (
+                <AutoresizeTextarea
+                  input$={testcase$.acceptedStdout}
+                  readonly
+                  hiddenOnEmpty
+                  placeholder="Accepted stdout..."
+                  variant="accepted"
+                  onExpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
+                />
+              )}
+            </>
+          )}
         </div>
       );
     case Status.COMPILING:
       return (
-        <div class="container mx-auto mb-6">
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p class="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">compiling</p>
+        <div className="testcase-container">
+          <div className="testcase-toolbar">
+            <div className="testcase-toolbar-left">
+              <strong
+                className="testcase-elapsed"
+                style={{ backgroundColor: getStatusColor(status) }}
+              >
+                COMPILING
+              </strong>
+              <div className="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+                <div className="codicon codicon-loading codicon-modifier-spin"></div>
+              </div>
             </div>
           </div>
         </div>
       );
     case Status.RUNNING:
       return (
-        <div class="container mx-auto mb-6">
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <ActionButton id={id} action={Action.STOP} backgroundColor={RED_COLOR} text="stop" />
+        <div className="testcase-container">
+          <div className="testcase-toolbar">
+            <div className="testcase-toolbar-left">
+              <div className="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+                <div className="codicon codicon-loading codicon-modifier-spin"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleStop}>
+                <div className="codicon codicon-stop-circle"></div>
+              </div>
             </div>
           </div>
-          <StdinRow />
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <AutoresizeTextarea input={newStdin} onKeyUp={handleNewStdinKeyUp} />
-          </div>
-          <StderrRow />
-          <StdoutRow />
+          {visible && (
+            <>
+              <AutoresizeTextarea
+                input$={testcase$.stdin}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stdin..."
+                onExpand={() => handleExpandStdio(Stdio.STDIN)}
+              />
+              <AutoresizeTextarea
+                input$={newStdin$}
+                placeholder="New stdin..."
+                onKeyUp={handleNewStdinKeyUp}
+                variant="active"
+              />
+              <AutoresizeTextarea
+                input$={testcase$.stderr}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stderr..."
+                variant="stderr"
+                onExpand={() => handleExpandStdio(Stdio.STDERR)}
+              />
+              <AutoresizeTextarea input$={testcase$.stdout} readonly placeholder="Stdout..." />
+            </>
+          )}
         </div>
       );
     case Status.EDITING:
       return (
-        <div class="container mx-auto mb-6">
-          <div class="flex flex-row">
-            <div class="w-6 shrink-0" />
-            <div class="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <button
-                type="button"
-                class="text-base leading-tight px-3 w-fit display-font"
-                style={{ backgroundColor: BLUE_COLOR }}
-                onClick={handleSave}
-              >
-                save
-              </button>
+        <div className="testcase-container">
+          <div className="testcase-toolbar">
+            <div className="testcase-toolbar-left">
+              <div className="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+                <div className="codicon codicon-sync codicon-modifier-spin"></div>
+              </div>
+              <div className="testcase-toolbar-icon">
+                <div className="codicon codicon-save" onClick={handleSave}></div>
+              </div>
             </div>
           </div>
-          <div class="flex flex-row">
-            <ArrowSvgInwards color="#FFFFFF" />
-            <AutoresizeTextarea input={testcase.$stdin!} />
-          </div>
-          <div class="flex flex-row">
-            <ArrowSvgOutwards color={GREEN_COLOR} />
-            <AutoresizeTextarea input={testcase.$acceptedStdout!} />
-          </div>
+          <AutoresizeTextarea
+            input$={testcase$.stdin}
+            placeholder="Stdin..."
+            onExpand={() => handleExpandStdio(Stdio.STDIN)}
+          />
+          <AutoresizeTextarea
+            input$={testcase$.acceptedStdout}
+            placeholder="Accepted stdout..."
+            variant="accepted"
+            onExpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
+          />
         </div>
       );
+    default:
+      return <></>;
   }
-}
+});
+
+export default Testcase;

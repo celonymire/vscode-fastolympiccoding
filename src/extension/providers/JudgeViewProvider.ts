@@ -243,6 +243,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: WebviewMessageType.SAVE_ALL });
   }
 
+  toggleWebviewSettings() {
+    super._postMessage({ type: WebviewMessageType.SETTINGS_TOGGLE });
+  }
+
   private _nextTestcase() {
     void this._run(this._addTestcase(), true);
   }
@@ -367,7 +371,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     newTestcase.stdin.write(testcase?.stdin ?? "", !!testcase);
     newTestcase.stderr.write(testcase?.stderr ?? "", !!testcase);
     newTestcase.stdout.write(testcase?.stdout ?? "", !!testcase);
-    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true);
+    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true); // force endline for empty answer comparison
 
     super._postMessage({
       type: WebviewMessageType.SET,
@@ -439,12 +443,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const code = await compile(file, languageSettings.compileCommand, this._context);
 
       if (!token.isCancellationRequested && code) {
+        testcase.status = Status.CE;
         super._postMessage({
           type: WebviewMessageType.SET,
           id,
           property: "status",
           value: Status.CE,
         });
+        this._saveFileData();
         return;
       }
     }
@@ -495,12 +501,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.process.process?.stderr.once("end", () => testcase.stderr.write("", true));
     testcase.process.process?.stdout.once("end", () => testcase.stdout.write("", true));
     testcase.process.process?.once("error", (data: Error) => {
-      super._postMessage({
-        type: WebviewMessageType.STDIO,
-        id,
-        stdio: Stdio.STDERR,
-        data: data.message,
-      });
+      testcase.stderr.write(data.message, true);
       super._postMessage({
         type: WebviewMessageType.SET,
         id,
@@ -555,12 +556,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "stdin",
       value: testcase.stdin.data,
     });
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
+      property: "acceptedStdout",
+      value: testcase.acceptedStdout.data,
+    });
   }
 
   private _accept(id: number) {
     const testcase = this._state.get(id)!;
 
     testcase.status = Status.AC;
+    // shortened version will be sent back while writing
     super._postMessage({
       type: WebviewMessageType.SET,
       id,

@@ -178,10 +178,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       ];
       const codes = await Promise.all(promises);
 
-      for (let i = 0; i < 3; i++) {
-        if (codes[i]) {
-          return;
+      let anyFailedToCompile = false;
+      for (const code of codes) {
+        if (code) {
+          anyFailedToCompile = true;
+          break;
         }
+      }
+      if (anyFailedToCompile) {
+        this._saveState();
+        return;
       }
     }
 

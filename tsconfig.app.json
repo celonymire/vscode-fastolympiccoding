@@ -6,14 +6,8 @@
     "types": ["vscode-webview"],
     "target": "ESNext",
     "lib": ["ESNext", "DOM"],
-    "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "jsx": "react-jsx"
   },
   "extends": "./tsconfig.json",
-  "include": [
-    "src/webview/**/*.ts",
-    "src/webview/**/*.tsx",
-    "src/shared/**/*.ts",
-    "src/external/**/*.ts"
-  ]
+  "include": ["src/webview/**/*.ts", "src/webview/**/*.tsx", "src/shared/**/*.ts"]
 }

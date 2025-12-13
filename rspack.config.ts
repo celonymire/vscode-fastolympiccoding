@@ -1,18 +1,16 @@
 import { defineConfig } from "@rspack/cli";
-import { type Configuration } from "@rspack/core";
+import { type Configuration, DefinePlugin } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import * as path from "node:path";
 
 const isProd = process.env.NODE_ENV === "production";
 
 const sharedResolve: Configuration["resolve"] = {
-  extensions: [".ts", ".tsx"],
+  extensions: [".ts", ".tsx", ".js", ".jsx"],
   alias: {
     "~shared": path.resolve("./src/shared"),
     "~webview": path.resolve("./src/webview"),
     "~extension": path.resolve("./src/extension"),
-    "~external": path.resolve("./src/external"),
-    "~styles": path.resolve("./src/styles"),
   },
 };
 
@@ -79,10 +77,17 @@ const webviewsConfig: Configuration = {
   output: {
     path: path.resolve("./dist"),
     filename: "[name].js",
-    cssFilename: "styles.css",
   },
   target: ["web", "es2015"],
-  resolve: sharedResolve,
+  resolve: {
+    ...sharedResolve,
+    alias: {
+      ...sharedResolve.alias,
+      // Ensure single React instance for all imports
+      react: path.resolve("./node_modules/react"),
+      "react-dom": path.resolve("./node_modules/react-dom"),
+    },
+  },
   module: {
     rules: [
       {
@@ -93,20 +98,18 @@ const webviewsConfig: Configuration = {
             jsc: {
               parser: { syntax: "typescript", tsx: true },
               transform: {
-                react: { runtime: "automatic", importSource: "preact" },
+                react: { runtime: "automatic" },
               },
             },
           },
         },
       },
-      {
-        test: /\.css$/,
-        use: ["postcss-loader"],
-        type: "css",
-      },
     ],
   },
   plugins: [
+    new DefinePlugin({
+      "process.env.NODE_ENV": JSON.stringify(isProd ? "production" : "development"),
+    }),
     new ForkTsCheckerWebpackPlugin({
       typescript: {
         configFile: "tsconfig.app.json",

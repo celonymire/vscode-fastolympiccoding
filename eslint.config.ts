@@ -2,19 +2,14 @@ import * as js from "@eslint/js";
 import * as tseslint from "@typescript-eslint/eslint-plugin";
 import * as tsparser from "@typescript-eslint/parser";
 import * as react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
 import prettier from "eslint-config-prettier";
 import * as globals from "globals";
-
-// eslint-plugin-preact is CommonJS without types, use require
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const preact = require("eslint-plugin-preact") as {
-  configs: { recommended: { rules: Record<string, unknown> } };
-};
 
 export default [
   js.configs.recommended,
   {
-    ignores: ["dist/**", "node_modules/**", "src/external/**"],
+    ignores: ["dist/**", "node_modules/**"],
   },
   {
     files: ["src/**/*.ts", "src/**/*.tsx"],
@@ -35,11 +30,11 @@ export default [
     plugins: {
       "@typescript-eslint": tseslint,
       react: react,
-      preact: preact,
+      "react-hooks": reactHooks,
     },
     rules: {
       ...tseslint.configs.recommended.rules,
-      ...preact.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
       // Rely on TypeScript for undefined symbols in TS files
       "no-undef": "off",
     },

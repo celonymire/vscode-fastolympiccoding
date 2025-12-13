@@ -81,6 +81,7 @@ export enum WebviewMessageType {
   SAVE_ALL = 4,
   SHOW = 5,
   INITIAL_STATE = 6,
+  SETTINGS_TOGGLE = 7,
 }
 
 export const NewMessageSchema = v.object({
@@ -131,6 +132,10 @@ export const InitialStateSchema = v.object({
   timeLimit: v.number(),
 });
 
+export const SettingsToggleSchema = v.object({
+  type: v.literal(WebviewMessageType.SETTINGS_TOGGLE),
+});
+
 export const WebviewMessageSchema = v.union([
   NewMessageSchema,
   SetMessageSchema,
@@ -139,6 +144,7 @@ export const WebviewMessageSchema = v.union([
   SaveAllMessageSchema,
   ShowMessageSchema,
   InitialStateSchema,
+  SettingsToggleSchema,
 ]);
 
 export type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>;

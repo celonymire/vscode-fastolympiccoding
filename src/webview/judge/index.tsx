@@ -1,10 +1,10 @@
-import { render } from "preact";
+import { createRoot } from "react-dom/client";
 
-import "~styles/global.css";
+import "./index.css";
 
 import App from "./App";
 
 const root = document.getElementById("root");
 if (root) {
-  render(<App />, root);
+  createRoot(root).render(<App />);
 }

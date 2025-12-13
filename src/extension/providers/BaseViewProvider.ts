@@ -34,7 +34,10 @@ export default abstract class BaseViewProvider<
     this._webview = webviewView.webview;
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, "dist")],
+      localResourceRoots: [
+        vscode.Uri.joinPath(this._context.extensionUri, "dist"),
+        vscode.Uri.joinPath(this._context.extensionUri, "node_modules", "@vscode", "codicons"),
+      ],
     };
     webviewView.webview.html = this._getWebviewContent(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((message: unknown) => {
@@ -78,10 +81,20 @@ export default abstract class BaseViewProvider<
   }
 
   private _getWebviewContent(webview: vscode.Webview): string {
-    const config = vscode.workspace.getConfiguration("fastolympiccoding");
-    const font = config.get<string>("font")!;
     const scriptUri = this._getUri(webview, ["dist", this.view, "index.js"]);
-    const stylesUri = this._getUri(webview, ["dist", "styles.css"]);
+    const stylesUri = this._getUri(webview, ["dist", this.view, "index.css"]);
+    const codiconsUri = webview
+      .asWebviewUri(
+        vscode.Uri.joinPath(
+          this._context.extensionUri,
+          "node_modules",
+          "@vscode",
+          "codicons",
+          "dist",
+          "codicon.css"
+        )
+      )
+      .toString();
     const nonce = getNonce();
 
     return `
@@ -90,13 +103,9 @@ export default abstract class BaseViewProvider<
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}';">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; font-src ${webview.cspSource}; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}';">
                 <link rel="stylesheet" href="${stylesUri}">
-                <style nonce="${nonce}">
-                    .display-font {
-                        font-family: ${font};
-                    };
-                </style>
+                <link rel="stylesheet" href="${codiconsUri}">
             </head>
         <body>
             <div id="root"></div>

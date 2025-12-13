@@ -22,6 +22,56 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "menus": {
+      "view/title": [
+        {
+          "command": "fastolympiccoding.runAll",
+          "group": "navigation@1",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.stopAll",
+          "group": "navigation@2",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.deleteAll",
+          "group": "navigation@3",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.saveAll",
+          "group": "navigation@4",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "group": "navigation@5",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.startStressTest",
+          "group": "navigation@1",
+          "when": "view == fastolympiccoding.stress"
+        },
+        {
+          "command": "fastolympiccoding.stopStressTest",
+          "group": "navigation@2",
+          "when": "view == fastolympiccoding.stress"
+        },
+        {
+          "command": "fastolympiccoding.clearStressTest",
+          "group": "navigation@3",
+          "when": "view == fastolympiccoding.stress"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "when": "false"
+        }
+      ]
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -207,37 +257,44 @@
       {
         "command": "fastolympiccoding.runAll",
         "title": "Run All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(run-all)"
       },
       {
         "command": "fastolympiccoding.stopAll",
         "title": "Stop All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
       },
       {
         "command": "fastolympiccoding.deleteAll",
         "title": "Delete All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(clear-all)"
       },
       {
         "command": "fastolympiccoding.saveAll",
         "title": "Save All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(save-all)"
       },
       {
         "command": "fastolympiccoding.startStressTest",
         "title": "Start Stress Test",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(debug-start)"
       },
       {
         "command": "fastolympiccoding.stopStressTest",
         "title": "Stop Stress Test",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "fastolympiccoding.clearStressTest",
         "title": "Clear Stress Test",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(clear-all)"
       },
       {
         "command": "fastolympiccoding.clearData",
@@ -258,6 +315,12 @@
         "command": "fastolympiccoding.stopCompetitiveCompanion",
         "title": "Stop Competitive Companion",
         "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.toggleJudgeSettings",
+        "title": "Toggle Judge Settings",
+        "category": "Fast Olympic Coding",
+        "icon": "$(gear)"
       }
     ],
     "keybindings": [
@@ -315,29 +378,27 @@
   "license": "MIT",
   "devDependencies": {
     "@rspack/cli": "^1.6.7",
-    "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^22.19.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@types/vscode": "^1.106.1",
     "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-preact": "^0.1.0",
     "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "fork-ts-checker-webpack-plugin": "^9.1.0",
     "globals": "^16.5.0",
-    "postcss": "^8.5.6",
-    "postcss-load-config": "^6.0.1",
-    "postcss-loader": "^8.2.0",
     "prettier": "3.6.2",
-    "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@preact/signals": "^2.5.1",
-    "nu-observables": "^0.0.7",
-    "preact": "^10.28.0",
+    "@legendapp/state": "3.0.0-beta.42",
+    "@vscode/codicons": "^0.0.44",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
     "valibot": "^1.2.0"
   }
 }
