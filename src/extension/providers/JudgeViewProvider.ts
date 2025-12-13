@@ -22,7 +22,7 @@ import {
   SetTimeLimitSchema,
   StdinMessageSchema,
   ViewMessageSchema,
-  WebviewMessage,
+  type WebviewMessage,
   WebviewMessageType,
 } from "~shared/judge-messages";
 

@@ -370,6 +370,7 @@
     "lint": "eslint .",
     "format": "prettier --write src",
     "check": "prettier --check src",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.app.json",
     "build": "rspack build",
     "prod": "NODE_ENV=production rspack build",
     "watch": "rspack build --watch"
@@ -379,26 +380,25 @@
   "devDependencies": {
     "@rspack/cli": "^1.6.7",
     "@types/node": "^22.19.2",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
     "@types/vscode": "^1.106.1",
     "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-svelte": "^3.9.0",
     "fork-ts-checker-webpack-plugin": "^9.1.0",
     "globals": "^16.5.0",
     "prettier": "3.6.2",
+    "prettier-plugin-svelte": "^3.3.3",
+    "svelte": "^5.34.6",
+    "svelte-check": "^4.2.1",
+    "svelte-loader": "^3.2.4",
+    "svelte-preprocess": "^6.0.3",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@legendapp/state": "3.0.0-beta.42",
     "@vscode/codicons": "^0.0.44",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
     "valibot": "^1.2.0"
   }
 }

@@ -1,8 +1,8 @@
 import * as js from "@eslint/js";
 import * as tseslint from "@typescript-eslint/eslint-plugin";
 import * as tsparser from "@typescript-eslint/parser";
-import * as react from "eslint-plugin-react";
-import reactHooks from "eslint-plugin-react-hooks";
+import eslintPluginSvelte from "eslint-plugin-svelte";
+import svelteParser from "svelte-eslint-parser";
 import prettier from "eslint-config-prettier";
 import * as globals from "globals";
 
@@ -12,7 +12,7 @@ export default [
     ignores: ["dist/**", "node_modules/**"],
   },
   {
-    files: ["src/**/*.ts", "src/**/*.tsx"],
+    files: ["src/**/*.ts"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -29,19 +29,40 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tseslint,
-      react: react,
-      "react-hooks": reactHooks,
     },
     rules: {
       ...tseslint.configs.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
       // Rely on TypeScript for undefined symbols in TS files
       "no-undef": "off",
     },
-    settings: {
-      react: {
-        version: "detect",
+  },
+  ...eslintPluginSvelte.configs["flat/recommended"],
+  {
+    files: ["src/**/*.svelte"],
+    languageOptions: {
+      parser: svelteParser,
+      parserOptions: {
+        parser: tsparser,
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: [".svelte"],
       },
+      globals: {
+        ...globals.browser,
+        acquireVsCodeApi: "readonly",
+        // Svelte 5 runes
+        $state: "readonly",
+        $derived: "readonly",
+        $effect: "readonly",
+        $props: "readonly",
+        $bindable: "readonly",
+        $inspect: "readonly",
+        $host: "readonly",
+      },
+    },
+    rules: {
+      // Rely on TypeScript for undefined symbols
+      "no-undef": "off",
     },
   },
   {

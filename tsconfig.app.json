@@ -1,13 +1,12 @@
 {
   "compilerOptions": {
     "composite": true,
-    "module": "CommonJS",
-    "moduleResolution": "node10",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "types": ["vscode-webview"],
     "target": "ESNext",
-    "lib": ["ESNext", "DOM"],
-    "jsx": "react-jsx"
+    "lib": ["ESNext", "DOM"]
   },
   "extends": "./tsconfig.json",
-  "include": ["src/webview/**/*.ts", "src/webview/**/*.tsx", "src/shared/**/*.ts"]
+  "include": ["src/webview/**/*.ts", "src/webview/**/*.svelte", "src/shared/**/*.ts"]
 }

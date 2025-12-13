@@ -2,11 +2,12 @@ import { defineConfig } from "@rspack/cli";
 import { type Configuration, DefinePlugin } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import * as path from "node:path";
+import { sveltePreprocess } from "svelte-preprocess";
 
 const isProd = process.env.NODE_ENV === "production";
 
 const sharedResolve: Configuration["resolve"] = {
-  extensions: [".ts", ".tsx", ".js", ".jsx"],
+  extensions: [".ts", ".tsx", ".js", ".jsx", ".svelte"],
   alias: {
     "~shared": path.resolve("./src/shared"),
     "~webview": path.resolve("./src/webview"),
@@ -71,8 +72,8 @@ const webviewsConfig: Configuration = {
     css: true,
   },
   entry: {
-    "judge/index": "./src/webview/judge/index.tsx",
-    "stress/index": "./src/webview/stress/index.tsx",
+    "judge/index": "./src/webview/judge/index.ts",
+    "stress/index": "./src/webview/stress/index.ts",
   },
   output: {
     path: path.resolve("./dist"),
@@ -83,23 +84,40 @@ const webviewsConfig: Configuration = {
     ...sharedResolve,
     alias: {
       ...sharedResolve.alias,
-      // Ensure single React instance for all imports
-      react: path.resolve("./node_modules/react"),
-      "react-dom": path.resolve("./node_modules/react-dom"),
     },
+    conditionNames: ["svelte", "browser", "import"],
+    mainFields: ["svelte", "browser", "module", "main"],
   },
   module: {
     rules: [
       {
-        test: /\.tsx?$/,
+        test: /\.svelte$/,
+        use: [
+          {
+            loader: "svelte-loader",
+            options: {
+              preprocess: sveltePreprocess({ typescript: true }),
+              emitCss: true,
+              compilerOptions: {
+                dev: !isProd,
+                css: "external",
+              },
+              onwarn: (warning: { code: string }, handler: (warning: { code: string }) => void) => {
+                if (warning.code.startsWith("a11y")) return;
+                handler(warning);
+              },
+            },
+          },
+        ],
+      },
+      {
+        test: /\.ts$/,
+        exclude: /\.svelte\.ts$/,
         use: {
           loader: "builtin:swc-loader",
           options: {
             jsc: {
-              parser: { syntax: "typescript", tsx: true },
-              transform: {
-                react: { runtime: "automatic" },
-              },
+              parser: { syntax: "typescript" },
             },
           },
         },
