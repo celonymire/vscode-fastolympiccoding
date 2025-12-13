@@ -53,8 +53,9 @@ export class ReadonlyTerminal implements vscode.Pseudoterminal {
  * Handles text data with constraints on maximum display characters and lines.
  *
  * The primary purpose of this class is to truncate text for UI display limits,
- * while always preserving the full data internally for any downstream usage.
- * (For example, answer checking and other logic can use the full data.)
+ * while always preserving the full data internally for any downstream usage,
+ * such as answer checking (e.g., comparison with accepted stdout) or other logic
+ * that requires the complete, untruncated output.
  *
  * Competitive Companion states the inputs and outputs must end with a newline!
  */
