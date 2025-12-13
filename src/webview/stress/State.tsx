@@ -138,6 +138,7 @@ const State = observer(function State({ state$, id, onView, onAdd }: Props) {
             readonly
             placeholder={placeholders[id]}
             onExpand={handleExpand}
+            variant="stderr"
           />
         </div>
       );
