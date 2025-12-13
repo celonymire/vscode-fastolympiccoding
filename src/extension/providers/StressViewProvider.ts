@@ -17,7 +17,7 @@ import {
   ProviderMessageSchema,
   ProviderMessageType,
   ViewMessageSchema,
-  WebviewMessage,
+  type WebviewMessage,
   WebviewMessageType,
 } from "~shared/stress-messages";
 
