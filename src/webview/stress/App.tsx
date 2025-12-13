@@ -4,7 +4,6 @@ import { useCallback, useEffect } from "react";
 import * as v from "valibot";
 
 import { Status } from "~shared/enums";
-import { BLUE_COLOR, RED_COLOR } from "~webview/components";
 import {
   ProviderMessageType,
   RunningMessageSchema,

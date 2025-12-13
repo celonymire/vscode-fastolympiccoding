@@ -78,58 +78,76 @@ const AutoresizeTextarea = observer(function AutoresizeTextarea({
     return null;
   }
 
+  const contentStyle = {
+    whiteSpace: "pre-wrap" as const,
+    border: `1px solid ${getVariantBorderColor(variant)}`,
+    borderRadius: "2px" as const,
+    boxSizing: "border-box" as const,
+    background: "var(--vscode-editor-background)",
+    width: "100%" as const,
+    marginBottom: "3px" as const,
+    fontFamily: "var(--vscode-editor-font-family)",
+    fontSize: "var(--vscode-editor-font-size)",
+    color: "var(--vscode-foreground)",
+  };
+
+  const expandButtonStyle = {
+    position: "absolute" as const,
+    top: "2px" as const,
+    right: "2px" as const,
+    border: "none" as const,
+    background: "transparent" as const,
+    color: "var(--vscode-foreground)",
+    cursor: "pointer" as const,
+    padding: "2px" as const,
+    display: "flex" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    opacity: isHovered ? 1 : 0,
+    transition: "opacity 120ms ease-in-out",
+    pointerEvents: isHovered ? ("auto" as const) : ("none" as const),
+  };
+
   return (
     <div
       style={{ position: "relative" }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <textarea
-        ref={textarea}
-        rows={1}
-        style={{
-          whiteSpace: "pre-wrap",
-          resize: "none",
-          border: `1px solid ${getVariantBorderColor(variant)}`,
-          borderRadius: "2px",
-          boxSizing: "border-box",
-          background: "var(--vscode-editor-background)",
-          width: "100%",
-          marginBottom: "3px",
-          overflowY: "hidden",
-          outline: "none",
-          fontFamily: "var(--vscode-editor-font-family)",
-          fontSize: "var(--vscode-editor-font-size)",
-          color: "var(--vscode-foreground)",
-        }}
-        readOnly={readonly}
-        value={value}
-        onChange={handleChange}
-        onKeyUp={handleKeyUp}
-        placeholder={placeholder}
-      />
+      {readonly ? (
+        <div
+          style={{
+            ...contentStyle,
+            padding: "4px",
+            color: value ? "var(--vscode-foreground)" : "var(--vscode-input-placeholderForeground)",
+          }}
+        >
+          {value || placeholder}
+        </div>
+      ) : (
+        <textarea
+          ref={textarea}
+          rows={1}
+          style={{
+            ...contentStyle,
+            resize: "none",
+            overflowY: "hidden",
+            outline: "none",
+          }}
+          readOnly={readonly}
+          value={value}
+          onChange={handleChange}
+          onKeyUp={handleKeyUp}
+          placeholder={placeholder}
+        />
+      )}
       {!!onExpand && (
         <button
           type="button"
           aria-label="Expand"
           className="codicon codicon-screen-full"
           onClick={handleExpand}
-          style={{
-            position: "absolute",
-            top: "2px",
-            right: "2px",
-            border: "none",
-            background: "transparent",
-            color: "var(--vscode-foreground)",
-            cursor: "pointer",
-            padding: "2px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: isHovered ? 1 : 0,
-            transition: "opacity 120ms ease-in-out",
-            pointerEvents: isHovered ? "auto" : "none",
-          }}
+          style={expandButtonStyle}
         />
       )}
     </div>
