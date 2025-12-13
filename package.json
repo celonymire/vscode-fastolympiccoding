@@ -25,6 +25,26 @@
     "menus": {
       "view/title": [
         {
+          "command": "fastolympiccoding.runAll",
+          "group": "navigation@1",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.stopAll",
+          "group": "navigation@2",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.deleteAll",
+          "group": "navigation@3",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.saveAll",
+          "group": "navigation@4",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
           "command": "fastolympiccoding.startStressTest",
           "group": "navigation@1",
           "when": "view == fastolympiccoding.stress"
@@ -226,22 +246,26 @@
       {
         "command": "fastolympiccoding.runAll",
         "title": "Run All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(run-all)"
       },
       {
         "command": "fastolympiccoding.stopAll",
         "title": "Stop All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
       },
       {
         "command": "fastolympiccoding.deleteAll",
         "title": "Delete All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(clear-all)"
       },
       {
         "command": "fastolympiccoding.saveAll",
         "title": "Save All Testcases",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(save-all)"
       },
       {
         "command": "fastolympiccoding.startStressTest",
