@@ -495,12 +495,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.process.process?.stderr.once("end", () => testcase.stderr.write("", true));
     testcase.process.process?.stdout.once("end", () => testcase.stdout.write("", true));
     testcase.process.process?.once("error", (data: Error) => {
-      super._postMessage({
-        type: WebviewMessageType.STDIO,
-        id,
-        stdio: Stdio.STDERR,
-        data: data.message,
-      });
+      testcase.stderr.write(data.message, true);
       super._postMessage({
         type: WebviewMessageType.SET,
         id,
