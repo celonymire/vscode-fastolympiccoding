@@ -1,0 +1,84 @@
+/* Standard VSCode styling */
+
+.text-button {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  padding: 4px;
+  border-radius: 2px;
+  text-align: center;
+  cursor: pointer;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid var(--vscode-button-border, transparent);
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  line-height: 18px;
+}
+
+.text-button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.divider {
+  height: 1px;
+  margin: 6px 0;
+  background-color: var(--vscode-textSeparator-foreground);
+}
+
+/* Main View */
+
+.new-testcase-button .codicon {
+  margin-right: 3px;
+}
+
+/* Testcase View */
+
+.testcase-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.testcase-toolbar-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.testcase-toolbar-right {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.testcase-toolbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  border-radius: 2px;
+  padding: 3px;
+}
+
+.testcase-toolbar-icon:not(.testcase-toolbar-icon-exclude-highlight):hover {
+  background: var(--vscode-button-secondaryBackground);
+}
+
+.testcase-container {
+  margin-bottom: 24px;
+}
+
+.testcase-elapsed {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 1px 6px;
+  border-radius: 11px;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+}

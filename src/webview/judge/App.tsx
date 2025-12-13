@@ -5,7 +5,6 @@ import * as v from "valibot";
 
 import { Status, Stdio } from "~shared/enums";
 import { TestcaseSchema } from "~shared/schemas";
-import { BLUE_COLOR } from "~webview/components";
 import {
   DeleteMessageSchema,
   InitialStateSchema,
@@ -31,6 +30,7 @@ const state$ = observable({
 });
 
 window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
+  console.log(msg.data);
   switch (msg.data.type) {
     case WebviewMessageType.NEW:
       handleNew(msg.data);
@@ -132,70 +132,21 @@ function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSche
   state$.newTimeLimit.set(timeLimit);
 }
 
-function submitTimeLimit() {
-  postProviderMessage({
-    type: ProviderMessageType.TL,
-    limit: Number(state$.newTimeLimit.get()),
-  });
-}
-
 const App = observer(function App() {
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
   const handleNext = useCallback(() => postProviderMessage({ type: ProviderMessageType.NEXT }), []);
 
-  const handleTimeLimitChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    state$.newTimeLimit.set(Number(event.target.value));
-  }, []);
-
-  const handleTimeLimitKeyUp = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      submitTimeLimit();
-    }
-  }, []);
-
   return (
-    state$.show.get() && (
-      <div className="flex flex-col h-screen">
-        <div className="flex-1 overflow-auto">
-          {Array.from(state$.testcases.get().entries()).map(([id]) => (
-            <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
-          ))}
-          <button
-            type="button"
-            className="ml-6 text-base leading-tight bg-zinc-600 px-3 shrink-0 display-font"
-            onClick={handleNext}
-          >
-            next test
-          </button>
-        </div>
-        <div className="m-6 flex gap-x-2 items-center my-3 bg-zinc-800">
-          <button
-            type="button"
-            className="text-base leading-tight px-3 w-fit display-font"
-            style={{ backgroundColor: BLUE_COLOR }}
-          >
-            time limit
-          </button>
-          <input
-            type="number"
-            className="appearance-none bg-transparent border-none focus:outline-none text-base leading-tight display-font w-fit"
-            value={state$.newTimeLimit.get()}
-            onChange={handleTimeLimitChange}
-            onKeyUp={handleTimeLimitKeyUp}
-          />
-          <span className="text-base leading-tight display-font w-fit">ms</span>
-          <button
-            type="button"
-            className="text-base leading-tight px-3 w-fit display-font"
-            style={{ backgroundColor: BLUE_COLOR }}
-            onClick={submitTimeLimit}
-          >
-            set
-          </button>
-        </div>
-      </div>
-    )
+    <div className="testcase-container">
+      {Array.from(state$.testcases.get().entries()).map(([id]) => (
+        <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
+      ))}
+      <button type="button" className="text-button new-testcase-button" onClick={handleNext}>
+        <div className="codicon codicon-add"></div>
+        New Testcase
+      </button>
+    </div>
   );
 });
 
