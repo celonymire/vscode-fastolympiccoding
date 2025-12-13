@@ -20,11 +20,11 @@
   background: var(--vscode-button-hoverBackground);
 }
 
-/* Main View */
-
-.new-testcase-button .codicon {
+.text-button .codicon {
   margin-right: 4px;
 }
+
+/* Main View */
 
 #empty-state {
   display: flex;

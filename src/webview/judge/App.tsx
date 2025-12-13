@@ -185,6 +185,7 @@ const App = observer(function App() {
             <p className="settings-additional-info">Specify time limit in milliseconds</p>
           </div>
           <button type="button" className="text-button" onClick={handleSaveSettings}>
+            <div className="codicon codicon-save"></div>
             Save
           </button>
         </>
@@ -195,11 +196,7 @@ const App = observer(function App() {
           {Array.from(state$.testcases.get().entries()).map(([id]) => (
             <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
           ))}
-          <button
-            type="button"
-            className="text-button new-testcase-button"
-            onClick={handleNewTestcase}
-          >
+          <button type="button" className="text-button" onClick={handleNewTestcase}>
             <div className="codicon codicon-add"></div>
             New Testcase
           </button>
