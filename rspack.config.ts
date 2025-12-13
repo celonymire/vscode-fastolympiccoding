@@ -1,5 +1,5 @@
 import { defineConfig } from "@rspack/cli";
-import { type Configuration, DefinePlugin } from "@rspack/core";
+import { type Configuration } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import * as path from "node:path";
 import { sveltePreprocess } from "svelte-preprocess";
@@ -125,9 +125,6 @@ const webviewsConfig: Configuration = {
     ],
   },
   plugins: [
-    new DefinePlugin({
-      "process.env.NODE_ENV": JSON.stringify(isProd ? "production" : "development"),
-    }),
     new ForkTsCheckerWebpackPlugin({
       typescript: {
         configFile: "tsconfig.app.json",
