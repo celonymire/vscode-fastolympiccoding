@@ -119,6 +119,7 @@ const AutoresizeTextarea = observer(function AutoresizeTextarea({
           style={{
             ...contentStyle,
             padding: "4px",
+            overflowX: "auto",
             color: value ? "var(--vscode-foreground)" : "var(--vscode-input-placeholderForeground)",
           }}
         >
