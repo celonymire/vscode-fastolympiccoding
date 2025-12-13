@@ -99,7 +99,7 @@
   {/each}
 {:else}
   <div id="empty-state">
-    <div class="codicon codicon-symbol-event" style="font-size: 150px;"></div>
+    <div class="codicon codicon-symbol-event empty-state-icon"></div>
     <p>Open a file to get started</p>
   </div>
 {/if}
@@ -112,5 +112,9 @@
     justify-content: center;
     gap: 8px;
     min-height: 100vh;
+  }
+
+  .empty-state-icon {
+    font-size: 150px;
   }
 </style>

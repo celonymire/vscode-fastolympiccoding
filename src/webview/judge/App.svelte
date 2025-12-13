@@ -215,8 +215,8 @@
   {/if}
 {:else}
   <div id="empty-state">
-    <div class="codicon codicon-symbol-event" style="font-size: 150px;"></div>
-    <p style="line-height: 1;">Open a file to get started</p>
+    <div class="codicon codicon-symbol-event empty-state-icon"></div>
+    <p class="empty-state-text">Open a file to get started</p>
   </div>
 {/if}
 
@@ -254,6 +254,14 @@
     justify-content: center;
     gap: 8px;
     min-height: 100vh;
+  }
+
+  .empty-state-icon {
+    font-size: 150px;
+  }
+
+  .empty-state-text {
+    line-height: 1;
   }
 
   /* Settings View */
