@@ -443,12 +443,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const code = await compile(file, languageSettings.compileCommand, this._context);
 
       if (!token.isCancellationRequested && code) {
+        testcase.status = Status.CE;
         super._postMessage({
           type: WebviewMessageType.SET,
           id,
           property: "status",
           value: Status.CE,
         });
+        this._saveFileData();
         return;
       }
     }
