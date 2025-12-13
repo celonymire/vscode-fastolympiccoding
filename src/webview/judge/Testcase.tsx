@@ -92,8 +92,8 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
       const statusColor = getStatusColor(status);
 
       return (
-        <div className="testcase-container" style={{ opacity: skipped ? 0.5 : 1 }}>
-          <div className="testcase-toolbar">
+        <div className="testcase-container">
+          <div className={`testcase-toolbar ${skipped ? "testcase-toolbar--hidden" : ""}`}>
             <div className="testcase-toolbar-left">
               <strong className="testcase-elapsed" style={{ backgroundColor: statusColor }}>
                 {testcase$.elapsed.get()}ms
@@ -110,7 +110,10 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               <div className="testcase-toolbar-icon" onClick={handleToggleVisibility}>
                 <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
               </div>
-              <div className="testcase-toolbar-icon" onClick={handleToggleSkip}>
+              <div
+                className="testcase-toolbar-icon  testcase-toolbar-icon--visibility"
+                onClick={handleToggleSkip}
+              >
                 <div
                   className={`codicon ${skipped ? "codicon-debug-connected" : "codicon-debug-disconnect"}`}
                 ></div>
