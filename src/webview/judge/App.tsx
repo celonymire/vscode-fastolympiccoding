@@ -161,7 +161,7 @@ const App = observer(function App() {
   return (
     <div id="empty-state">
       <div className="codicon codicon-symbol-event" style={{ fontSize: 150 }}></div>
-      <p>Open a file to get started</p>
+      <p style={{ lineHeight: 1 }}>Open a file to get started</p>
     </div>
   );
 });
