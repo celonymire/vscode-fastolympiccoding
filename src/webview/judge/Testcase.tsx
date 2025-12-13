@@ -73,11 +73,14 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
     () => handleAction(Action.TOGGLE_VISIBILITY),
     [handleAction]
   );
+  const handleToggleSkip = useCallback(() => handleAction(Action.TOGGLE_SKIP), [handleAction]);
   const handleStop = useCallback(() => handleAction(Action.STOP), [handleAction]);
   const handleCompare = useCallback(() => handleAction(Action.COMPARE), [handleAction]);
 
   const status = testcase$.status.get();
   const visible = testcase$.shown.get();
+  const skipped = testcase$.skipped.get();
+  const toggled = testcase$.toggled.get();
 
   switch (status) {
     case Status.NA:
@@ -89,7 +92,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
       const statusColor = getStatusColor(status);
 
       return (
-        <div className="testcase-container">
+        <div className="testcase-container" style={{ opacity: skipped ? 0.5 : 1 }}>
           <div className="testcase-toolbar">
             <div className="testcase-toolbar-left">
               <strong className="testcase-elapsed" style={{ backgroundColor: statusColor }}>
@@ -106,6 +109,11 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               </div>
               <div className="testcase-toolbar-icon" onClick={handleToggleVisibility}>
                 <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleToggleSkip}>
+                <div
+                  className={`codicon ${skipped ? "codicon-debug-connected" : "codicon-debug-disconnect"}`}
+                ></div>
               </div>
             </div>
             <div className="testcase-toolbar-right">
@@ -127,7 +135,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               )}
             </div>
           </div>
-          {visible && (
+          {!skipped && visible && !(status === Status.AC && !toggled) && (
             <>
               <AutoresizeTextarea
                 input$={testcase$.stdin}
