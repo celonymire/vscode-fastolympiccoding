@@ -555,12 +555,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "stdin",
       value: testcase.stdin.data,
     });
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
+      property: "acceptedStdout",
+      value: testcase.acceptedStdout.data,
+    });
   }
 
   private _accept(id: number) {
     const testcase = this._state.get(id)!;
 
     testcase.status = Status.AC;
+    // shortened version will be sent back while writing
     super._postMessage({
       type: WebviewMessageType.SET,
       id,
