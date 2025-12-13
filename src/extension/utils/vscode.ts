@@ -10,15 +10,38 @@ export type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
   private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
   private _closeEmitter: vscode.EventEmitter<number> = new vscode.EventEmitter();
+  private _readyResolver: (() => void) | undefined = undefined;
+  private _ready: Promise<void>;
+  private _buffer: string[] = [];
+  private _opened = false;
 
   onDidWrite: vscode.Event<string> = this._writeEmitter.event;
   onDidClose: vscode.Event<number> = this._closeEmitter.event;
+  get ready(): Promise<void> {
+    return this._ready;
+  }
 
-  open(): void {}
+  constructor() {
+    this._ready = new Promise<void>((resolve) => {
+      this._readyResolver = resolve;
+    });
+  }
+
+  open(): void {
+    this._opened = true;
+    this._readyResolver?.();
+    this._buffer.forEach((text) => this._writeEmitter.fire(text));
+    this._buffer = [];
+  }
 
   write(text: string): void {
     // VSCode requires \r\n for newline, but keep existing \r\n
-    this._writeEmitter.fire(text.replace(/\n/g, "\r\n"));
+    const normalized = text.replace(/\n/g, "\r\n");
+    if (!this._opened) {
+      this._buffer.push(normalized);
+      return;
+    }
+    this._writeEmitter.fire(normalized);
   }
 
   close(): void {

@@ -120,7 +120,7 @@ export async function compile(
       process.process?.stderr.on("data", (data: string) => {
         err += data;
       });
-      process.process?.on("error", (data) => {
+      process.process?.once("error", (data) => {
         err += data.stack;
       });
 
@@ -140,11 +140,11 @@ export async function compile(
       });
       errorTerminal.set(file, terminal);
 
-      // FIXME remove this hack when https://github.com/microsoft/vscode/issues/87843 is resolved
-      await new Promise<void>((resolve) => setTimeout(() => resolve(), 400));
-
-      dummy.write(err);
       terminal.show(true);
+
+      // Ensure the pseudoterminal is opened before writing errors
+      await dummy.ready;
+      dummy.write(err);
       return process.exitCode;
     })();
     compilePromise.set(file, promise);
