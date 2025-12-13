@@ -15,15 +15,10 @@ import {
   WebviewMessageType,
 } from "~shared/stress-messages";
 import { postProviderMessage } from "./message";
-import State from "./State";
+import State, { IState } from "./State";
 
 type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
 type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
-
-interface IState {
-  data: string;
-  status: Status;
-}
 
 const state$ = observable({
   items: [
@@ -83,86 +78,34 @@ function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
 }
 
 const App = observer(function App() {
-  useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
+  const show = state$.showView.get();
 
-  const handleStop = useCallback(() => postProviderMessage({ type: ProviderMessageType.STOP }), []);
-  const handleRun = useCallback(() => postProviderMessage({ type: ProviderMessageType.RUN }), []);
-  const handleClear = useCallback(() => clear(), []);
   const handleExpand = useCallback((id: number) => expand(id), []);
   const handleAdd = useCallback((id: number) => add(id), []);
 
-  const renderButton = () => {
-    if (state$.running.get())
-      return (
-        <button
-          type="button"
-          className="text-base leading-tight px-3 w-fit display-font"
-          style={{ backgroundColor: RED_COLOR }}
-          onClick={handleStop}
-        >
-          stop
-        </button>
-      );
-    if (
-      state$.items[0].status.get() === Status.COMPILING ||
-      state$.items[1].status.get() === Status.COMPILING ||
-      state$.items[2].status.get() === Status.COMPILING
-    )
-      return null;
-    return (
-      <button
-        type="button"
-        className="text-base leading-tight px-3 w-fit display-font"
-        style={{ backgroundColor: BLUE_COLOR }}
-        onClick={handleRun}
-      >
-        stress test
-      </button>
-    );
-  };
+  useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
-  if (!state$.showView.get()) return null;
+  if (show) {
+    return (
+      <>
+        {[0, 1, 2].map((id) => (
+          <State
+            key={id}
+            id={id}
+            state$={state$.items[id]}
+            onView={handleExpand}
+            onAdd={handleAdd}
+          />
+        ))}
+      </>
+    );
+  }
 
   return (
-    <>
-      <div className="container mx-auto mb-6">
-        <div className="flex flex-row">
-          <div className="w-6 shrink-0" />
-          <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
-            {renderButton()}
-            <button
-              type="button"
-              className="text-base leading-tight px-3 w-fit display-font"
-              style={{ backgroundColor: BLUE_COLOR }}
-              onClick={handleClear}
-            >
-              clear
-            </button>
-          </div>
-        </div>
-      </div>
-      <State
-        data$={state$.items[0].data}
-        status={state$.items[0].status.get()}
-        id={0}
-        onView={handleExpand}
-        onAdd={handleAdd}
-      />
-      <State
-        data$={state$.items[1].data}
-        status={state$.items[1].status.get()}
-        id={1}
-        onView={handleExpand}
-        onAdd={handleAdd}
-      />
-      <State
-        data$={state$.items[2].data}
-        status={state$.items[2].status.get()}
-        id={2}
-        onView={handleExpand}
-        onAdd={handleAdd}
-      />
-    </>
+    <div id="empty-state">
+      <div className="codicon codicon-symbol-event" style={{ fontSize: 150 }}></div>
+      <p>Open a file to get started</p>
+    </div>
   );
 });
 

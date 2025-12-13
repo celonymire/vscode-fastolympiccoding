@@ -4,31 +4,17 @@ import * as v from "valibot";
 
 import { TestcaseSchema } from "~shared/schemas";
 import { Status, Stdio } from "~shared/enums";
-import AutoresizeTextarea from "./AutoresizeTextarea";
+import AutoresizeTextarea from "../AutoresizeTextarea";
 import { useCallback } from "react";
 import { Action, ProviderMessageType } from "~shared/judge-messages";
 import { postProviderMessage } from "./message";
+import { getStatusColor } from "~webview/utils";
 
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
 interface Props {
   id: number;
   testcase$: Observable<ITestcase>;
-}
-
-function getStatusColor(status: Status): string {
-  switch (status) {
-    case Status.AC:
-      return "var(--vscode-terminal-ansiGreen)";
-    case Status.CE:
-      return "var(--vscode-terminal-ansiYellow)";
-    case Status.WA:
-    case Status.RE:
-    case Status.TL:
-      return "var(--vscode-terminal-ansiRed)";
-    default:
-      return "var(--vscode-button-secondaryBackground)";
-  }
 }
 
 const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
@@ -48,7 +34,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
     });
   }, [testcase$, id]);
 
-  const handleViewStdio = useCallback(
+  const handleExpandStdio = useCallback(
     (stdio: Stdio) => postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio }),
     [id]
   );
@@ -138,15 +124,28 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               )}
             </div>
           </div>
-          <AutoresizeTextarea input$={testcase$.stdin} readonly placeholder="Stdin..." />
+          <AutoresizeTextarea
+            input$={testcase$.stdin}
+            readonly
+            hiddenOnEmpty
+            placeholder="Stdin..."
+            onExpand={() => handleExpandStdio(Stdio.STDIN)}
+          />
           <AutoresizeTextarea
             input$={testcase$.stderr}
             readonly
             hiddenOnEmpty
             placeholder="Stderr..."
             variant="stderr"
+            onExpand={() => handleExpandStdio(Stdio.STDERR)}
           />
-          <AutoresizeTextarea input$={testcase$.stdout} readonly placeholder="Stdout..." />
+          <AutoresizeTextarea
+            input$={testcase$.stdout}
+            readonly
+            hiddenOnEmpty
+            placeholder="Stdout..."
+            onExpand={() => handleExpandStdio(Stdio.STDOUT)}
+          />
           {status === Status.WA && (
             <AutoresizeTextarea
               input$={testcase$.acceptedStdout}
@@ -154,6 +153,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               hiddenOnEmpty
               placeholder="Accepted stdout..."
               variant="accepted"
+              onExpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
             />
           )}
         </div>
@@ -189,6 +189,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
             readonly
             hiddenOnEmpty
             placeholder="Stdin..."
+            onExpand={() => handleExpandStdio(Stdio.STDIN)}
           />
           <AutoresizeTextarea
             input$={newStdin$}
@@ -202,6 +203,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
             hiddenOnEmpty
             placeholder="Stderr..."
             variant="stderr"
+            onExpand={() => handleExpandStdio(Stdio.STDERR)}
           />
           <AutoresizeTextarea input$={testcase$.stdout} readonly placeholder="Stdout..." />
         </div>
@@ -219,11 +221,16 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               </div>
             </div>
           </div>
-          <AutoresizeTextarea input$={testcase$.stdin} placeholder="Stdin..." />
+          <AutoresizeTextarea
+            input$={testcase$.stdin}
+            placeholder="Stdin..."
+            onExpand={() => handleExpandStdio(Stdio.STDIN)}
+          />
           <AutoresizeTextarea
             input$={testcase$.acceptedStdout}
             placeholder="Accepted stdout..."
             variant="accepted"
+            onExpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
           />
         </div>
       );

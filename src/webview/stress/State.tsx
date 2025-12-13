@@ -3,96 +3,163 @@ import { observer, Memo } from "@legendapp/state/react";
 import { useCallback } from "react";
 
 import { Status } from "~shared/enums";
-import { ArrowSvgOutwards, BLUE_COLOR, RED_COLOR } from "~webview/components";
+import AutoresizeTextarea from "../AutoresizeTextarea";
+import { getStatusColor } from "~webview/utils";
+
+export interface IState {
+  data: string;
+  status: Status;
+}
 
 interface Props {
-  data$: Observable<string>;
-  status: Status;
+  state$: Observable<IState>;
   id: number;
   onView: (id: number) => void;
   onAdd: (id: number) => void;
 }
 
 const from = ["Generator", "Solution", "Good Solution"];
+const placeholders = ["Generator input...", "Solution output...", "Accepted output..."];
 
-const State = observer(function State({ data$, status, id, onView, onAdd }: Props) {
+const State = observer(function State({ state$, id, onView, onAdd }: Props) {
+  const status = state$.status.get();
+  const statusColor = getStatusColor(status);
+
   const handleAdd = useCallback(() => onAdd(id), [id, onAdd]);
-  const handleView = useCallback(() => onView(id), [id, onView]);
+  const handleExpand = useCallback(() => onView(id), [id, onView]);
 
   switch (status) {
     case Status.COMPILING:
       return (
-        <div className="container mx-auto mb-6">
-          <div className="flex flex-row">
-            <div className="w-6 shrink-0" />
-            <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
+        <div className="state-container">
+          <div className="state-toolbar">
+            <div className="state-toolbar-left">
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: statusColor }}
+              >
                 {from[id]}
-              </p>
-              <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
-                compiling
-              </p>
+              </strong>
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: statusColor }}
+              >
+                COMPILING
+              </strong>
+              <div className="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+                <div className="codicon codicon-loading codicon-modifier-spin"></div>
+              </div>
             </div>
           </div>
         </div>
       );
     case Status.RUNNING:
       return (
-        <div className="container mx-auto mb-6">
-          <div className="flex flex-row">
-            <ArrowSvgOutwards color="#FFFFFF" />
-            <div className="grow">
-              <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
+        <>
+          <div className="state-container">
+            <div className="state-toolbar">
+              <div className="state-toolbar-left">
+                <strong
+                  className="state-toolbar-text-bubble"
+                  style={{ backgroundColor: statusColor }}
+                >
+                  {from[id]}
+                </strong>
+                <div className="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+                  <div className="codicon codicon-loading codicon-modifier-spin"></div>
+                </div>
+              </div>
+            </div>
+            <AutoresizeTextarea
+              input$={state$.data}
+              readonly
+              placeholder={placeholders[id]}
+              onExpand={handleExpand}
+            />
+          </div>
+        </>
+      );
+    case Status.CE:
+      return (
+        <div className="state-container">
+          <div className="state-toolbar">
+            <div className="state-toolbar-left">
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: getStatusColor(Status.NA) }}
+              >
                 {from[id]}
-              </p>
-              <pre className="text-base display-font">
-                <Memo>{() => data$.get()}</Memo>
-              </pre>
+              </strong>
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: statusColor }}
+              >
+                Compile Error
+              </strong>
             </div>
           </div>
         </div>
       );
-    default:
+    case Status.WA:
+    case Status.RE:
+    case Status.TL:
+      const statusText =
+        status === Status.WA
+          ? "Wrong Answer"
+          : status === Status.RE
+            ? "Runtime Error"
+            : "Time Limit Exceeded";
+
       return (
-        <div className="container mx-auto mb-6">
-          <div className="flex flex-row">
-            <div className="w-6 shrink-0" />
-            <div className="flex justify-start gap-x-2 bg-zinc-800 grow">
-              <p className="text-base leading-tight bg-zinc-600 px-3 w-fit display-font">
+        <div className="state-container">
+          <div className="state-toolbar">
+            <div className="state-toolbar-left">
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: getStatusColor(Status.NA) }}
+              >
                 {from[id]}
-              </p>
-              {[Status.RE, Status.CE, Status.WA, Status.TL].includes(status) && (
-                <p
-                  className="text-base leading-tight px-3 w-fit display-font"
-                  style={{ backgroundColor: RED_COLOR }}
-                >
-                  {status === Status.CE
-                    ? "CE"
-                    : status === Status.RE
-                      ? "RE"
-                      : status === Status.WA
-                        ? "WA"
-                        : "TL"}
-                </p>
-              )}
-              {(status === Status.RE || status === Status.WA) && (
-                <button
-                  type="button"
-                  className="text-base leading-tight px-3 w-fit display-font"
-                  style={{ background: BLUE_COLOR }}
-                  onClick={handleAdd}
-                >
-                  add testcase
-                </button>
-              )}
+              </strong>
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: statusColor }}
+              >
+                {statusText}
+              </strong>
+            </div>
+            <div className="state-toolbar-right">
+              <div className="state-toolbar-icon" onClick={handleAdd}>
+                <div className="codicon codicon-insert"></div>
+              </div>
             </div>
           </div>
-          <div className="flex flex-row">
-            <ArrowSvgOutwards color="#FFFFFF" onClick={handleView} />
-            <pre className="text-base display-font">
-              <Memo>{() => data$.get()}</Memo>
-            </pre>
+          <AutoresizeTextarea
+            input$={state$.data}
+            readonly
+            placeholder={placeholders[id]}
+            onExpand={handleExpand}
+          />
+        </div>
+      );
+    default:
+      return (
+        <div className="state-container">
+          <div className="state-toolbar">
+            <div className="state-toolbar-left">
+              <strong
+                className="state-toolbar-text-bubble"
+                style={{ backgroundColor: getStatusColor(Status.NA) }}
+              >
+                {from[id]}
+              </strong>
+            </div>
           </div>
+          <AutoresizeTextarea
+            input$={state$.data}
+            readonly
+            placeholder={placeholders[id]}
+            onExpand={handleExpand}
+          />
         </div>
       );
   }

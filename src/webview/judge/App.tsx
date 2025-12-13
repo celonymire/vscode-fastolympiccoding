@@ -30,7 +30,6 @@ const state$ = observable({
 });
 
 window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
-  console.log(msg.data);
   switch (msg.data.type) {
     case WebviewMessageType.NEW:
       handleNew(msg.data);
