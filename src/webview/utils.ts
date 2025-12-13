@@ -5,8 +5,9 @@ export function getStatusColor(status: Status): string {
     case Status.AC:
       return "var(--vscode-terminal-ansiGreen)";
     case Status.CE:
-      return "var(--vscode-terminal-ansiYellow)";
+      return "var(--vscode-terminal-ansiMagenta)";
     case Status.WA:
+      return "var(--vscode-terminal-ansiYellow)";
     case Status.RE:
     case Status.TL:
       return "var(--vscode-terminal-ansiRed)";

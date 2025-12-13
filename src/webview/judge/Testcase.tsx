@@ -82,15 +82,46 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
   const skipped = testcase$.skipped.get();
   const toggled = testcase$.toggled.get();
 
+  const statusColor = getStatusColor(status);
+
   switch (status) {
+    case Status.CE:
+      return (
+        <div className="testcase-container">
+          <div className={`testcase-toolbar ${skipped ? "testcase-toolbar--hidden" : ""}`}>
+            <div className="testcase-toolbar-left">
+              <strong className="testcase-elapsed" style={{ backgroundColor: statusColor }}>
+                CE
+              </strong>
+              <div className="testcase-toolbar-icon" onClick={handleRun}>
+                <div className="codicon codicon-run-below"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleEdit}>
+                <div className="codicon codicon-edit"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleDelete}>
+                <div className="codicon codicon-trash"></div>
+              </div>
+              <div className="testcase-toolbar-icon" onClick={handleToggleVisibility}>
+                <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
+              </div>
+              <div
+                className="testcase-toolbar-icon  testcase-toolbar-icon--visibility"
+                onClick={handleToggleSkip}
+              >
+                <div
+                  className={`codicon ${skipped ? "codicon-debug-connected" : "codicon-debug-disconnect"}`}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
     case Status.NA:
     case Status.AC:
-    case Status.CE:
     case Status.WA:
     case Status.RE:
     case Status.TL:
-      const statusColor = getStatusColor(status);
-
       return (
         <div className="testcase-container">
           <div className={`testcase-toolbar ${skipped ? "testcase-toolbar--hidden" : ""}`}>
