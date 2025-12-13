@@ -62,6 +62,30 @@ export class TextHandler {
     this._shortDataLength++;
   }
 
+  private _sendPendingIfNeeded(last: boolean) {
+    if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this._lastWrite < TextHandler.INTERVAL && !last) {
+      return;
+    }
+
+    this._lastWrite = now;
+    if (
+      this._shortDataLength === TextHandler._maxDisplayCharacters ||
+      this._newlineCount === TextHandler._maxDisplayLines
+    ) {
+      this._pending += "...";
+      this._shortDataLength = TextHandler._maxDisplayCharacters + 1; // prevent further appends
+    }
+    if (this._callback) {
+      this._callback(this._pending);
+    }
+    this._pending = "";
+  }
+
   get data() {
     return this._data;
   }
@@ -97,27 +121,7 @@ export class TextHandler {
       this._appendPendingCharacter("\n");
       this._data += "\n";
     }
-    if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - this._lastWrite < TextHandler.INTERVAL && !last) {
-      return;
-    }
-
-    this._lastWrite = now;
-    if (
-      this._shortDataLength === TextHandler._maxDisplayCharacters ||
-      this._newlineCount === TextHandler._maxDisplayLines
-    ) {
-      this._pending += "...";
-      this._shortDataLength = TextHandler._maxDisplayCharacters + 1; // prevent further appends
-    }
-    if (this._callback) {
-      this._callback(this._pending);
-    }
-    this._pending = "";
+    this._sendPendingIfNeeded(last);
   }
 
   reset() {
