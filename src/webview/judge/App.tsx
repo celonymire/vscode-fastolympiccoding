@@ -137,12 +137,6 @@ function handleNewTestcase() {
   postProviderMessage({ type: ProviderMessageType.NEXT });
 }
 
-function handleTimeLimit(e: React.KeyboardEvent) {
-  if (e.key === "Enter") {
-    handleSaveSettings();
-  }
-}
-
 function handleSaveSettings() {
   handleSettingsToggle();
 
@@ -179,7 +173,6 @@ const App = observer(function App() {
               value={state$.newTimeLimit.get()}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              onKeyUp={handleTimeLimit}
               className="settings-input"
             />
             <p className="settings-additional-info">
