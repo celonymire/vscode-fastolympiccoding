@@ -77,6 +77,8 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
   const handleCompare = useCallback(() => handleAction(Action.COMPARE), [handleAction]);
 
   const status = testcase$.status.get();
+  const visible = testcase$.shown.get();
+
   switch (status) {
     case Status.NA:
     case Status.AC:
@@ -103,7 +105,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
                 <div className="codicon codicon-trash"></div>
               </div>
               <div className="testcase-toolbar-icon" onClick={handleToggleVisibility}>
-                <div className="codicon codicon-eye-closed"></div>
+                <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
               </div>
             </div>
             <div className="testcase-toolbar-right">
@@ -125,37 +127,41 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               )}
             </div>
           </div>
-          <AutoresizeTextarea
-            input$={testcase$.stdin}
-            readonly
-            hiddenOnEmpty
-            placeholder="Stdin..."
-            onExpand={() => handleExpandStdio(Stdio.STDIN)}
-          />
-          <AutoresizeTextarea
-            input$={testcase$.stderr}
-            readonly
-            hiddenOnEmpty
-            placeholder="Stderr..."
-            variant="stderr"
-            onExpand={() => handleExpandStdio(Stdio.STDERR)}
-          />
-          <AutoresizeTextarea
-            input$={testcase$.stdout}
-            readonly
-            hiddenOnEmpty
-            placeholder="Stdout..."
-            onExpand={() => handleExpandStdio(Stdio.STDOUT)}
-          />
-          {status === Status.WA && (
-            <AutoresizeTextarea
-              input$={testcase$.acceptedStdout}
-              readonly
-              hiddenOnEmpty
-              placeholder="Accepted stdout..."
-              variant="accepted"
-              onExpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
-            />
+          {visible && (
+            <>
+              <AutoresizeTextarea
+                input$={testcase$.stdin}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stdin..."
+                onExpand={() => handleExpandStdio(Stdio.STDIN)}
+              />
+              <AutoresizeTextarea
+                input$={testcase$.stderr}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stderr..."
+                variant="stderr"
+                onExpand={() => handleExpandStdio(Stdio.STDERR)}
+              />
+              <AutoresizeTextarea
+                input$={testcase$.stdout}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stdout..."
+                onExpand={() => handleExpandStdio(Stdio.STDOUT)}
+              />
+              {status === Status.WA && (
+                <AutoresizeTextarea
+                  input$={testcase$.acceptedStdout}
+                  readonly
+                  hiddenOnEmpty
+                  placeholder="Accepted stdout..."
+                  variant="accepted"
+                  onExpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
+                />
+              )}
+            </>
           )}
         </div>
       );
@@ -185,28 +191,32 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
               </div>
             </div>
           </div>
-          <AutoresizeTextarea
-            input$={testcase$.stdin}
-            readonly
-            hiddenOnEmpty
-            placeholder="Stdin..."
-            onExpand={() => handleExpandStdio(Stdio.STDIN)}
-          />
-          <AutoresizeTextarea
-            input$={newStdin$}
-            placeholder="New stdin..."
-            onKeyUp={handleNewStdinKeyUp}
-            variant="active"
-          />
-          <AutoresizeTextarea
-            input$={testcase$.stderr}
-            readonly
-            hiddenOnEmpty
-            placeholder="Stderr..."
-            variant="stderr"
-            onExpand={() => handleExpandStdio(Stdio.STDERR)}
-          />
-          <AutoresizeTextarea input$={testcase$.stdout} readonly placeholder="Stdout..." />
+          {visible && (
+            <>
+              <AutoresizeTextarea
+                input$={testcase$.stdin}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stdin..."
+                onExpand={() => handleExpandStdio(Stdio.STDIN)}
+              />
+              <AutoresizeTextarea
+                input$={newStdin$}
+                placeholder="New stdin..."
+                onKeyUp={handleNewStdinKeyUp}
+                variant="active"
+              />
+              <AutoresizeTextarea
+                input$={testcase$.stderr}
+                readonly
+                hiddenOnEmpty
+                placeholder="Stderr..."
+                variant="stderr"
+                onExpand={() => handleExpandStdio(Stdio.STDERR)}
+              />
+              <AutoresizeTextarea input$={testcase$.stdout} readonly placeholder="Stdout..." />
+            </>
+          )}
         </div>
       );
     case Status.EDITING:
