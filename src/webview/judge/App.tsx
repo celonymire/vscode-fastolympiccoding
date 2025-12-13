@@ -111,12 +111,6 @@ function handleSaveAll() {
     if (testcase.status === Status.EDITING) {
       const stdin = testcase.stdin;
       const acceptedStdout = testcase.acceptedStdout;
-      // the extension host will send shortened version of both of these
-      const testcase$ = state$.testcases.get(id);
-      if (testcase$) {
-        testcase$.stdin.set("");
-        testcase$.acceptedStdout.set("");
-      }
       postProviderMessage({
         type: ProviderMessageType.SAVE,
         id,
