@@ -20,12 +20,6 @@
   background: var(--vscode-button-hoverBackground);
 }
 
-.divider {
-  height: 1px;
-  margin: 6px 0;
-  background-color: var(--vscode-textSeparator-foreground);
-}
-
 /* Main View */
 
 .new-testcase-button .codicon {
