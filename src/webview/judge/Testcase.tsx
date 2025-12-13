@@ -161,7 +161,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
                   <div className="codicon codicon-close"></div>
                 </div>
               )}
-              {status == Status.WA && (
+              {status === Status.WA && (
                 <div className="testcase-toolbar-icon" onClick={handleCompare}>
                   <div className="codicon codicon-diff-single"></div>
                 </div>

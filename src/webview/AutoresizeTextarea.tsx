@@ -62,7 +62,6 @@ const AutoresizeTextarea = observer(function AutoresizeTextarea({
   );
 
   const handleExpand = useCallback(() => {
-    console.log("expand");
     onExpand?.();
   }, [onExpand]);
 
