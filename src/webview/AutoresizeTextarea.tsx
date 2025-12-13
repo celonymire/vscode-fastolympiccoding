@@ -42,8 +42,8 @@ const AutoresizeTextarea = observer(function AutoresizeTextarea({
 
   useLayoutEffect(() => {
     if (textarea.current) {
-      textarea.current!.style.height = "inherit";
-      textarea.current!.style.height = `${textarea.current!.scrollHeight}px`;
+      textarea.current.style.height = "inherit";
+      textarea.current.style.height = `${textarea.current.scrollHeight}px`;
     }
   });
 
