@@ -367,7 +367,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     newTestcase.stdin.write(testcase?.stdin ?? "", !!testcase);
     newTestcase.stderr.write(testcase?.stderr ?? "", !!testcase);
     newTestcase.stdout.write(testcase?.stdout ?? "", !!testcase);
-    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true);
+    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true); // force endline for empty answer comparison
 
     super._postMessage({
       type: WebviewMessageType.SET,
