@@ -83,6 +83,7 @@ export class TextHandler {
     }
     this._pending += char;
     this._shortDataLength++;
+    this._newlineCount += char === "\n" ? 1 : 0;
   }
 
   private _sendPendingIfNeeded(last: boolean) {
