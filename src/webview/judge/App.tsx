@@ -144,6 +144,8 @@ function handleTimeLimit(e: React.KeyboardEvent) {
 }
 
 function handleSaveSettings() {
+  handleSettingsToggle();
+
   const limit = state$.newTimeLimit.get();
   postProviderMessage({ type: ProviderMessageType.TL, limit });
 }
