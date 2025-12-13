@@ -45,7 +45,7 @@ const AutoresizeTextarea = observer(function AutoresizeTextarea({
       textarea.current.style.height = "inherit";
       textarea.current.style.height = `${textarea.current.scrollHeight}px`;
     }
-  });
+  }, [value]);
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
