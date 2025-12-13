@@ -144,6 +144,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerTextEditorCommand("fastolympiccoding.toggleJudgeSettings", () =>
+      judgeViewProvider.toggleWebviewSettings()
+    )
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerTextEditorCommand(
       "fastolympiccoding.startStressTest",
       () => void stressViewProvider.run()

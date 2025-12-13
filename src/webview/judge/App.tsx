@@ -27,6 +27,7 @@ const state$ = observable({
   testcases: new Map<number, ITestcase>(),
   newTimeLimit: 0,
   show: true,
+  showSettings: false,
 });
 
 window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
@@ -51,6 +52,9 @@ window.addEventListener("message", (msg: MessageEvent<WebviewMessage>) => {
       break;
     case WebviewMessageType.INITIAL_STATE:
       handleInitialState(msg.data);
+      break;
+    case WebviewMessageType.SETTINGS_TOGGLE:
+      handleSettingsToggle();
       break;
   }
 });
@@ -131,31 +135,81 @@ function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSche
   state$.newTimeLimit.set(timeLimit);
 }
 
+function handleSettingsToggle() {
+  state$.showSettings.set((prev) => !prev);
+}
+
 function handleNewTestcase() {
   postProviderMessage({ type: ProviderMessageType.NEXT });
 }
 
+function handleTimeLimit(e: React.KeyboardEvent) {
+  if (e.key === "Enter") {
+    handleSaveSettings();
+  }
+}
+
+function handleSaveSettings() {
+  const limit = state$.newTimeLimit.get();
+  postProviderMessage({ type: ProviderMessageType.TL, limit });
+}
+
 const App = observer(function App() {
   const show = state$.show.get();
+  const showSettings = state$.showSettings.get();
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    state$.newTimeLimit.set(Number(e.target.value));
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      !/\d/.test(e.key) &&
+      !["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab"].includes(e.key)
+    ) {
+      e.preventDefault();
+    }
+  }, []);
 
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
   if (show) {
-    return (
-      <div className="testcase-container">
-        {Array.from(state$.testcases.get().entries()).map(([id]) => (
-          <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
-        ))}
-        <button
-          type="button"
-          className="text-button new-testcase-button"
-          onClick={handleNewTestcase}
-        >
-          <div className="codicon codicon-add"></div>
-          New Testcase
-        </button>
-      </div>
-    );
+    if (showSettings) {
+      return (
+        <>
+          <div className="settings-section">
+            <p className="settings-label">Time Limit</p>
+            <input
+              value={state$.newTimeLimit.get()}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onKeyUp={handleTimeLimit}
+              className="settings-input"
+            />
+            <p className="settings-additional-info">Specify time limit in milliseconds</p>
+          </div>
+          <button type="button" className="text-button" onClick={handleSaveSettings}>
+            Save
+          </button>
+        </>
+      );
+    } else {
+      return (
+        <div className="testcase-container">
+          {Array.from(state$.testcases.get().entries()).map(([id]) => (
+            <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
+          ))}
+          <button
+            type="button"
+            className="text-button new-testcase-button"
+            onClick={handleNewTestcase}
+          >
+            <div className="codicon codicon-add"></div>
+            New Testcase
+          </button>
+        </div>
+      );
+    }
   }
 
   return (

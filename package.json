@@ -45,6 +45,11 @@
           "when": "view == fastolympiccoding.judge"
         },
         {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "group": "navigation@5",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
           "command": "fastolympiccoding.startStressTest",
           "group": "navigation@1",
           "when": "view == fastolympiccoding.stress"
@@ -58,6 +63,12 @@
           "command": "fastolympiccoding.clearStressTest",
           "group": "navigation@3",
           "when": "view == fastolympiccoding.stress"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "when": "false"
         }
       ]
     },
@@ -304,6 +315,12 @@
         "command": "fastolympiccoding.stopCompetitiveCompanion",
         "title": "Stop Competitive Companion",
         "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.toggleJudgeSettings",
+        "title": "Toggle Judge Settings",
+        "category": "Fast Olympic Coding",
+        "icon": "$(gear)"
       }
     ],
     "keybindings": [

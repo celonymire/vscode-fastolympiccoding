@@ -35,6 +35,39 @@
   min-height: 100vh;
 }
 
+/* Settings View */
+
+.settings-section {
+  margin-bottom: 16px;
+}
+
+.settings-label {
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.settings-additional-info {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.settings-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+}
+
+.settings-input:focus {
+  border: 1px solid var(--vscode-inputOption-activeBorder);
+}
+
 /* Testcase View */
 
 .testcase-toolbar {
