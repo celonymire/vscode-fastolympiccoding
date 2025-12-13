@@ -180,7 +180,12 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
         <div className="testcase-container">
           <div className="testcase-toolbar">
             <div className="testcase-toolbar-left">
-              <strong>COMPILING</strong>
+              <strong
+                className="testcase-elapsed"
+                style={{ backgroundColor: getStatusColor(status) }}
+              >
+                COMPILING
+              </strong>
               <div className="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
                 <div className="codicon codicon-loading codicon-modifier-spin"></div>
               </div>
