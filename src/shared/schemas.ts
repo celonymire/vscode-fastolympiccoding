@@ -13,15 +13,15 @@ export const TestSchema = v.object({
 });
 
 export const TestcaseSchema = v.object({
-  stdin: v.string(),
-  stderr: v.string(),
-  stdout: v.string(),
-  acceptedStdout: v.string(),
-  elapsed: v.number(),
-  status: v.enum(Status),
-  shown: v.boolean(),
-  toggled: v.boolean(),
-  skipped: v.boolean(),
+  stdin: v.fallback(v.string(), ""),
+  stderr: v.fallback(v.string(), ""),
+  stdout: v.fallback(v.string(), ""),
+  acceptedStdout: v.fallback(v.string(), ""),
+  elapsed: v.fallback(v.number(), 0),
+  status: v.fallback(v.enum(Status), Status.NA),
+  shown: v.fallback(v.boolean(), true),
+  toggled: v.fallback(v.boolean(), false),
+  skipped: v.fallback(v.boolean(), false),
 });
 
 const InputStdinSchema = v.object({

@@ -30,11 +30,12 @@ type IProblem = v.InferOutput<typeof ProblemSchema>;
 type ITest = v.InferOutput<typeof TestSchema>;
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
-const FileDataSchema = v.partial(
+const FileDataSchema = v.fallback(
   v.object({
-    timeLimit: v.number(),
-    testcases: v.array(v.unknown()),
-  })
+    timeLimit: v.fallback(v.number(), 0),
+    testcases: v.fallback(v.array(v.unknown()), []),
+  }),
+  { timeLimit: 0, testcases: [] }
 );
 
 interface IFileData {
@@ -139,23 +140,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
     const storageData = super.readStorage()[file];
-    const parseResult = v.safeParse(FileDataSchema, storageData);
-    if (!parseResult.success) {
-      // If invalid, use defaults
-      this._timeLimit = 0;
-      super._postMessage({
-        type: WebviewMessageType.INITIAL_STATE,
-        timeLimit: this._timeLimit,
-      });
-      return;
-    }
-    const fileData = parseResult.output;
-    const testcases = fileData.testcases || [];
-    const partialSchema = v.partial(TestcaseSchema);
-    this._timeLimit = fileData.timeLimit ?? 0;
+    const fileData = v.parse(FileDataSchema, storageData);
+    const testcases = fileData.testcases;
+    this._timeLimit = fileData.timeLimit;
     for (let i = 0; i < testcases.length; i++) {
-      const parseTestcase = v.safeParse(partialSchema, testcases[i]);
-      const testcase = parseTestcase.success ? parseTestcase.output : {};
+      const testcase = v.parse(TestcaseSchema, testcases[i]);
       this._addTestcase(testcase);
     }
 

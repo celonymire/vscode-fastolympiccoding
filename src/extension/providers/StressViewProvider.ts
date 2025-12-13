@@ -21,12 +21,10 @@ import {
   WebviewMessageType,
 } from "~shared/stress-messages";
 
-const StressDataSchema = v.partial(
-  v.object({
-    data: v.string(),
-    status: v.enum(Status),
-  })
-);
+const StressDataSchema = v.object({
+  data: v.fallback(v.string(), ""),
+  status: v.fallback(v.enum(Status), Status.NA),
+});
 
 interface IData {
   data: string;
@@ -116,14 +114,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
     const fileData = super.readStorage()[file];
-    const arrayDataSchema = v.array(StressDataSchema);
-    const parseResult = v.safeParse(arrayDataSchema, fileData);
-    const state = parseResult.success ? parseResult.output : [];
+    const arrayDataSchema = v.fallback(v.array(StressDataSchema), []);
+    const state = v.parse(arrayDataSchema, fileData);
     for (let id = 0; id < state.length; id++) {
-      const testcase = state[id] || {};
+      const testcase = state[id];
 
-      this._state[id].data.write(testcase.data ?? "", true);
-      this._state[id].status = testcase.status ?? Status.NA;
+      this._state[id].data.write(testcase.data, true);
+      this._state[id].status = testcase.status;
       super._postMessage({
         type: WebviewMessageType.STATUS,
         id,
