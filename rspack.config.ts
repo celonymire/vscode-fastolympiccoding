@@ -11,7 +11,6 @@ const sharedResolve: Configuration["resolve"] = {
     "~shared": path.resolve("./src/shared"),
     "~webview": path.resolve("./src/webview"),
     "~extension": path.resolve("./src/extension"),
-    "~styles": path.resolve("./src/styles"),
   },
 };
 
@@ -78,7 +77,6 @@ const webviewsConfig: Configuration = {
   output: {
     path: path.resolve("./dist"),
     filename: "[name].js",
-    cssFilename: "styles.css",
   },
   target: ["web", "es2015"],
   resolve: {

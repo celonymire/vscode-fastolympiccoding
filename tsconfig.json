@@ -4,7 +4,6 @@
       "~shared/*": ["./src/shared/*"],
       "~webview/*": ["./src/webview/*"],
       "~extension/*": ["./src/extension/*"],
-      "~styles/*": ["./src/styles/*"]
     },
     "strict": true,
     "outDir": "./dist/types",

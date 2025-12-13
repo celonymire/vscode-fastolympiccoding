@@ -4,6 +4,7 @@
 !LICENSE
 !media/icon.png
 !dist/judge/index.js
+!dist/judge/index.css
 !dist/stress/index.js
+!dist/stress/index.css
 !dist/extension.js
-!dist/styles.css

@@ -315,7 +315,6 @@
   "license": "MIT",
   "devDependencies": {
     "@rspack/cli": "^1.6.7",
-    "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^22.19.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -329,15 +328,12 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "fork-ts-checker-webpack-plugin": "^9.1.0",
     "globals": "^16.5.0",
-    "postcss": "^8.5.6",
-    "postcss-load-config": "^6.0.1",
-    "postcss-loader": "^8.2.0",
     "prettier": "3.6.2",
-    "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "@legendapp/state": "3.0.0-beta.42",
+    "@vscode/codicons": "^0.0.44",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "valibot": "^1.2.0"
