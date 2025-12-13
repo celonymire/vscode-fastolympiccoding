@@ -1,1 +1,0 @@
-// Webview utilities\n// Status colors are now defined via CSS classes in components for CSP compliance\n
