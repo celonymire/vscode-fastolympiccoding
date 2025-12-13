@@ -1,6 +1,6 @@
 import { observable } from "@legendapp/state";
-import { observer } from "@legendapp/state/react";
-import { useCallback, useEffect } from "react";
+import { For, observer } from "@legendapp/state/react";
+import { useEffect } from "react";
 import * as v from "valibot";
 
 import { Status } from "~shared/enums";
@@ -78,24 +78,15 @@ function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
 const App = observer(function App() {
   const show = state$.showView.get();
 
-  const handleExpand = useCallback((id: number) => expand(id), []);
-  const handleAdd = useCallback((id: number) => add(id), []);
-
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
   if (show) {
     return (
-      <>
-        {[0, 1, 2].map((id) => (
-          <State
-            key={id}
-            id={id}
-            state$={state$.items[id]}
-            onView={handleExpand}
-            onAdd={handleAdd}
-          />
-        ))}
-      </>
+      <For each={state$.items}>
+        {(item$, index) => (
+          <State key={index} id={Number(index)} state$={item$} onView={expand} onAdd={add} />
+        )}
+      </For>
     );
   }
 
