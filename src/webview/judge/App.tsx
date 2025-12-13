@@ -182,7 +182,9 @@ const App = observer(function App() {
               onKeyUp={handleTimeLimit}
               className="settings-input"
             />
-            <p className="settings-additional-info">Specify time limit in milliseconds</p>
+            <p className="settings-additional-info">
+              Specify time limit in milliseconds. "0" Means no limit.
+            </p>
           </div>
           <button type="button" className="text-button" onClick={handleSaveSettings}>
             <div className="codicon codicon-save"></div>
