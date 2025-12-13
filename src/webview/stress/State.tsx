@@ -1,5 +1,5 @@
 import type { Observable } from "@legendapp/state";
-import { observer, Memo } from "@legendapp/state/react";
+import { observer } from "@legendapp/state/react";
 import { useCallback } from "react";
 
 import { Status } from "~shared/enums";
@@ -102,7 +102,7 @@ const State = observer(function State({ state$, id, onView, onAdd }: Props) {
       );
     case Status.WA:
     case Status.RE:
-    case Status.TL:
+    case Status.TL: {
       const statusText =
         status === Status.WA
           ? "Wrong Answer"
@@ -142,6 +142,7 @@ const State = observer(function State({ state$, id, onView, onAdd }: Props) {
           />
         </div>
       );
+    }
     default:
       return (
         <div className="state-container">

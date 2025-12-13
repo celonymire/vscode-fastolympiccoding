@@ -31,7 +31,6 @@ const state$ = observable({
 
 const expand = (id: number) => postProviderMessage({ type: ProviderMessageType.VIEW, id });
 const add = (id: number) => postProviderMessage({ type: ProviderMessageType.ADD, id });
-const clear = () => postProviderMessage({ type: ProviderMessageType.CLEAR });
 
 window.addEventListener("message", (event: MessageEvent<WebviewMessage>) => {
   switch (event.data.type) {

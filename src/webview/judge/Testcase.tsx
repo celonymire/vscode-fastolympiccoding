@@ -63,7 +63,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
   const handleRun = useCallback(() => {
     newStdin$.set("");
     handleAction(Action.RUN);
-  }, [handleAction]);
+  }, [handleAction, newStdin$]);
 
   const handleEdit = useCallback(() => handleAction(Action.EDIT), [handleAction]);
   const handleDelete = useCallback(() => handleAction(Action.DELETE), [handleAction]);
