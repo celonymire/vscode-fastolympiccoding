@@ -501,6 +501,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.process.process?.stderr.once("end", () => testcase.stderr.write("", true));
     testcase.process.process?.stdout.once("end", () => testcase.stdout.write("", true));
     testcase.process.process?.once("error", (data: Error) => {
+      if (token.isCancellationRequested) {
+        return;
+      }
       testcase.stderr.write(data.message, true);
       super._postMessage({
         type: WebviewMessageType.SET,
@@ -513,6 +516,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.process.process?.once("close", () => {
       testcase.process.process?.stderr.removeAllListeners("data");
       testcase.process.process?.stdout.removeAllListeners("data");
+      if (token.isCancellationRequested) {
+        return;
+      }
       setTestcaseStats(testcase, this._timeLimit);
       super._postMessage({
         type: WebviewMessageType.SET,
