@@ -132,20 +132,37 @@ function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSche
   state$.newTimeLimit.set(timeLimit);
 }
 
+function handleNewTestcase() {
+  postProviderMessage({ type: ProviderMessageType.NEXT });
+}
+
 const App = observer(function App() {
+  const show = state$.show.get();
+
   useEffect(() => postProviderMessage({ type: ProviderMessageType.LOADED }), []);
 
-  const handleNext = useCallback(() => postProviderMessage({ type: ProviderMessageType.NEXT }), []);
+  if (show) {
+    return (
+      <div className="testcase-container">
+        {Array.from(state$.testcases.get().entries()).map(([id]) => (
+          <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
+        ))}
+        <button
+          type="button"
+          className="text-button new-testcase-button"
+          onClick={handleNewTestcase}
+        >
+          <div className="codicon codicon-add"></div>
+          New Testcase
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="testcase-container">
-      {Array.from(state$.testcases.get().entries()).map(([id]) => (
-        <Testcase key={id} id={id} testcase$={state$.testcases.get(id)!} />
-      ))}
-      <button type="button" className="text-button new-testcase-button" onClick={handleNext}>
-        <div className="codicon codicon-add"></div>
-        New Testcase
-      </button>
+    <div id="empty-state">
+      <div className="codicon codicon-symbol-event" style={{ fontSize: 150 }}></div>
+      <p>Open a file to get started</p>
     </div>
   );
 });
