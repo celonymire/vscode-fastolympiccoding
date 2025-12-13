@@ -142,7 +142,7 @@ const Testcase = observer(function Testcase({ id, testcase$ }: Props) {
                 <div className={`codicon ${visible ? "codicon-eye-closed" : "codicon-eye"}`}></div>
               </div>
               <div
-                className="testcase-toolbar-icon  testcase-toolbar-icon--visibility"
+                className="testcase-toolbar-icon testcase-toolbar-icon--visibility"
                 onClick={handleToggleSkip}
               >
                 <div
