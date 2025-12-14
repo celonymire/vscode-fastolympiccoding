@@ -256,7 +256,7 @@
     min-height: 100vh;
   }
 
-  .empty-state-icon {
+  .codicon.empty-state-icon {
     font-size: 150px;
   }
 
