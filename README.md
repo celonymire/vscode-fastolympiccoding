@@ -66,6 +66,47 @@ We can use the following variables in the syntax of `${...}`
 - `compileCommand` (optional): Command to run before `runCommand` when the file content changed
 - `runCommand`: Command to run the solution
 - `currentWorkingDirectory` (optional): sets the current working directory for `runCommand`
+- `debugCommand` (optional): Command to start the solution under a debug server/wrapper (the extension will pipe testcase stdin to this process)
+- `debugAttachConfig` (optional): Name of `launch.json` attach configuration.
+</details>
+
+<details>
+  <summary>Attach configuration example (Microsoft C/C++)</summary>
+
+VS Code debug adapters generally do not support arbitrary stdin injection in a universal way.
+Fast Olympic Coding keeps stdin control by starting your program under a debug server (`debugCommand`) and then asking VS Code to attach (`debugAttachConfig`).
+
+1. Add these settings for `.cpp`:
+
+```json
+{
+  "fastolympiccoding.runSettings": {
+    ".cpp": {
+      // compile and run configurations from above...
+      "debugCommand": "gdbserver :2345 ${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
+      "debugAttachConfig": "C/C++: Attach"
+    }
+  }
+}
+```
+
+2. Create an attach configuration in `.vscode/launch.json`:
+
+```json
+{
+  "configurations": [
+    {
+      "name": "C/C++: Attach",
+      "type": "cppdbg",
+      "request": "launch",
+      "MIMode": "gdb",
+      "miDebuggerServerAddress": "localhost:2345",
+      "program": "${fileDirname}/${fileBasenameNoExtension}${exeExtname}"
+    }
+  ]
+}
+```
+
 </details>
 
 ---

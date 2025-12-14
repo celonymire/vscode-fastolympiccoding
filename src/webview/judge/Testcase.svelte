@@ -56,6 +56,11 @@
     handleAction(Action.RUN);
   }
 
+  function handleDebug() {
+    newStdin = "";
+    handleAction(Action.DEBUG);
+  }
+
   function handleEdit() {
     handleAction(Action.EDIT);
   }
@@ -119,6 +124,10 @@
           <div class="codicon codicon-run-below"></div>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="testcase-toolbar-icon" onclick={handleDebug}>
+          <div class="codicon codicon-debug-alt"></div>
+        </div>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleEdit}>
           <div class="codicon codicon-edit"></div>
         </div>
@@ -152,6 +161,10 @@
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
+        </div>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="testcase-toolbar-icon" onclick={handleDebug}>
+          <div class="codicon codicon-debug-alt"></div>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleEdit}>

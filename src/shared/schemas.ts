@@ -5,6 +5,8 @@ export const LanguageSettingsSchema = v.object({
   compileCommand: v.optional(v.string()),
   runCommand: v.string(),
   currentWorkingDirectory: v.optional(v.string()),
+  debugCommand: v.optional(v.string()),
+  debugAttachConfig: v.optional(v.string()),
 });
 
 export const TestSchema = v.object({

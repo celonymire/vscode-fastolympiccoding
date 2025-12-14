@@ -115,7 +115,7 @@
 
   function handleNewTestcase(e: Event) {
     postProviderMessage({ type: ProviderMessageType.NEXT });
-    event.currentTarget.blur();
+    (e.currentTarget as HTMLElement | null)?.blur();
   }
 
   function handleSaveSettings() {

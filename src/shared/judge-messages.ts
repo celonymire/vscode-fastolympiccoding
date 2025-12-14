@@ -11,6 +11,7 @@ export enum Action {
   TOGGLE_VISIBILITY = 6,
   TOGGLE_SKIP = 7,
   COMPARE = 8,
+  DEBUG = 9,
 }
 
 export enum ProviderMessageType {

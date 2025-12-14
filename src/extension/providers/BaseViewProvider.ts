@@ -31,6 +31,12 @@ export default abstract class BaseViewProvider<
   abstract onDispose(): void;
   abstract onShow(): void;
 
+  // Called when the webview becomes hidden. By default, preserve existing behavior
+  // (treat hide like dispose), but subclasses may override to keep long-running state.
+  onHide(): void {
+    this.onDispose();
+  }
+
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this._webview = webviewView.webview;
     webviewView.webview.options = {
@@ -51,7 +57,7 @@ export default abstract class BaseViewProvider<
       if (webviewView.visible) {
         this.onShow();
       } else {
-        this.onDispose();
+        this.onHide();
       }
     });
   }
