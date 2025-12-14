@@ -113,8 +113,9 @@
     showSettings = !showSettings;
   }
 
-  function handleNewTestcase() {
+  function handleNewTestcase(e: Event) {
     postProviderMessage({ type: ProviderMessageType.NEXT });
+    event.currentTarget.blur();
   }
 
   function handleSaveSettings() {
