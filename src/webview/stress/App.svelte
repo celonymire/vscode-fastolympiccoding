@@ -30,7 +30,7 @@
     { data: "", status: Status.NA },
   ]);
   let showView = $state(true);
-  let running = $state(false);
+  let _running = $state(false);
 
   function expand(id: number) {
     postProviderMessage({ type: ProviderMessageType.VIEW, id });
@@ -60,7 +60,7 @@
   }
 
   function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
-    running = value;
+    _running = value;
   }
 
   onMount(() => {

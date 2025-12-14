@@ -60,9 +60,21 @@ export default [
         $host: "readonly",
       },
     },
+    plugins: {
+      "@typescript-eslint": tseslint,
+    },
     rules: {
       // Rely on TypeScript for undefined symbols
       "no-undef": "off",
+      // Disable base rule and use TypeScript version which better understands type definitions
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+        },
+      ],
     },
   },
   {
