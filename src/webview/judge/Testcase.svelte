@@ -377,7 +377,7 @@
 
   /* WA=2 */
   .testcase-elapsed[data-status="2"] {
-    background-color: var(--vscode-terminal-ansiYellow);
+    background-color: var(--vscode-terminal-ansiRed);
   }
 
   /* AC=3 */
