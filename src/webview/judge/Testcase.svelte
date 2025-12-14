@@ -361,7 +361,8 @@
     font-size: 15px;
     font-weight: bold;
     line-height: 1;
-    background-color: var(--vscode-button-secondaryBackground);
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
   }
 
   /* Status-specific colors using data-status attribute */

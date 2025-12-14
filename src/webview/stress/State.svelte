@@ -47,7 +47,7 @@
         <strong class="state-toolbar-text-bubble" data-status={status}>
           {from[id]}
         </strong>
-        <strong class="state-toolbar-text-bubble" data-status={status}> COMPILING </strong>
+        <strong class="state-toolbar-text-bubble" data-status={status}>COMPILING</strong>
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
@@ -176,7 +176,8 @@
     font-size: 15px;
     font-weight: bold;
     line-height: 1;
-    background-color: var(--vscode-button-secondaryBackground);
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
   }
 
   /* Status-specific colors using data-status attribute */
@@ -192,7 +193,7 @@
 
   /* WA=2 */
   .state-toolbar-text-bubble[data-status="2"] {
-    background-color: var(--vscode-terminal-ansiYellow);
+    background-color: var(--vscode-terminal-ansiRed);
   }
 
   /* AC=3 */
