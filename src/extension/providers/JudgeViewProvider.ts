@@ -74,6 +74,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _fileCancellation?: vscode.CancellationTokenSource;
   private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
   private _currentFile?: string;
+  private _activeDebugTestcaseId?: number;
 
   private async _getExecutionContext(id: number): Promise<
     | {
@@ -293,6 +294,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   constructor(context: vscode.ExtensionContext) {
     super("judge", context, ProviderMessageSchema);
+
+    context.subscriptions.push(
+      vscode.debug.onDidStartDebugSession((session) => {
+        const id = session.configuration?.fastolympiccodingTestcaseId;
+        if (typeof id !== "number") {
+          return;
+        }
+        this._activeDebugTestcaseId = id;
+      }),
+      vscode.debug.onDidTerminateDebugSession((session) => {
+        const id = session.configuration?.fastolympiccodingTestcaseId;
+        if (typeof id === "number" && this._activeDebugTestcaseId === id) {
+          this._stop(id);
+          this._activeDebugTestcaseId = undefined;
+        }
+      })
+    );
 
     this.onShow();
   }
@@ -810,13 +828,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       resolvedConfig[key] = typeof value === "string" ? resolveVariables(value, file) : value;
     }
 
+    // Tag this debug session so we can identify which testcase is being debugged.
+    // VS Code preserves custom fields on session.configuration.
+    resolvedConfig.fastolympiccodingTestcaseId = id;
+
     // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
     // We just need to bypass our type system here.
     void vscode.debug.startDebugging(folder, resolvedConfig as vscode.DebugConfiguration);
   }
 
   private _stop(id: number) {
-    this._state.get(id)!.process.process?.kill();
+    const testcase = this._state.get(id);
+    if (!testcase) {
+      return;
+    }
+
+    // If this testcase is the one currently being debugged, stop the VS Code debug session.
+    // This is more reliable than killing the spawned debug-wrapper process alone.
+    if (this._activeDebugTestcaseId === id && vscode.debug.activeDebugSession) {
+      void vscode.debug.stopDebugging(vscode.debug.activeDebugSession);
+    }
+
+    testcase.process.process?.kill();
   }
 
   private _delete(id: number) {
