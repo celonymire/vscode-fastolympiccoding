@@ -1,41 +1,37 @@
-jobs:
-
 name: Release
 
 on:
   push:
     tags:
       - "*.*.*"
-  jobs:
-    release:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Download build artifact
-          uses: actions/download-artifact@v4
-          with:
-            name: dist
-            path: dist
 
-        - name: Checkout repository
-          uses: actions/checkout@v4
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        - name: Set up Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: "20"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
 
-        - name: Install vsce
-          run: npm install -g @vscode/vsce
+      - name: Install dependencies
+        run: npm install
 
-        - name: Package VSCode extension
-          run: vsce package
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
 
-        - name: Create GitHub Release
-          uses: softprops/action-gh-release@v2
-          with:
-            files: "*.vsix"
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package VSCode extension
+        run: vsce package
 
-        - name: Publish to VSCode Marketplace
-          run: vsce publish -p ${{ secrets.VSCE_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.vsix"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to VSCode Marketplace
+        run: vsce publish -p ${{ secrets.VSCE_TOKEN }}

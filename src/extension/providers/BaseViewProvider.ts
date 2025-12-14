@@ -35,10 +35,7 @@ export default abstract class BaseViewProvider<
     this._webview = webviewView.webview;
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this._context.extensionUri, "dist"),
-        vscode.Uri.joinPath(this._context.extensionUri, "node_modules", "@vscode", "codicons"),
-      ],
+      localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, "dist")],
     };
     webviewView.webview.html = this._getWebviewContent(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((message: unknown) => {
@@ -90,18 +87,7 @@ export default abstract class BaseViewProvider<
   private _getWebviewContent(webview: vscode.Webview): string {
     const scriptUri = this._getUri(webview, ["dist", this.view, "index.js"]);
     const stylesUri = this._getUri(webview, ["dist", this.view, "index.css"]);
-    const codiconsUri = webview
-      .asWebviewUri(
-        vscode.Uri.joinPath(
-          this._context.extensionUri,
-          "node_modules",
-          "@vscode",
-          "codicons",
-          "dist",
-          "codicon.css"
-        )
-      )
-      .toString();
+    const codiconsUri = this._getUri(webview, ["dist", "codicons", "codicon.css"]);
     const nonce = getNonce();
 
     return `

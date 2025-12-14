@@ -1,7 +1,7 @@
 {
   "name": "vscode-fastolympiccoding",
   "displayName": "Fast Olympic Coding",
-  "version": "1.3.8",
+  "version": "1.4.0",
   "description": "Competitive programming in VSCode made easy",
   "icon": "./media/icon.png",
   "categories": [
@@ -384,6 +384,7 @@
     "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
+    "@vscode/codicons": "^0.0.44",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.13.1",
@@ -398,7 +399,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.44",
     "valibot": "^1.2.0"
   }
 }

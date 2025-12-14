@@ -1,10 +1,13 @@
 **/*
 
 !.vscodeignore
+!README.md
 !LICENSE
-!media/icon.png
+!media/**
 !dist/judge/index.js
 !dist/judge/index.css
 !dist/stress/index.js
 !dist/stress/index.css
 !dist/extension.js
+!dist/codicons/codicon.css
+!dist/codicons/codicon.ttf

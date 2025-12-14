@@ -47,9 +47,7 @@
         <strong class="state-toolbar-text-bubble" data-status={status}>
           {from[id]}
         </strong>
-        <strong class="state-toolbar-text-bubble" data-status={status}>
-          COMPILING
-        </strong>
+        <strong class="state-toolbar-text-bubble" data-status={status}> COMPILING </strong>
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
@@ -82,9 +80,7 @@
         <strong class="state-toolbar-text-bubble" data-status={Status.NA}>
           {from[id]}
         </strong>
-        <strong class="state-toolbar-text-bubble" data-status={status}>
-          Compile Error
-        </strong>
+        <strong class="state-toolbar-text-bubble" data-status={status}> Compile Error </strong>
       </div>
     </div>
   </div>

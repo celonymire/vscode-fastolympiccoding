@@ -71,11 +71,7 @@
     onmouseleave={() => (isHovered = false)}
   >
     {#if readonly}
-      <div
-        class="content readonly"
-        class:content--has-value={hasValue}
-        data-variant={variant}
-      >
+      <div class="content readonly" class:content--has-value={hasValue} data-variant={variant}>
         {value || placeholder}
       </div>
     {:else}

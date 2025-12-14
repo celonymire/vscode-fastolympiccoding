@@ -130,8 +130,13 @@
           <div class="codicon {visible ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon testcase-toolbar-icon--visibility" onclick={handleToggleSkip}>
-          <div class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"></div>
+        <div
+          class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+          onclick={handleToggleSkip}
+        >
+          <div
+            class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
+          ></div>
         </div>
       </div>
     </div>
@@ -160,8 +165,13 @@
           <div class="codicon {visible ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon testcase-toolbar-icon--visibility" onclick={handleToggleSkip}>
-          <div class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"></div>
+        <div
+          class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+          onclick={handleToggleSkip}
+        >
+          <div
+            class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
+          ></div>
         </div>
       </div>
       <div class="testcase-toolbar-right">
@@ -224,9 +234,7 @@
   <div class="testcase-container">
     <div class="testcase-toolbar">
       <div class="testcase-toolbar-left">
-        <strong class="testcase-elapsed" data-status={status}>
-          COMPILING
-        </strong>
+        <strong class="testcase-elapsed" data-status={status}> COMPILING </strong>
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>

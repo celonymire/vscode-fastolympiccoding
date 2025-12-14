@@ -8,9 +8,9 @@ This repository contains a VS Code extension that provides two webview-based too
 
 Build and tooling:
 
-- Use `bun install` to install dependencies.
-- Use `bun run watch` during development and `bun run prod` for production builds. Rspack bundles the extension and webviews into `dist/`. Styles are co-located within Svelte components.
-- Run `bun run lint` and `bun run format` to apply ESLint (TypeScript + Svelte) and Prettier rules.
+- Use `npm install` to install dependencies.
+- Use `npm run watch` during development and `npm run prod` for production builds. Rspack bundles the extension and webviews into `dist/`. Styles are co-located within Svelte components.
+- Run `npm run lint` and `npm run format` to apply ESLint (TypeScript + Svelte) and Prettier rules.
 
 Design and implementation guidelines:
 

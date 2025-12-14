@@ -1,5 +1,5 @@
 import { defineConfig } from "@rspack/cli";
-import { type Configuration } from "@rspack/core";
+import { CopyRspackPlugin, type Configuration } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import * as path from "node:path";
 import { sveltePreprocess } from "svelte-preprocess";
@@ -129,6 +129,18 @@ const webviewsConfig: Configuration = {
       typescript: {
         configFile: "tsconfig.app.json",
       },
+    }),
+    new CopyRspackPlugin({
+      patterns: [
+        {
+          from: "node_modules/@vscode/codicons/dist/codicon.css",
+          to: "codicons/",
+        },
+        {
+          from: "node_modules/@vscode/codicons/dist/codicon.ttf",
+          to: "codicons/",
+        },
+      ],
     }),
   ],
 };
