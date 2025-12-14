@@ -164,7 +164,7 @@
   }
 
   .state-container {
-    margin-bottom: 24px;
+    margin-bottom: 28px;
   }
 
   .state-toolbar-text-bubble {

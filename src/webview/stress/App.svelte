@@ -85,9 +85,11 @@
 </script>
 
 {#if showView}
-  {#each items as item, index (index)}
-    <State id={index} state={item} onView={expand} onAdd={add} />
-  {/each}
+  <div class="state-container">
+    {#each items as item, index (index)}
+      <State id={index} state={item} onView={expand} onAdd={add} />
+    {/each}
+  </div>
 {:else}
   <div id="empty-state">
     <div class="codicon codicon-symbol-event empty-state-icon"></div>
@@ -96,6 +98,10 @@
 {/if}
 
 <style>
+  .state-container {
+    margin-top: 4px;
+  }
+
   #empty-state {
     display: flex;
     flex-direction: column;

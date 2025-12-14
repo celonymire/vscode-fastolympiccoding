@@ -298,6 +298,7 @@
 
   /* Testcase View */
   .testcase-container {
+    margin-top: 4px;
     margin-bottom: 24px;
   }
 </style>
