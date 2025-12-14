@@ -188,7 +188,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
     }
 
-    super._postMessage({ type: WebviewMessageType.RUNNING, value: true });
     for (let id = 0; id < 3; id++) {
       super._postMessage({
         type: WebviewMessageType.STATUS,
@@ -315,7 +314,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
     }
     this._running = false;
-    super._postMessage({ type: WebviewMessageType.RUNNING, value: false });
 
     if (this._clearFlag) {
       for (let id = 0; id < 3; id++) {

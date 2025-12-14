@@ -6,7 +6,6 @@ export enum WebviewMessageType {
   STDIO = 1,
   CLEAR = 2,
   SHOW = 3,
-  RUNNING = 4,
 }
 
 export const StatusMessageSchema = v.object({
@@ -30,17 +29,11 @@ export const ShowMessageSchema = v.object({
   visible: v.boolean(),
 });
 
-export const RunningMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.RUNNING),
-  value: v.boolean(),
-});
-
 export const WebviewMessageSchema = v.union([
   StatusMessageSchema,
   StdioMessageSchema,
   ClearMessageSchema,
   ShowMessageSchema,
-  RunningMessageSchema,
 ]);
 
 export type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>;

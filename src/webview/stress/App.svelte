@@ -5,7 +5,6 @@
   import { Status } from "~shared/enums";
   import {
     ProviderMessageType,
-    type RunningMessageSchema,
     type ShowMessageSchema,
     type StatusMessageSchema,
     type StdioMessageSchema,
@@ -30,7 +29,6 @@
     { data: "", status: Status.NA },
   ]);
   let showView = $state(true);
-  let _running = $state(false);
 
   function expand(id: number) {
     postProviderMessage({ type: ProviderMessageType.VIEW, id });
@@ -59,10 +57,6 @@
     showView = visible;
   }
 
-  function handleRunning({ value }: v.InferOutput<typeof RunningMessageSchema>) {
-    _running = value;
-  }
-
   onMount(() => {
     const handleMessage = (event: MessageEvent<WebviewMessage>) => {
       switch (event.data.type) {
@@ -77,9 +71,6 @@
           break;
         case WebviewMessageType.SHOW:
           handleShow(event.data);
-          break;
-        case WebviewMessageType.RUNNING:
-          handleRunning(event.data);
           break;
       }
     };
