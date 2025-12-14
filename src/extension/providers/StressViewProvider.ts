@@ -90,6 +90,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   ) {
     super("stress", context, ProviderMessageSchema);
 
+    for (let id = 0; id < 3; id++) {
+      this._state[id].data.callback = (data: string) => {
+        super._postMessage({
+          type: WebviewMessageType.STDIO,
+          id,
+          data,
+        });
+      };
+    }
+
     this.onShow();
   }
 
@@ -119,13 +129,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     for (let id = 0; id < state.length; id++) {
       const testcase = state[id];
 
-      this._state[id].data.write(testcase.data, true);
       this._state[id].status = testcase.status;
       super._postMessage({
         type: WebviewMessageType.STATUS,
         id,
-        status: this._state[id].status,
+        status: testcase.status,
       });
+      this._state[id].data.reset();
+      this._state[id].data.write(testcase.data, true);
     }
   }
 
