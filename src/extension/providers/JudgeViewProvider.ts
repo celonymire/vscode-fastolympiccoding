@@ -774,23 +774,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    this._clearIOTexts(id, testcase);
-
-    const resolvedArgs = resolveCommand(languageSettings.debugCommand, file);
-    const cwd = languageSettings.currentWorkingDirectory
-      ? resolveVariables(languageSettings.currentWorkingDirectory)
-      : undefined;
-
-    // No time limit for debugging; user stops it manually.
-    this._launchProcess({
-      id,
-      token,
-      testcase,
-      resolvedArgs,
-      cwd,
-      timeout: undefined,
-    });
-
     // get the attach debug configuration
     const folder =
       vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file)) ??
@@ -803,6 +786,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       vscode.window.showWarningMessage("Debug attach configuration not found.");
       return;
     }
+
+    const resolvedArgs = resolveCommand(languageSettings.debugCommand, file);
+    const cwd = languageSettings.currentWorkingDirectory
+      ? resolveVariables(languageSettings.currentWorkingDirectory)
+      : undefined;
+
+    this._clearIOTexts(id, testcase);
+
+    // No time limit for debugging; user stops it manually.
+    this._launchProcess({
+      id,
+      token,
+      testcase,
+      resolvedArgs,
+      cwd,
+      timeout: undefined,
+    });
 
     // resolve the values in the attach configuration
     const resolvedConfig: Partial<vscode.DebugConfiguration> = {};
