@@ -1,6 +1,6 @@
-<h3 align="center">⚡ Fast Olympic Coding ⚡</h3>
+<h1 align="center">⚡ Fast Olympic Coding ⚡</h1>
 
-![Testcases Gif](media/demo.gif)
+![Testcases Gif](media/banner.png)
 
 <p align="center">
 <img src="https://vsmarketplacebadges.dev/version-short/sam20908.vscode-fastolympiccoding.svg">
@@ -8,19 +8,18 @@
 <img src="https://vsmarketplacebadges.dev/rating-short/sam20908.vscode-fastolympiccoding.svg">
 </p>
 
-Fast Olympic Coding is an extension to assist with various tasks in competitive programming. It is a ported and enhanced version of the corresponding Sublime Text plugin that also leverages the power of VSCode.
+<p align="center"><i>Once a mighty Competitive Programming plugin... Reborn with the powers of VSCode!</i></p>
 
 ### ⚡ Overview
 
-- [📜](#-testcase-window) Concurrently run, edit, and delete multiple testcases
-- [👨🏻‍💻](#-stress-tester) Stress tester to find counterexamples
-- [👜](#-inserting-prewritten-code) Insert pre-written code from another file with automatic folding
-- [🛜](#-competitive-companion) Reads contests and problems from [Competitive Companion](https://github.com/jmerle/competitive-companion)
-- 🏃 **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
+- [📜](#-judge) Minimal and _adaptive_ UI for maximized functionality and view utilization
+- [🐞](#-stress-tester) Built-in stress tester to aid your debugging
+- [👜](#-inserting-prewritten-code) Insert file templates without leaving your code
+- [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) for efficient problem gathering
+- ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
 
 ### 💻 Keybinds
 
-- Compile: `Ctrl+Alt+C`
 - Compile and run all testcases: `Ctrl+Alt+B`
 - Stop all testcases: `Ctrl+Alt+K`
 - Delete all testcases: `Ctrl+Alt+D`
@@ -71,34 +70,27 @@ We can use the following variables in the syntax of `${...}`
 
 ---
 
-### 📜 Testcase Window
+### 📜 Judge
 
-#### 📄 Other features include...
+The UI adapts to VSCode's theme, font family and font size. Minimalism from the old plugin has been improved with [VSCode Codicons](https://microsoft.github.io/vscode-codicons/dist/codicon.html) and the native look of VSCode. The new UI experience is integrated into both Judge and Stress Tester windows.
 
-- Show/hide the testcase details
-- Shortened details of testcases for huge outputs
-  - **View full text by clicking on their corresponding arrows**
-- Color supported output for compile errors
+- Run, edit, hide, skip testcases, you name it!
+- Hidden optimizations such as batched IO, truncating huge IO, and cached compilations.
+- Dedicated popup for compiler errors with color support
 - ... and so much more!
 
-<img src="media/demo_2.gif" alt="2nd Demo Gif"/>
-
-| ![Diff View Image](media/diff-ac.png) |
-| :-----------------------------------: |
-| _View wrong answers in a diff view!_  |
+<img src="media/judge.gif" alt="Judge Demo Gif"/>
 
 <details>
   <summary>General setting for both Testcase Window and Stress Tester</summary>
 
-- `font`: Font family used to render text (restart extension to apply)
-- `runSettings`: Object of [run settings](#-setting-up)
 - `maxDisplayCharacters`: Maximum number of characters to display for each output
 - `maxDisplayLines`: Maximum number of lines to display for each output
 </details>
 
 ---
 
-### 👨🏻‍💻 Stress Tester
+### 🐞 Stress Tester
 
 Required files (naming scheme can be configured in settings):
 
@@ -147,15 +139,13 @@ Required files (naming scheme can be configured in settings):
 
 ### 🛜 Competitive Companion
 
-- **Open the extension to start the listening process!**
-
 |      ![Problem Parsing Gif](media/problem_parsing.gif)      |
 | :---------------------------------------------------------: |
 | _Using Competitive Companion to parse a CodeForces problem_ |
 
-| ![Contest Parsing Gif](media/contest_parsing.gif)  |
-| :------------------------------------------------: |
-| _We can parse an entire CodeForces Div.3 Contest!_ |
+| ![Contest Parsing Gif](media/contest_parsing.gif) |
+| :-----------------------------------------------: |
+|   _We can parse an entire CodeForces Contest!_    |
 
 <details>
   <summary>Settings for Competitive Companion integration</summary>
