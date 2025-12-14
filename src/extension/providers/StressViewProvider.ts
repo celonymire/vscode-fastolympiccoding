@@ -76,21 +76,21 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this.stop();
   }
 
+  onShow() {
+    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
+      () => this.loadCurrentFileData(),
+      this
+    );
+    this.loadCurrentFileData();
+  }
+
   constructor(
     context: vscode.ExtensionContext,
     private _testcaseViewProvider: JudgeViewProvider
   ) {
     super("stress", context, ProviderMessageSchema);
 
-    for (let id = 0; id < 3; id++) {
-      this._state[id].data.callback = (data: string) =>
-        super._postMessage({ type: WebviewMessageType.STDIO, id, data });
-    }
-
-    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
-      () => this.loadCurrentFileData(),
-      this
-    );
+    this.onShow();
   }
 
   loadCurrentFileData() {

@@ -29,6 +29,7 @@ export default abstract class BaseViewProvider<
 
   abstract onMessage(msg: v.InferOutput<Schema>): void;
   abstract onDispose(): void;
+  abstract onShow(): void;
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this._webview = webviewView.webview;
@@ -49,7 +50,13 @@ export default abstract class BaseViewProvider<
       }
     });
     webviewView.onDidDispose(() => this.onDispose());
-    webviewView.onDidChangeVisibility(() => this.onDispose()); // webviews don't have persistent states
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this.onShow();
+      } else {
+        this.onDispose();
+      }
+    });
   }
 
   getViewId(): string {

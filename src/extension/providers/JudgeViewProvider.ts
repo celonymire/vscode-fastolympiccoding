@@ -107,13 +107,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this.stopAll();
   }
 
-  constructor(context: vscode.ExtensionContext) {
-    super("judge", context, ProviderMessageSchema);
-
+  onShow() {
     this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
       () => this.loadCurrentFileData(),
       this
     );
+    this.loadCurrentFileData();
+  }
+
+  constructor(context: vscode.ExtensionContext) {
+    super("judge", context, ProviderMessageSchema);
+
+    this.onShow();
   }
 
   loadCurrentFileData() {
