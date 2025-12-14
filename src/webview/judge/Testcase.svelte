@@ -106,6 +106,7 @@
   const visible = $derived(testcase.shown);
   const skipped = $derived(testcase.skipped);
   const toggled = $derived(testcase.toggled);
+  const showDetails = $derived(!skipped && visible && !(status === Status.AC && !toggled));
 </script>
 
 {#if status === Status.CE}
@@ -127,7 +128,7 @@
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleToggleVisibility}>
-          <div class="codicon {visible ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
+          <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div
@@ -162,7 +163,7 @@
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleToggleVisibility}>
-          <div class="codicon {visible ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
+          <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div
@@ -195,7 +196,7 @@
         {/if}
       </div>
     </div>
-    {#if !skipped && visible && !(status === Status.AC && !toggled)}
+    {#if showDetails}
       <AutoresizeTextarea
         value={testcase.stdin}
         readonly
