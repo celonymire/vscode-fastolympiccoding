@@ -23,3 +23,7 @@ Design and implementation guidelines:
 - Keep changes minimal and consistent with existing patterns. Prefer reusing the Judge/Stress provider and webview patterns over introducing new architectures.
 
 Additional path-specific details are defined in `.github/instructions/*.instructions.md`, which Copilot uses when working in matching files.
+
+Always use context7 when I need code generation, setup or configuration steps, or
+library/API documentation. This means you should automatically use the Context7 MCP
+tools to resolve library id and get library docs without me having to explicitly ask.
