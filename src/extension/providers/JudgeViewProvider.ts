@@ -306,7 +306,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       vscode.debug.onDidTerminateDebugSession((session) => {
         const id = session.configuration?.fastolympiccodingTestcaseId;
         if (typeof id === "number" && this._activeDebugTestcaseId === id) {
-          console.log("Debug session ended, stopping testcase", id);
           this._stop(id);
           this._activeDebugTestcaseId = undefined;
         }
