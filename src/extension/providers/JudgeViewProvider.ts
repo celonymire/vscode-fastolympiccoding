@@ -306,6 +306,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       vscode.debug.onDidTerminateDebugSession((session) => {
         const id = session.configuration?.fastolympiccodingTestcaseId;
         if (typeof id === "number" && this._activeDebugTestcaseId === id) {
+          console.log("Debug session ended, stopping testcase", id);
           this._stop(id);
           this._activeDebugTestcaseId = undefined;
         }
@@ -821,6 +822,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       cwd,
       timeout: undefined,
     });
+
+    // Wait for the debug process to spawn before attaching
+    const spawned = await testcase.process.waitForSpawn();
+    if (!spawned || token.isCancellationRequested) {
+      return;
+    }
 
     // resolve the values in the attach configuration
     const resolvedConfig = resolveVariables(attachConfig, file);
