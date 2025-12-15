@@ -78,7 +78,7 @@ The extension typically attaches the debugger to an existing process, which allo
 **Please use `${debugPort}` as the port to your debugging servers!** The extension checks against that port to check for flaky issues with debuggers such as:
 
 - Debugger server didn't start properly and connecting to that port would be a timeout issue.
-- The port is already taken, which can
+- The port is already taken, which will cause havoc!
 
 Fast Olympic Coding supports debuggers that implement **Microsoft's MI Debugging Engine**.
 
