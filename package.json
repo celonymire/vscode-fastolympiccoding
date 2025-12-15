@@ -219,7 +219,7 @@
       {
         "title": "Competitive Companion",
         "properties": {
-          "fastolympiccoding.autoStartCompetitiveCompanion": {
+          "fastolympiccoding.automaticallyStartCompetitiveCompanion": {
             "type": "boolean",
             "default": true,
             "description": "Automatically start listening for Competitive Companion when VSCode starts."
