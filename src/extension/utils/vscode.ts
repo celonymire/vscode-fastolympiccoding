@@ -177,7 +177,7 @@ export class ReadonlyStringProvider implements vscode.TextDocumentContentProvide
   }
 }
 
-export function resolveVariables(string: string, inContextOfFile?: string): string {
+function resolveStringVariables(string: string, inContextOfFile?: string): string {
   const workspaces = vscode.workspace.workspaceFolders;
   const workspace = vscode.workspace.workspaceFolders?.at(0);
   const activeEditor = inContextOfFile ? undefined : vscode.window.activeTextEditor;
@@ -244,6 +244,43 @@ export function resolveVariables(string: string, inContextOfFile?: string): stri
     path.normalize(group)
   );
   return resolved;
+}
+
+function resolveArrayVariables(array: any[], inContextOfFile?: string): any[] {
+  return array.map((item) => resolveVariables(item, inContextOfFile));
+}
+
+function resolveObjectVariables(
+  obj: Record<string, any>,
+  inContextOfFile?: string
+): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    result[key] = resolveVariables(val, inContextOfFile);
+  }
+  return result;
+}
+
+export function resolveVariables(value: string, inContextOfFile?: string): string;
+export function resolveVariables(value: any[], inContextOfFile?: string): any[];
+export function resolveVariables(
+  value: Record<string, any>,
+  inContextOfFile?: string
+): Record<string, any>;
+export function resolveVariables(
+  value: string | any[] | Record<string, any>,
+  inContextOfFile?: string
+): any {
+  if (Array.isArray(value)) {
+    return resolveArrayVariables(value, inContextOfFile);
+  }
+  if (typeof value === "object" && value !== null) {
+    return resolveObjectVariables(value, inContextOfFile);
+  }
+  if (typeof value === "string") {
+    return resolveStringVariables(value, inContextOfFile);
+  }
+  return value;
 }
 
 export function resolveCommand(command: string, inContextOfFile?: string) {

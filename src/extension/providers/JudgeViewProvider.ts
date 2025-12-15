@@ -823,10 +823,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
 
     // resolve the values in the attach configuration
-    const resolvedConfig: Partial<vscode.DebugConfiguration> = {};
-    for (const [key, value] of Object.entries(attachConfig)) {
-      resolvedConfig[key] = typeof value === "string" ? resolveVariables(value, file) : value;
-    }
+    const resolvedConfig = resolveVariables(attachConfig, file);
 
     // Tag this debug session so we can identify which testcase is being debugged.
     // VS Code preserves custom fields on session.configuration.
