@@ -71,10 +71,25 @@ We can use the following variables in the syntax of `${...}`
 </details>
 
 <details>
-  <summary>Attach configuration example (Microsoft C/C++)</summary>
+  <summary>Debugging configuration</summary>
 
-VS Code debug adapters generally do not support arbitrary stdin injection in a universal way.
-Fast Olympic Coding keeps stdin control by starting your program under a debug server (`debugCommand`) and then asking VS Code to attach (`debugAttachConfig`).
+The extension typically attaches the debugger to an existing process, which allows custom inputs to be propagated to the program. However, each language has its own set of tooling. Adapt the commands as necessary!
+
+**Please use `${debugPort}` as the port to your debugging servers!** The extension checks against that port to check for flaky issues with debuggers such as:
+
+- Debugger server didn't start properly and connecting to that port would be a timeout issue.
+- The port is already taken, which can
+
+Fast Olympic Coding supports debuggers that implement **Microsoft's MI Debugging Engine**.
+
+<details>
+  <summary>Example C++ configuration</summary>
+
+I recommend either use _Microsoft C/C++_ or _Native Debug_.
+
+**C++ (and other compiled languages) requires debug symbols to be compiled in!** Easiest way is to add `-g` flag to your compile command.
+
+Here are the steps for _Native Debug_, which should be very similar with _Microsoft C/C++_:
 
 1. Add these settings for `.cpp`:
 
@@ -83,29 +98,33 @@ Fast Olympic Coding keeps stdin control by starting your program under a debug s
   "fastolympiccoding.runSettings": {
     ".cpp": {
       // compile and run configurations from above...
-      "debugCommand": "gdbserver :2345 ${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
-      "debugAttachConfig": "C/C++: Attach"
+      "debugCommand": "gdbserver :${debugPort} ${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
+      "debugAttachConfig": "GDB Native gdbserver"
     }
   }
 }
 ```
 
-2. Create an attach configuration in `.vscode/launch.json`:
+1. Create a GDB server configuration in `.vscode/launch.json`:
 
 ```json
 {
   "configurations": [
     {
-      "name": "C/C++: Attach",
-      "type": "cppdbg",
-      "request": "launch",
-      "MIMode": "gdb",
-      "miDebuggerServerAddress": "localhost:2345",
-      "program": "${fileDirname}/${fileBasenameNoExtension}${exeExtname}"
+      "name": "GDB Native gdbserver",
+      "type": "gdb",
+      "request": "attach",
+      "executable": "${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
+      "target": ":${debugPort}",
+      "remote": true,
+      "cwd": "${workspaceRoot}",
+      "valuesFormatting": "prettyPrinters"
     }
   ]
 }
 ```
+
+</details>
 
 </details>
 

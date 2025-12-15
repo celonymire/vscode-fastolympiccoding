@@ -1,6 +1,7 @@
 import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -171,4 +172,68 @@ export async function compile(
   const code = await promise;
   compilePromise.delete(file);
   return code;
+}
+
+/**
+ * Finds an available TCP port by binding to port 0 and letting the OS assign one.
+ * Returns the assigned port number.
+ */
+export async function findAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address && typeof address === "object") {
+        const port = address.port;
+        server.close(() => resolve(port));
+      } else {
+        server.close(() => reject(new Error("Failed to get port")));
+      }
+    });
+    server.on("error", reject);
+  });
+}
+
+/**
+ * Waits until a port is in use by attempting to bind to it.
+ * If we get EADDRINUSE, it means something is already listening.
+ * This approach avoids connecting as a client which could disrupt the debug server.
+ *
+ * @param port - The port number to check
+ * @param timeout - Maximum time to wait in milliseconds (default: 10000)
+ * @param interval - Time between bind attempts in milliseconds (default: 100)
+ */
+export async function waitForPortListening(
+  port: number,
+  timeout: number,
+  interval = 100
+): Promise<boolean> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const isInUse = await new Promise<boolean>((resolve) => {
+      const server = net.createServer();
+
+      server.once("error", (err: NodeJS.ErrnoException) => {
+        // EADDRINUSE means the port is already in use (something is listening)
+        resolve(err.code === "EADDRINUSE");
+      });
+
+      server.once("listening", () => {
+        // We were able to bind, so nothing is listening yet
+        server.close(() => resolve(false));
+      });
+
+      server.listen(port, "127.0.0.1");
+    });
+
+    if (isInUse) {
+      return true;
+    }
+
+    // Wait before the next attempt
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+
+  return false;
 }

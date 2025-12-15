@@ -4,7 +4,12 @@ import * as v from "valibot";
 import { Status, Stdio } from "~shared/enums";
 import { ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/providers/BaseViewProvider";
-import { compile, Runnable } from "~extension/utils/runtime";
+import {
+  compile,
+  findAvailablePort,
+  Runnable,
+  waitForPortListening,
+} from "~extension/utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -792,6 +797,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
+    // Generate a dynamic port for this debug session
+    let debugPort: number;
+    try {
+      debugPort = await findAvailablePort();
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Failed to find available port for debugging: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
+    const extraVariables = { debugPort: String(debugPort) };
+
     // get the attach debug configuration
     const folder =
       vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file)) ??
@@ -805,9 +822,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const resolvedArgs = resolveCommand(languageSettings.debugCommand, file);
+    const resolvedArgs = resolveCommand(languageSettings.debugCommand, file, extraVariables);
     const cwd = languageSettings.currentWorkingDirectory
-      ? resolveVariables(languageSettings.currentWorkingDirectory)
+      ? resolveVariables(languageSettings.currentWorkingDirectory, file, extraVariables)
       : undefined;
 
     this._clearIOTexts(id, testcase);
@@ -829,15 +846,31 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     // resolve the values in the attach configuration
-    const resolvedConfig = resolveVariables(attachConfig, file);
+    const resolvedConfig = resolveVariables(attachConfig, file, extraVariables);
 
     // Tag this debug session so we can identify which testcase is being debugged.
     // VS Code preserves custom fields on session.configuration.
     resolvedConfig.fastolympiccodingTestcaseId = id;
 
+    // Wait for the debug server to be ready by checking if the port is listening
+    const debugServerRunning = await waitForPortListening(debugPort, 10000);
+    if (!debugServerRunning) {
+      vscode.window.showErrorMessage(
+        `Debug server did not start listening on port ${debugPort} within 10 seconds.`
+      );
+      this._stop(id);
+      return;
+    }
+
     // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
     // We just need to bypass our type system here.
-    void vscode.debug.startDebugging(folder, resolvedConfig as vscode.DebugConfiguration);
+    const started = await vscode.debug.startDebugging(
+      folder,
+      resolvedConfig as vscode.DebugConfiguration
+    );
+    if (!started) {
+      this._stop(id);
+    }
   }
 
   private _stop(id: number) {
