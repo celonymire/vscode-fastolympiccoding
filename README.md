@@ -115,9 +115,11 @@ The extension typically attaches the debugger to an existing process, which allo
 <details>
   <summary>Example C++ configuration</summary>
 
-I recommend use either Microsoft's official [**C/C++**](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) or [**Native Debug**](https://marketplace.visualstudio.com/items?itemName=webfreak.debug). CodeLLDB does not work because `lldb-server` cannot send real-time inputs.
+I recommend either Microsoft's official [**C/C++**](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) or [**Native Debug**](https://marketplace.visualstudio.com/items?itemName=webfreak.debug). CodeLLDB does not work because `lldb-server` cannot send real-time inputs.
 
 **C++ (and other compiled languages) requires debug symbols to be compiled in!** Easiest way is to add `-g` flag to your compile command.
+
+Since both of them work with `gdbserver`, ensure that is installed, which is also what I tested with.
 
 Here are the steps for **Native Debug**, which should be very similar with **Microsoft C/C++**:
 
@@ -203,6 +205,8 @@ Here are the steps for **Python Debugger**:
   <summary>Example Java configuration</summary>
 
 I recommend Microsoft's official [**Debugger for Java**](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-debug) for the best experience. For some reason, Oracle's **Java** extension ignores breakpoints.
+
+**Compile your Java files with debug symbols!** Add `-g` flag to your compile command.
 
 Ensure you have **Java Development Kit** version 1.8+ installed.
 
