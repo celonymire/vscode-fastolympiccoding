@@ -19,17 +19,7 @@
 - [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) for efficient problem gathering
 - ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
 
-## 💻 Keybinds
-
-- Compile and run all testcases: `Ctrl+Alt+B`
-- Stop all testcases: `Ctrl+Alt+K`
-- Delete all testcases: `Ctrl+Alt+D`
-- Save all testcases: `Ctrl+Alt+S`
-- Run stress test: `Ctrl+Alt+G`
-- Stop stress test: `Ctrl+Alt+H`
-- Insert file template: `Ctrl+Alt+I`
-
-### 📥 Install within VSCode or at [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sam20908.vscode-fastolympiccoding)
+### 📥 Install within Visual Studio Code or at [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sam20908.vscode-fastolympiccoding)
 
 ---
 
@@ -95,13 +85,13 @@ The UI adapts to VSCode's theme, font family and font size. Minimalism from the 
 
 The extension typically attaches the debugger to an existing process, which allows custom inputs to be propagated to the program. However, each language has its own set of tooling. Adapt the commands as necessary!
 
-**Please use `${debugPort}` as the port to your debugging servers!** The hand-picked port provides the following benefits:
+**🚨Please use `${debugPort}` as the port for your debugging servers!** The hand-picked port provides the following benefits:
 
 1. The operating system allocated the port to ensure it is available
 2. Detects when the debugging server fails to launch at the chosen port within a timeframe
 3. Frees the port when error occurs
 
-**‼️NOT ALL DEBUGGERS ARE EQUAL!** Even if there are several debugging servers, they may not have the same set of features or work the same way! Same warning applies to VSCode debugger extensions!
+**‼️NOT ALL DEBUGGERS ARE EQUAL!** Between debugging servers for the same language, they may not have the same set of features or work the same way! Same warning applies to VSCode debugger extensions!
 
 ![Debugging Gif](media/debugging.gif)
 
