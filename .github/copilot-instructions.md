@@ -17,7 +17,18 @@ Design and implementation guidelines:
 - All extension ↔ webview communication must use the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Append to enums instead of reordering to keep numeric values and stored data stable.
 - Use `compile()` and `Runnable` from `src/extension/utils/runtime.ts` for running code, and `resolveVariables` / `resolveCommand` from `src/extension/utils/vscode.ts` for safe, cross-platform commands.
 - Use `TextHandler` for streamed output; always call `.reset()` for a fresh run and `.write(data, last)` for updates.
+- Debugging support is implemented as **attach-mode** from Judge: the extension starts a debug-wrapped process via `Runnable` (so it can pipe testcase stdin), then triggers VS Code debugging by configuration name via `vscode.debug.startDebugging(...)`.
+- Per-language debug configuration lives in `fastolympiccoding.runSettings` alongside compile/run commands: `debugCommand` (starts debug server/wrapper) and `debugAttachConfig` (name of a `launch.json` configuration to attach with).
+- Debugging uses a per-session dynamic port:
+  - The extension generates a fresh `${debugPort}` for every debug run and injects it into both `debugCommand` and the selected `launch.json` configuration.
+  - VS Code does not resolve `${debugPort}` by itself; the extension resolves variables and passes a fully-resolved config to `vscode.debug.startDebugging(...)`.
+  - The debug attach flow waits for the chosen port to become “listening” (timeout) before attaching; see `findAvailablePort()` / `waitForPortListening()` and `JudgeViewProvider`’s debug path.
+  - `${debugPort}` is optional (hardcoded ports still work) but reintroduce port-conflict failures on rapid re-runs.
 - Use Svelte 5 runes for webview state: `$state()` for reactive variables, `$derived()` for computed values, `$effect()` for side effects, and `$props()` for component props.
 - Keep changes minimal and consistent with existing patterns. Prefer reusing the Judge/Stress provider and webview patterns over introducing new architectures.
 
 Additional path-specific details are defined in `.github/instructions/*.instructions.md`, which Copilot uses when working in matching files.
+
+Always use context7 when I need code generation, setup or configuration steps, or
+library/API documentation. This means you should automatically use the Context7 MCP
+tools to resolve library id and get library docs without me having to explicitly ask.

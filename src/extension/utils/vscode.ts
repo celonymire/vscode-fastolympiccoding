@@ -177,7 +177,11 @@ export class ReadonlyStringProvider implements vscode.TextDocumentContentProvide
   }
 }
 
-export function resolveVariables(string: string, inContextOfFile?: string): string {
+function resolveStringVariables(
+  string: string,
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): string {
   const workspaces = vscode.workspace.workspaceFolders;
   const workspace = vscode.workspace.workspaceFolders?.at(0);
   const activeEditor = inContextOfFile ? undefined : vscode.window.activeTextEditor;
@@ -198,7 +202,7 @@ export function resolveVariables(string: string, inContextOfFile?: string): stri
 
   // ${getDefaultBuildTaskName} is not supported because it is slow and requires async. Bark if necessary :)
 
-  const vscodeSubstitutions: { [regex: string]: string } = {
+  const substitutions: { [regex: string]: string } = {
     "${userHome}": os.homedir(),
     "${workspaceFolder}": workspace?.uri.fsPath ?? "",
     "${workspaceFolderBasename}": workspace?.name ?? "",
@@ -227,28 +231,92 @@ export function resolveVariables(string: string, inContextOfFile?: string): stri
     "${exeExtname}": os.platform() === "win32" ? ".exe" : "",
   };
 
-  // Replace all regexes with their matches at once
-  const vscodeVariableRgex = new RegExp(
-    Object.keys(vscodeSubstitutions)
+  // Merge extraVariables into substitutions
+  if (extraVariables) {
+    for (const [key, val] of Object.entries(extraVariables)) {
+      substitutions[`\${${key}}`] = val;
+    }
+  }
+
+  // Replace all variables with their values in a single pass
+  const variableRegex = new RegExp(
+    Object.keys(substitutions)
       .map((variable) => `\\${variable}`)
       .join("|"),
     "g"
   );
-  const vscodeResolvedString = string.replace(
-    vscodeVariableRgex,
-    (variable) => vscodeSubstitutions[variable]
-  );
+  const resolvedString = string.replace(variableRegex, (variable) => substitutions[variable]);
 
   // Resolve ${path:...} last
-  const resolved = vscodeResolvedString.replace(/\${path:(.*?)}/g, (_, group: string) =>
+  const resolved = resolvedString.replace(/\${path:(.*?)}/g, (_, group: string) =>
     path.normalize(group)
   );
   return resolved;
 }
 
-export function resolveCommand(command: string, inContextOfFile?: string) {
+function resolveArrayVariables(
+  array: unknown[],
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): unknown[] {
+  return array.map((item) => resolveVariables(item as never, inContextOfFile, extraVariables));
+}
+
+function resolveObjectVariables(
+  obj: Record<string, unknown>,
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    result[key] = resolveVariables(val as never, inContextOfFile, extraVariables);
+  }
+  return result;
+}
+
+export function resolveVariables(
+  value: string,
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): string;
+export function resolveVariables(
+  value: unknown[],
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): unknown[];
+export function resolveVariables(
+  value: Record<string, unknown>,
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): Record<string, unknown>;
+export function resolveVariables(
+  value: unknown,
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+): unknown {
+  if (Array.isArray(value)) {
+    return resolveArrayVariables(value, inContextOfFile, extraVariables);
+  }
+  if (typeof value === "object" && value !== null) {
+    return resolveObjectVariables(
+      value as Record<string, unknown>,
+      inContextOfFile,
+      extraVariables
+    );
+  }
+  if (typeof value === "string") {
+    return resolveStringVariables(value, inContextOfFile, extraVariables);
+  }
+  return value;
+}
+
+export function resolveCommand(
+  command: string,
+  inContextOfFile?: string,
+  extraVariables?: Record<string, string>
+) {
   const args = command.trim().split(" ");
-  return args.map((arg) => resolveVariables(arg, inContextOfFile));
+  return args.map((arg) => resolveVariables(arg, inContextOfFile, extraVariables));
 }
 
 export async function openInNewEditor(content: string): Promise<void> {

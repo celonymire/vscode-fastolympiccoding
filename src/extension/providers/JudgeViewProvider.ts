@@ -4,7 +4,12 @@ import * as v from "valibot";
 import { Status, Stdio } from "~shared/enums";
 import { ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/providers/BaseViewProvider";
-import { compile, Runnable } from "~extension/utils/runtime";
+import {
+  compile,
+  findAvailablePort,
+  Runnable,
+  waitForPortListening,
+} from "~extension/utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -73,6 +78,177 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _newId = 0;
   private _fileCancellation?: vscode.CancellationTokenSource;
   private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
+  private _currentFile?: string;
+  private _activeDebugTestcaseId?: number;
+
+  private async _getExecutionContext(id: number): Promise<
+    | {
+        token: vscode.CancellationToken;
+        file: string;
+        testcase: IState;
+        languageSettings: NonNullable<ReturnType<typeof getLanguageSettings>>;
+      }
+    | undefined
+  > {
+    const token = this._fileCancellation?.token;
+    if (!token || token.isCancellationRequested) {
+      return;
+    }
+
+    const file = this._currentFile;
+    if (!file) {
+      return;
+    }
+
+    const testcase = this._state.get(id);
+    if (!testcase) {
+      return;
+    }
+
+    // stop already-running process
+    this._stop(id);
+    await testcase.process.promise;
+
+    if (token.isCancellationRequested || testcase.skipped) {
+      return;
+    }
+
+    const languageSettings = getLanguageSettings(file);
+    if (!languageSettings) {
+      return;
+    }
+
+    return { token, file, testcase, languageSettings };
+  }
+
+  private async _compileIfNeeded(
+    id: number,
+    token: vscode.CancellationToken,
+    file: string,
+    testcase: IState,
+    languageSettings: NonNullable<ReturnType<typeof getLanguageSettings>>
+  ): Promise<boolean> {
+    if (!languageSettings.compileCommand) {
+      return false;
+    }
+
+    testcase.status = Status.COMPILING;
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
+      property: "status",
+      value: Status.COMPILING,
+    });
+
+    const code = await compile(file, languageSettings.compileCommand, this._context);
+
+    if (!token.isCancellationRequested && code) {
+      testcase.status = Status.CE;
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "status",
+        value: Status.CE,
+      });
+      this._saveFileData();
+      return true;
+    }
+
+    return token.isCancellationRequested;
+  }
+
+  private _clearIOTexts(id: number, testcase: IState) {
+    testcase.stderr.reset();
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
+      property: "stderr",
+      value: "",
+    });
+
+    testcase.stdout.reset();
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
+      property: "stdout",
+      value: "",
+    });
+
+    testcase.status = Status.RUNNING;
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
+      property: "status",
+      value: Status.RUNNING,
+    });
+  }
+
+  private _launchProcess(params: {
+    id: number;
+    token: vscode.CancellationToken;
+    testcase: IState;
+    resolvedArgs: string[];
+    cwd?: string;
+    timeout?: number;
+  }) {
+    const { id, token, testcase, resolvedArgs, cwd, timeout } = params;
+
+    testcase.process.run(resolvedArgs[0], timeout, cwd, ...resolvedArgs.slice(1));
+
+    const proc = testcase.process.process;
+    if (!proc) {
+      return;
+    }
+
+    // Write stdin once the process is spawned (more reliable than writing immediately).
+    proc.once("spawn", () => {
+      if (token.isCancellationRequested) {
+        return;
+      }
+      proc.stdin.write(testcase.stdin.data);
+    });
+
+    proc.stderr.on("data", (data: string) => testcase.stderr.write(data, false));
+    proc.stdout.on("data", (data: string) => testcase.stdout.write(data, false));
+    proc.stderr.once("end", () => testcase.stderr.write("", true));
+    proc.stdout.once("end", () => testcase.stdout.write("", true));
+    proc.once("error", (data: Error) => {
+      if (token.isCancellationRequested) {
+        return;
+      }
+      testcase.stderr.write(data.message, true);
+      testcase.status = Status.RE;
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "status",
+        value: Status.RE,
+      });
+      this._saveFileData();
+    });
+    proc.once("close", () => {
+      proc.stderr.removeAllListeners("data");
+      proc.stdout.removeAllListeners("data");
+      if (token.isCancellationRequested) {
+        return;
+      }
+      setTestcaseStats(testcase, this._timeLimit);
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "status",
+        value: testcase.status,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "elapsed",
+        value: testcase.elapsed,
+      });
+
+      this._saveFileData();
+    });
+  }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
@@ -102,46 +278,141 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   onDispose() {
     this._onDidChangeActiveTextEditorDisposable?.dispose();
+    this._onDidChangeActiveTextEditorDisposable = undefined;
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
+    this._fileCancellation = undefined;
     this.stopAll();
   }
 
+  // When the webview is merely hidden, keep state and running processes.
+  // We still keep the editor-change listener so switching files in the editor
+  // correctly switches state even while the view is hidden.
+  override onHide() {
+    // no-op
+  }
+
   onShow() {
-    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
-      () => this.loadCurrentFileData(),
-      this
-    );
-    this.loadCurrentFileData();
+    this._ensureActiveEditorListener();
+    this._syncOrSwitchToTargetFile();
   }
 
   constructor(context: vscode.ExtensionContext) {
     super("judge", context, ProviderMessageSchema);
 
+    context.subscriptions.push(
+      vscode.debug.onDidStartDebugSession((session) => {
+        const id = session.configuration?.fastolympiccodingTestcaseId;
+        if (typeof id !== "number") {
+          return;
+        }
+        this._activeDebugTestcaseId = id;
+      }),
+      vscode.debug.onDidTerminateDebugSession((session) => {
+        const id = session.configuration?.fastolympiccodingTestcaseId;
+        if (typeof id === "number" && this._activeDebugTestcaseId === id) {
+          this._stop(id);
+          this._activeDebugTestcaseId = undefined;
+        }
+      })
+    );
+
     this.onShow();
   }
 
   loadCurrentFileData() {
-    // Cancel any in-flight operations for the previous file
+    this._ensureActiveEditorListener();
+    this._syncOrSwitchToTargetFile();
+  }
+
+  private _ensureActiveEditorListener() {
+    if (this._onDidChangeActiveTextEditorDisposable) {
+      return;
+    }
+    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
+      (editor) => this._handleActiveEditorChange(editor),
+      this
+    );
+  }
+
+  private _handleActiveEditorChange(editor?: vscode.TextEditor) {
+    const file = editor?.document.fileName;
+
+    // When focusing a webview/panel, VS Code may temporarily report no active editor.
+    // Only treat "no editor" as real if there are actually no visible text editors.
+    if (!file) {
+      if (vscode.window.visibleTextEditors.length === 0) {
+        this._switchToNoFile();
+      }
+      return;
+    }
+
+    if (file !== this._currentFile) {
+      this._switchToFile(file);
+    }
+  }
+
+  private _getTargetFile(): string | undefined {
+    return vscode.window.activeTextEditor?.document.fileName ?? this._currentFile;
+  }
+
+  private _syncOrSwitchToTargetFile() {
+    const file = this._getTargetFile();
+    if (!file) {
+      super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
+      return;
+    }
+
+    // If we are already on this file, just rehydrate the webview if needed.
+    if (file === this._currentFile && this._state.size > 0) {
+      super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
+      this._rehydrateWebviewFromState();
+      return;
+    }
+
+    // If we have no in-memory state for this file, switch (loads from storage).
+    if (file !== this._currentFile) {
+      this._switchToFile(file);
+      return;
+    }
+
+    // Same file but empty state (e.g., first load): load from storage.
+    this._rehydrateWebviewFromState();
+  }
+
+  private _switchToNoFile() {
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
-    this._fileCancellation = new vscode.CancellationTokenSource();
+    this._fileCancellation = undefined;
 
     this.stopAll();
     for (const id of this._state.keys()) {
       super._postMessage({ type: WebviewMessageType.DELETE, id });
     }
-    this._timeLimit = 0;
     this._state.clear();
+    this._timeLimit = 0;
+    this._newId = 0;
+    this._currentFile = undefined;
 
-    const file = vscode.window.activeTextEditor?.document.fileName;
-    if (!file) {
-      super._postMessage({
-        type: WebviewMessageType.SHOW,
-        visible: false,
-      });
-      return;
+    super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
+  }
+
+  private _switchToFile(file: string) {
+    // Cancel any in-flight operations for the previous file
+    this._fileCancellation?.cancel();
+    this._fileCancellation?.dispose();
+    this._fileCancellation = new vscode.CancellationTokenSource();
+
+    // Stop any processes tied to the previous file, and clear state/webview.
+    this.stopAll();
+    for (const id of this._state.keys()) {
+      super._postMessage({ type: WebviewMessageType.DELETE, id });
     }
+    this._state.clear();
+    this._timeLimit = 0;
+    this._newId = 0;
+
+    this._currentFile = file;
     super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
     const storageData = super.readStorage()[file];
@@ -153,10 +424,78 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._addTestcase(testcase);
     }
 
-    super._postMessage({
-      type: WebviewMessageType.INITIAL_STATE,
-      timeLimit: this._timeLimit,
-    });
+    super._postMessage({ type: WebviewMessageType.INITIAL_STATE, timeLimit: this._timeLimit });
+  }
+
+  private _rehydrateWebviewFromState() {
+    const file = this._getTargetFile();
+    if (!file) {
+      super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
+      return;
+    }
+    super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
+    super._postMessage({ type: WebviewMessageType.INITIAL_STATE, timeLimit: this._timeLimit });
+
+    for (const [id, testcase] of this._state.entries()) {
+      // Ensure a clean slate for this id in the webview.
+      super._postMessage({ type: WebviewMessageType.DELETE, id });
+      super._postMessage({ type: WebviewMessageType.NEW, id });
+
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "stdin",
+        value: testcase.stdin.data,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "stderr",
+        value: testcase.stderr.data,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "stdout",
+        value: testcase.stdout.data,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "acceptedStdout",
+        value: testcase.acceptedStdout.data,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "elapsed",
+        value: testcase.elapsed,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "status",
+        value: testcase.status,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "shown",
+        value: testcase.shown,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "toggled",
+        value: testcase.toggled,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "skipped",
+        value: testcase.skipped,
+      });
+    }
   }
 
   addFromCompetitiveCompanion(file: string, data: IProblem) {
@@ -174,7 +513,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })
     );
 
-    if (file === vscode.window.activeTextEditor?.document.fileName) {
+    const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
+    if (file === current) {
       this.deleteAll();
       this._timeLimit = data.timeLimit;
       for (const testcase of testcases) {
@@ -198,7 +538,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   addTestcaseToFile(file: string, testcase: ITestcase) {
     // used by stress view
 
-    if (file === vscode.window.activeTextEditor!.document.fileName) {
+    const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
+    if (file === current) {
       this._addTestcase(testcase);
       this._saveFileData();
     } else {
@@ -250,6 +591,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case Action.RUN:
         void this._run(id, false);
         break;
+      case Action.DEBUG:
+        void this._debug(id);
+        break;
       case Action.STOP:
         this._stop(id);
         break;
@@ -278,7 +622,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _saveFileData() {
-    const file = vscode.window.activeTextEditor?.document.fileName;
+    const file = this._currentFile;
     if (!file) {
       return;
     }
@@ -402,137 +746,152 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _run(id: number, newTestcase: boolean): Promise<void> {
-    const token = this._fileCancellation?.token;
-    if (!token || token.isCancellationRequested) {
+    const ctx = await this._getExecutionContext(id);
+    if (!ctx) {
       return;
     }
 
-    const file = vscode.window.activeTextEditor?.document.fileName;
-    if (!file) {
+    const { token, file, testcase, languageSettings } = ctx;
+
+    if (await this._compileIfNeeded(id, token, file, testcase, languageSettings)) {
       return;
     }
-
-    const testcase = this._state.get(id)!;
-
-    // stop already-running process
-    this._stop(id);
-    await testcase.process.promise;
-
-    if (token.isCancellationRequested || testcase.skipped) {
-      return;
-    }
-
-    const languageSettings = getLanguageSettings(file);
-    if (!languageSettings) {
-      return;
-    }
-
-    if (languageSettings.compileCommand) {
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "status",
-        value: Status.COMPILING,
-      });
-      const code = await compile(file, languageSettings.compileCommand, this._context);
-
-      if (!token.isCancellationRequested && code) {
-        testcase.status = Status.CE;
-        super._postMessage({
-          type: WebviewMessageType.SET,
-          id,
-          property: "status",
-          value: Status.CE,
-        });
-        this._saveFileData();
-        return;
-      }
-    }
-
     if (token.isCancellationRequested) {
       return;
     }
 
-    super._postMessage({
-      type: WebviewMessageType.SET,
-      id,
-      property: "stderr",
-      value: "",
-    });
-    super._postMessage({
-      type: WebviewMessageType.SET,
-      id,
-      property: "stdout",
-      value: "",
-    });
-    super._postMessage({
-      type: WebviewMessageType.SET,
-      id,
-      property: "status",
-      value: Status.RUNNING,
-    });
+    this._clearIOTexts(id, testcase);
 
     const resolvedArgs = resolveCommand(languageSettings.runCommand);
     const cwd = languageSettings.currentWorkingDirectory
       ? resolveVariables(languageSettings.currentWorkingDirectory)
       : undefined;
-    testcase.stderr.reset();
-    testcase.stdout.reset();
-    testcase.process.run(
-      resolvedArgs[0],
-      newTestcase ? undefined : this._timeLimit,
+
+    this._launchProcess({
+      id,
+      token,
+      testcase,
+      resolvedArgs,
       cwd,
-      ...resolvedArgs.slice(1)
-    );
-
-    testcase.process.process?.stdin.write(testcase.stdin.data);
-    testcase.process.process?.stderr.on("data", (data: string) =>
-      testcase.stderr.write(data, false)
-    );
-    testcase.process.process?.stdout.on("data", (data: string) =>
-      testcase.stdout.write(data, false)
-    );
-    testcase.process.process?.stderr.once("end", () => testcase.stderr.write("", true));
-    testcase.process.process?.stdout.once("end", () => testcase.stdout.write("", true));
-    testcase.process.process?.once("error", (data: Error) => {
-      if (token.isCancellationRequested) {
-        return;
-      }
-      testcase.stderr.write(data.message, true);
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "status",
-        value: Status.RE,
-      });
-      this._saveFileData();
-    });
-    testcase.process.process?.once("close", () => {
-      testcase.process.process?.stderr.removeAllListeners("data");
-      testcase.process.process?.stdout.removeAllListeners("data");
-      if (token.isCancellationRequested) {
-        return;
-      }
-      setTestcaseStats(testcase, this._timeLimit);
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "status",
-        value: testcase.status,
-      });
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "elapsed",
-        value: testcase.elapsed,
-      });
-
-      this._saveFileData();
+      timeout: newTestcase ? undefined : this._timeLimit,
     });
   }
 
+  private async _debug(id: number): Promise<void> {
+    const ctx = await this._getExecutionContext(id);
+    if (!ctx) {
+      return;
+    }
+
+    const { token, file, testcase, languageSettings } = ctx;
+
+    if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
+      vscode.window.showWarningMessage("Missing debug settings for this language.");
+      return;
+    }
+
+    if (await this._compileIfNeeded(id, token, file, testcase, languageSettings)) {
+      return;
+    }
+    if (token.isCancellationRequested) {
+      return;
+    }
+
+    // Generate a dynamic port for this debug session
+    let debugPort: number;
+    try {
+      debugPort = await findAvailablePort();
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Failed to find available port for debugging: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
+    const extraVariables = { debugPort: String(debugPort) };
+
+    // get the attach debug configuration
+    const folder =
+      vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file)) ??
+      vscode.workspace.workspaceFolders?.at(0);
+    const attachConfig = vscode.workspace
+      .getConfiguration("launch", folder)
+      .get<vscode.DebugConfiguration[]>("configurations", [])
+      .find((config) => config.name === languageSettings.debugAttachConfig);
+    if (!attachConfig) {
+      vscode.window.showWarningMessage("Debug attach configuration not found.");
+      return;
+    }
+
+    const resolvedArgs = resolveCommand(languageSettings.debugCommand, file, extraVariables);
+    const cwd = languageSettings.currentWorkingDirectory
+      ? resolveVariables(languageSettings.currentWorkingDirectory, file, extraVariables)
+      : undefined;
+
+    this._clearIOTexts(id, testcase);
+
+    // No time limit for debugging; user stops it manually.
+    this._launchProcess({
+      id,
+      token,
+      testcase,
+      resolvedArgs,
+      cwd,
+      timeout: undefined,
+    });
+
+    // Wait for the debug process to spawn before attaching
+    const spawned = await testcase.process.waitForSpawn();
+    if (!spawned || token.isCancellationRequested) {
+      await testcase.process.promise;
+      const exitCode = testcase.process.exitCode;
+      const signal = testcase.process.signal;
+      vscode.window.showErrorMessage(
+        `Debug process failed to start (exit code ${exitCode}, signal ${signal})`
+      );
+      return;
+    }
+
+    // resolve the values in the attach configuration
+    const resolvedConfig = resolveVariables(attachConfig, file, extraVariables);
+
+    // Tag this debug session so we can identify which testcase is being debugged.
+    // VS Code preserves custom fields on session.configuration.
+    resolvedConfig.fastolympiccodingTestcaseId = id;
+
+    // Wait for the debug server to be ready by checking if the port is listening
+    const debugServerRunning = await waitForPortListening(debugPort, 10000);
+    if (!debugServerRunning) {
+      vscode.window.showErrorMessage(
+        `Debug server did not start listening on port ${debugPort} within 10 seconds.`
+      );
+      this._stop(id);
+      return;
+    }
+
+    // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
+    // We just need to bypass our type system here.
+    const started = await vscode.debug.startDebugging(
+      folder,
+      resolvedConfig as vscode.DebugConfiguration
+    );
+    if (!started) {
+      this._stop(id);
+    }
+  }
+
   private _stop(id: number) {
-    this._state.get(id)!.process.process?.kill();
+    const testcase = this._state.get(id);
+    if (!testcase) {
+      return;
+    }
+
+    // If this testcase is the one currently being debugged, stop the VS Code debug session.
+    // This is more reliable than killing the spawned debug-wrapper process alone.
+    if (this._activeDebugTestcaseId === id && vscode.debug.activeDebugSession) {
+      void vscode.debug.stopDebugging(vscode.debug.activeDebugSession);
+    }
+
+    testcase.process.process?.kill();
   }
 
   private _delete(id: number) {
@@ -544,6 +903,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _edit(id: number) {
     const testcase = this._state.get(id)!;
+    testcase.status = Status.EDITING;
     super._postMessage({
       type: WebviewMessageType.SET,
       id,

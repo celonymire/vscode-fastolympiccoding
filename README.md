@@ -10,15 +10,16 @@
 
 <p align="center"><i>Once a mighty Competitive Programming plugin... Reborn with the powers of VSCode!</i></p>
 
-### ⚡ Overview
+## ⚡ Overview
 
 - [📜](#-judge) Minimal and _adaptive_ UI for maximized functionality and view utilization
+- [🪲](#-debugging) Extension agnostic configuration for VSCode debugging UX with real-time inputs
 - [🐞](#-stress-tester) Built-in stress tester to aid your debugging
 - [👜](#-inserting-prewritten-code) Insert file templates without leaving your code
 - [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) for efficient problem gathering
 - ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
 
-### 💻 Keybinds
+## 💻 Keybinds
 
 - Compile and run all testcases: `Ctrl+Alt+B`
 - Stop all testcases: `Ctrl+Alt+K`
@@ -90,6 +91,157 @@ The UI adapts to VSCode's theme, font family and font size. Minimalism from the 
 
 ---
 
+### 🪲 Debugging
+
+The extension typically attaches the debugger to an existing process, which allows custom inputs to be propagated to the program. However, each language has its own set of tooling. Adapt the commands as necessary!
+
+**Please use `${debugPort}` as the port to your debugging servers!** The hand-picked port provides the following benefits:
+
+1. The operating system allocated the port to ensure it is available
+2. Detects when the debugging server fails to launch at the chosen port within a timeframe
+3. Frees the port when error occurs
+
+**‼️NOT ALL DEBUGGERS ARE EQUAL!** Even if there are several debugging servers, they may not have the same set of features or work the same way! Same warning applies to VSCode debugger extensions!
+
+![Debugging Gif](media/debugging.gif)
+
+<details>
+  <summary>Additional language settings for debugging support</summary>
+
+- `debugCommand`: Command to start the solution under a debug server
+- `debugAttachConfig`: Name of `launch.json` attach configuration.
+</details>
+
+<details>
+  <summary>Example C++ configuration</summary>
+
+I recommend either use Microsoft's official [**C/C++**](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) or [**Native Debug**](https://marketplace.visualstudio.com/items?itemName=webfreak.debug). CodeLLDB does not work because `lldb-server` cannot send real-time inputs.
+
+**C++ (and other compiled languages) requires debug symbols to be compiled in!** Easiest way is to add `-g` flag to your compile command.
+
+Here are the steps for **Native Debug**, which should be very similar with **Microsoft C/C++**:
+
+1. Add these settings for `.cpp`:
+
+```json
+{
+  "fastolympiccoding.runSettings": {
+    ".cpp": {
+      // compile and run configurations from above...
+      "debugCommand": "gdbserver :${debugPort} ${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
+      "debugAttachConfig": "GDB: Attach"
+    }
+  }
+}
+```
+
+1. Create a GDB attach configuration in `.vscode/launch.json`:
+
+```json
+{
+  "configurations": [
+    {
+      "name": "GDB: Attach",
+      "type": "gdb",
+      "request": "attach",
+      "executable": "${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
+      "target": ":${debugPort}",
+      "remote": true,
+      "cwd": "${workspaceRoot}",
+      "valuesFormatting": "prettyPrinters"
+    }
+  ]
+}
+```
+
+</details>
+
+<details>
+  <summary>Example Python configuration</summary>
+
+I recommend Microsoft's official [**Python Debugger**](https://marketplace.visualstudio.com/items?itemName=ms-python.debugpy) for the best experience. The extension has built-in support for `debugpy`, which is the de-facto Python debugging server.
+
+Ensure you have `debugpy` installed via `pip`.
+
+Here are the steps for **Python Debugger**:
+
+1. Add these settings for `.py`:
+
+```json
+{
+  "fastolympiccoding.runSettings": {
+    ".py": {
+      // compile and run configurations from above...
+      "debugCommand": "python -m debugpy --listen ${debugPort} --wait-for-client ${path:${file}}",
+      "debugAttachConfig": "Python: Attach"
+    }
+  }
+}
+```
+
+1. Create a `debugpy` attach configuration in `.vscode/launch.json`:
+
+```json
+{
+  "configurations": [
+    {
+      "name": "Python: Attach",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "port": "${debugPort}"
+      },
+      "justMyCode": true
+    }
+  ]
+}
+```
+
+</details>
+
+<details>
+  <summary>Example Java configuration</summary>
+
+I recommend Microsoft's official [**Debugger for Java**](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-debug) for the best experience. For some reason, Oracle's **Java** extension ignores breakpoints.
+
+Ensure you have **Java Development Kit** version 1.8+ installed.
+
+Here are the steps for **Debugger for Java**:
+
+1. Add these settings for `.java`:
+
+```json
+{
+  "fastolympiccoding.runSettings": {
+    ".java": {
+      // compile and run configurations from above...
+      "debugCommand": "java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort} -cp ${path:${fileDirname}} ${fileBasenameNoExtension}",
+      "debugAttachConfig": "Java: Attach"
+    }
+  }
+}
+```
+
+1. Create a Java attach configuration in `.vscode/launch.json`:
+
+```json
+{
+  "configurations": [
+    {
+      "name": "Java: Attach",
+      "type": "java",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": "${debugPort}"
+    }
+  ]
+}
+```
+
+</details>
+
+---
+
 ### 🐞 Stress Tester
 
 Required files (naming scheme can be configured in settings):
@@ -101,9 +253,9 @@ Required files (naming scheme can be configured in settings):
 
 - **💡TIP**: To stress test for **Runtime Error** instead of **Wrong Answer**, have the good solution be the same as the one to bruteforce against!
 
-|                   ![Stress Tester Gif](media/stress_tester.gif)                    |
-| :--------------------------------------------------------------------------------: |
-| _Stress Tester was able to find an counterexample due to an integer overflow bug!_ |
+|                   ![Stress Tester Gif](media/stress_tester.gif)                   |
+| :-------------------------------------------------------------------------------: |
+| _Stress Tester was able to find a counterexample due to an integer overflow bug!_ |
 
 <details>
   <summary>Settings for Stress Tester</summary>

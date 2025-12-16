@@ -1,6 +1,7 @@
 import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -9,6 +10,7 @@ import { ReadonlyTerminal, resolveCommand } from "./vscode";
 export class Runnable {
   private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
   private _promise: Promise<void> | undefined = undefined;
+  private _spawnPromise: Promise<boolean> | undefined = undefined;
   private _startTime = 0;
   private _endTime = 0;
   private _signal: NodeJS.Signals | null = null;
@@ -25,12 +27,21 @@ export class Runnable {
     });
     this._process.stdout.setEncoding("utf-8");
     this._process.stderr.setEncoding("utf-8");
+
+    // Create spawn promise that resolves when process spawns or errors
+    let resolveSpawn: (value: boolean) => void;
+    this._spawnPromise = new Promise((resolve) => {
+      resolveSpawn = resolve;
+    });
+
     this._promise = new Promise((resolve) => {
       this._process?.once("spawn", () => {
         this._startTime = performance.now();
+        resolveSpawn(true);
       });
       this._process?.once("error", () => {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
+        resolveSpawn(false);
       });
       this._process?.once("close", (code, signal) => {
         this._endTime = performance.now();
@@ -40,6 +51,14 @@ export class Runnable {
         resolve();
       });
     });
+  }
+
+  /**
+   * Wait for the process to spawn. Returns a promise that resolves to true if the process
+   * spawned successfully, or false if there was an error or the process wasn't started.
+   */
+  async waitForSpawn(): Promise<boolean> {
+    return this._spawnPromise ?? Promise.resolve(false);
   }
 
   get process() {
@@ -153,4 +172,68 @@ export async function compile(
   const code = await promise;
   compilePromise.delete(file);
   return code;
+}
+
+/**
+ * Finds an available TCP port by binding to port 0 and letting the OS assign one.
+ * Returns the assigned port number.
+ */
+export async function findAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address && typeof address === "object") {
+        const port = address.port;
+        server.close(() => resolve(port));
+      } else {
+        server.close(() => reject(new Error("Failed to get port")));
+      }
+    });
+    server.on("error", reject);
+  });
+}
+
+/**
+ * Waits until a port is in use by attempting to bind to it.
+ * If we get EADDRINUSE, it means something is already listening.
+ * This approach avoids connecting as a client which could disrupt the debug server.
+ *
+ * @param port - The port number to check
+ * @param timeout - Maximum time to wait in milliseconds (default: 10000)
+ * @param interval - Time between bind attempts in milliseconds (default: 100)
+ */
+export async function waitForPortListening(
+  port: number,
+  timeout: number,
+  interval = 100
+): Promise<boolean> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const isInUse = await new Promise<boolean>((resolve) => {
+      const server = net.createServer();
+
+      server.once("error", (err: NodeJS.ErrnoException) => {
+        // EADDRINUSE means the port is already in use (something is listening)
+        resolve(err.code === "EADDRINUSE");
+      });
+
+      server.once("listening", () => {
+        // We were able to bind, so nothing is listening yet
+        server.close(() => resolve(false));
+      });
+
+      server.listen(port, "127.0.0.1");
+    });
+
+    if (isInUse) {
+      return true;
+    }
+
+    // Wait before the next attempt
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+
+  return false;
 }

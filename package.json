@@ -185,6 +185,14 @@
                     "type": "string",
                     "description": "Command to run the solution."
                   },
+                  "debugCommand": {
+                    "type": "string",
+                    "description": "Command to start the solution under a debug server/wrapper (the extension will pipe testcase stdin to this process)."
+                  },
+                  "debugAttachConfig": {
+                    "type": "string",
+                    "description": "Name of a launch.json configuration to attach to the debug server started by debugCommand."
+                  },
                   "currentWorkingDirectory": {
                     "type": "string",
                     "description": "Current working directory to set for the solution."
