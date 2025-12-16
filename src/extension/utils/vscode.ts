@@ -259,7 +259,7 @@ function resolveArrayVariables(
   inContextOfFile?: string,
   extraVariables?: Record<string, string>
 ): unknown[] {
-  return array.map((item) => resolveVariables(item, inContextOfFile, extraVariables));
+  return array.map((item) => resolveVariables(item as never, inContextOfFile, extraVariables));
 }
 
 function resolveObjectVariables(
@@ -269,7 +269,7 @@ function resolveObjectVariables(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
-    result[key] = resolveVariables(val, inContextOfFile, extraVariables);
+    result[key] = resolveVariables(val as never, inContextOfFile, extraVariables);
   }
   return result;
 }
@@ -290,15 +290,19 @@ export function resolveVariables(
   extraVariables?: Record<string, string>
 ): Record<string, unknown>;
 export function resolveVariables(
-  value: string | unknown[] | Record<string, unknown>,
+  value: unknown,
   inContextOfFile?: string,
   extraVariables?: Record<string, string>
-): string | unknown[] | Record<string, unknown> {
+): unknown {
   if (Array.isArray(value)) {
     return resolveArrayVariables(value, inContextOfFile, extraVariables);
   }
   if (typeof value === "object" && value !== null) {
-    return resolveObjectVariables(value, inContextOfFile, extraVariables);
+    return resolveObjectVariables(
+      value as Record<string, unknown>,
+      inContextOfFile,
+      extraVariables
+    );
   }
   if (typeof value === "string") {
     return resolveStringVariables(value, inContextOfFile, extraVariables);
