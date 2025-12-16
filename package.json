@@ -30,23 +30,28 @@
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.stopAll",
+          "command": "fastolympiccoding.debugAll",
           "group": "navigation@2",
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.deleteAll",
+          "command": "fastolympiccoding.stopAll",
           "group": "navigation@3",
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.saveAll",
+          "command": "fastolympiccoding.deleteAll",
           "group": "navigation@4",
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.toggleJudgeSettings",
+          "command": "fastolympiccoding.saveAll",
           "group": "navigation@5",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "group": "navigation@6",
           "when": "view == fastolympiccoding.judge"
         },
         {
@@ -274,6 +279,12 @@
         "icon": "$(run-all)"
       },
       {
+        "command": "fastolympiccoding.debugAll",
+        "title": "Debug All Testcases",
+        "category": "Fast Olympic Coding",
+        "icon": "$(debug-all)"
+      },
+      {
         "command": "fastolympiccoding.stopAll",
         "title": "Stop All Testcases",
         "category": "Fast Olympic Coding",
@@ -345,6 +356,11 @@
       {
         "command": "fastolympiccoding.runAll",
         "key": "ctrl+alt+b",
+        "when": "view.fastolympiccoding.judge.visible"
+      },
+      {
+        "command": "fastolympiccoding.debugAll",
+        "key": "ctrl+alt+n",
         "when": "view.fastolympiccoding.judge.visible"
       },
       {
