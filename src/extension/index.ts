@@ -239,6 +239,11 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCommands(context);
   registerDocumentContentProviders(context);
 
-  createListener(judgeViewProvider);
   createStatusBarItem(context);
+
+  const config = vscode.workspace.getConfiguration("fastolympiccoding");
+  const autoStart = config.get<boolean>("automaticallyStartCompetitiveCompanion", true);
+  if (autoStart) {
+    createListener(judgeViewProvider);
+  }
 }

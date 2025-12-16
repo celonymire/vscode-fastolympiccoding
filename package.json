@@ -219,6 +219,11 @@
       {
         "title": "Competitive Companion",
         "properties": {
+          "fastolympiccoding.automaticallyStartCompetitiveCompanion": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically start listening for Competitive Companion when VSCode starts."
+          },
           "fastolympiccoding.port": {
             "type": "number",
             "default": 1327,
