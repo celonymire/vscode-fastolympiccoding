@@ -4,12 +4,7 @@ import * as v from "valibot";
 import { Status, Stdio } from "~shared/enums";
 import { ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
 import BaseViewProvider from "~extension/providers/BaseViewProvider";
-import {
-  compile,
-  findAvailablePort,
-  Runnable,
-  waitForPortListening,
-} from "~extension/utils/runtime";
+import { compile, findAvailablePort, Runnable } from "~extension/utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -791,15 +786,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // VS Code preserves custom fields on session.configuration.
     resolvedConfig.fastolympiccodingTestcaseId = id;
 
-    // Wait for the debug server to be ready by checking if the port is listening
-    const debugServerRunning = await waitForPortListening(debugPort, 10000);
-    if (!debugServerRunning) {
-      vscode.window.showErrorMessage(
-        `Debug server did not start listening on port ${debugPort} within 10 seconds.`
-      );
-      this._stop(id);
-      return;
-    }
+    // Slight delay to ensure process is listening
+    // This is less than ideal because it relies on timing, but there is no reliable way
+    // to detect when the debug server is ready without attempting a connection. If we try
+    // to connect as a client, we might interfere with the debug session because the server
+    // treats the first connection as the debuggee. I also tried to check if the port is listening
+    // via platform specific means, but then I ran into the problem of mismatching PIDs and
+    // the server running in IPv6 vs IPv4 mode. So for now, we just wait a second.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
     // We just need to bypass our type system here.
