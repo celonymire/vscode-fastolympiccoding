@@ -17,6 +17,7 @@ Design and implementation guidelines:
 - All extension ↔ webview communication must use the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Append to enums instead of reordering to keep numeric values and stored data stable.
 - Use `compile()` and `Runnable` from `src/extension/utils/runtime.ts` for running code, and `resolveVariables` / `resolveCommand` from `src/extension/utils/vscode.ts` for safe, cross-platform commands.
 - Use `TextHandler` for streamed output; always call `.reset()` for a fresh run and `.write(data, last)` for updates.
+- **View persistence:** Judge and Stress are designed to preserve in-memory state (and any running `Runnable` processes) when their webviews are hidden/revealed. Lifecycle teardown belongs in `onDispose()`; hiding a view should not implicitly stop runs. Runs should stop/reset when the active editor switches to a different file (file-scoped state), using the same “webview focus may temporarily clear active editor” guard as Judge.
 - Debugging support is implemented as **attach-mode** from Judge: the extension starts a debug-wrapped process via `Runnable` (so it can pipe testcase stdin), then triggers VS Code debugging by configuration name via `vscode.debug.startDebugging(...)`.
 - Per-language debug configuration lives in `fastolympiccoding.runSettings` alongside compile/run commands: `debugCommand` (starts debug server/wrapper) and `debugAttachConfig` (name of a `launch.json` configuration to attach with).
 - Debugging uses a per-session dynamic port:

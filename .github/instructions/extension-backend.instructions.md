@@ -7,6 +7,7 @@ This repository is a VS Code extension called "Fast Olympic Coding." The `src/ex
 When changing files under `src/extension/**`:
 
 - Treat `JudgeViewProvider` and `StressViewProvider` as the main controllers for their respective webviews. They extend `BaseViewProvider`, which encapsulates webview setup, CSP nonce generation, message posting via Valibot-validated schemas, and workspaceState access keyed by active file path.
+- Judge and Stress are file-scoped and are expected to be **persistent**: hiding the webview should not tear down in-memory state or stop running processes. Teardown belongs in `onDispose()`. Switching the active editor to a different file should switch state (and stop any per-file running processes) using the same active-editor-change handling patterns used by `JudgeViewProvider`.
 - Webviews rely on Codicons for icons; `BaseViewProvider` already whitelists `@vscode/codicons/dist/codicon.css` in local resource roots and injects the stylesheet. Preserve that setup (CSP, resource roots, and link tag) whenever adjusting webview HTML or resource handling so icons keep rendering.
 - All extension ⇄ webview communication must go through the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Do not introduce ad-hoc string message types; instead, extend the shared enums and message unions.
 - The `Status` enum in `src/shared/enums.ts` represents the lifecycle: COMPILING → RUNNING → (AC | WA | RE | TL | CE | NA | EDITING). Preserve existing numeric values and append new states only at the end.
