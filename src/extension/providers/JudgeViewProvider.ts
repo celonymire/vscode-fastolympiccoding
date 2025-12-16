@@ -842,6 +842,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Wait for the debug process to spawn before attaching
     const spawned = await testcase.process.waitForSpawn();
     if (!spawned || token.isCancellationRequested) {
+      await testcase.process.promise;
+      const exitCode = testcase.process.exitCode;
+      const signal = testcase.process.signal;
+      vscode.window.showErrorMessage(
+        `Debug process failed to start (exit code ${exitCode}, signal ${signal})`
+      );
       return;
     }
 
