@@ -20,6 +20,8 @@ export default abstract class BaseViewProvider<
 > implements vscode.WebviewViewProvider
 {
   private _webview?: vscode.Webview = undefined;
+  private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
+  protected _currentFile?: string;
 
   constructor(
     readonly view: string,
@@ -28,14 +30,87 @@ export default abstract class BaseViewProvider<
   ) {}
 
   abstract onMessage(msg: v.InferOutput<Schema>): void;
-  abstract onDispose(): void;
   abstract onShow(): void;
 
-  // Called when the webview becomes hidden. By default, preserve existing behavior
-  // (treat hide like dispose), but subclasses may override to keep long-running state.
-  onHide(): void {
-    this.onDispose();
+  onDispose(): void {
+    this._onDidChangeActiveTextEditorDisposable?.dispose();
+    this._onDidChangeActiveTextEditorDisposable = undefined;
   }
+
+  // --- File persistence lifecycle (common to Judge/Stress) ---
+
+  // Subclasses must implement these to handle file switching
+  protected abstract _switchToNoFile(): void;
+  protected abstract _switchToFile(file: string): void;
+  protected abstract _rehydrateWebviewFromState(): void;
+  protected abstract _sendShowMessage(visible: boolean): void;
+
+  // Override in subclass if "same file" rehydration requires a state check (e.g., Judge checks _state.size > 0)
+  protected _hasState(): boolean {
+    return true;
+  }
+
+  loadCurrentFileData(): void {
+    this._ensureActiveEditorListener();
+    this._syncOrSwitchToTargetFile();
+  }
+
+  protected _ensureActiveEditorListener(): void {
+    if (this._onDidChangeActiveTextEditorDisposable) {
+      return;
+    }
+    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
+      (editor) => this._handleActiveEditorChange(editor),
+      this
+    );
+  }
+
+  protected _handleActiveEditorChange(editor?: vscode.TextEditor): void {
+    const file = editor?.document.fileName;
+
+    // When focusing a webview/panel, VS Code may temporarily report no active editor.
+    // Only treat "no editor" as real if there are actually no visible text editors.
+    if (!file) {
+      if (vscode.window.visibleTextEditors.length === 0) {
+        this._switchToNoFile();
+      }
+      return;
+    }
+
+    if (file !== this._currentFile) {
+      this._switchToFile(file);
+    }
+  }
+
+  protected _getTargetFile(): string | undefined {
+    return vscode.window.activeTextEditor?.document.fileName ?? this._currentFile;
+  }
+
+  protected _syncOrSwitchToTargetFile(): void {
+    const file = this._getTargetFile();
+    if (!file) {
+      this._sendShowMessage(false);
+      return;
+    }
+
+    // If we are already on this file, just rehydrate the webview from in-memory state.
+    if (file === this._currentFile && this._hasState()) {
+      this._sendShowMessage(true);
+      this._rehydrateWebviewFromState();
+      return;
+    }
+
+    // Different file (or same file without state): switch to it (loads from storage).
+    if (file !== this._currentFile) {
+      this._switchToFile(file);
+      return;
+    }
+
+    // Same file but no state (e.g., first load): just rehydrate (will load defaults).
+    this._rehydrateWebviewFromState();
+  }
+
+  // --- End file persistence lifecycle ---
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this._webview = webviewView.webview;
@@ -56,8 +131,6 @@ export default abstract class BaseViewProvider<
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
         this.onShow();
-      } else {
-        this.onHide();
       }
     });
   }

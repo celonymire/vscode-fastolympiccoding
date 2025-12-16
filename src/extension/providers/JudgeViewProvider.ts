@@ -77,8 +77,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _timeLimit = 0;
   private _newId = 0;
   private _fileCancellation?: vscode.CancellationTokenSource;
-  private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
-  private _currentFile?: string;
   private _activeDebugTestcaseId?: number;
 
   private async _getExecutionContext(id: number): Promise<
@@ -276,20 +274,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  onDispose() {
-    this._onDidChangeActiveTextEditorDisposable?.dispose();
-    this._onDidChangeActiveTextEditorDisposable = undefined;
+  override onDispose() {
+    super.onDispose();
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
     this._fileCancellation = undefined;
     this.stopAll();
-  }
-
-  // When the webview is merely hidden, keep state and running processes.
-  // We still keep the editor-change listener so switching files in the editor
-  // correctly switches state even while the view is hidden.
-  override onHide() {
-    // no-op
   }
 
   onShow() {
@@ -320,67 +310,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this.onShow();
   }
 
-  loadCurrentFileData() {
-    this._ensureActiveEditorListener();
-    this._syncOrSwitchToTargetFile();
+  // Judge has state if there are testcases loaded
+  protected override _hasState(): boolean {
+    return this._state.size > 0;
   }
 
-  private _ensureActiveEditorListener() {
-    if (this._onDidChangeActiveTextEditorDisposable) {
-      return;
-    }
-    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
-      (editor) => this._handleActiveEditorChange(editor),
-      this
-    );
+  protected override _sendShowMessage(visible: boolean): void {
+    super._postMessage({ type: WebviewMessageType.SHOW, visible });
   }
 
-  private _handleActiveEditorChange(editor?: vscode.TextEditor) {
-    const file = editor?.document.fileName;
-
-    // When focusing a webview/panel, VS Code may temporarily report no active editor.
-    // Only treat "no editor" as real if there are actually no visible text editors.
-    if (!file) {
-      if (vscode.window.visibleTextEditors.length === 0) {
-        this._switchToNoFile();
-      }
-      return;
-    }
-
-    if (file !== this._currentFile) {
-      this._switchToFile(file);
-    }
-  }
-
-  private _getTargetFile(): string | undefined {
-    return vscode.window.activeTextEditor?.document.fileName ?? this._currentFile;
-  }
-
-  private _syncOrSwitchToTargetFile() {
-    const file = this._getTargetFile();
-    if (!file) {
-      super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
-      return;
-    }
-
-    // If we are already on this file, just rehydrate the webview if needed.
-    if (file === this._currentFile && this._state.size > 0) {
-      super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
-      this._rehydrateWebviewFromState();
-      return;
-    }
-
-    // If we have no in-memory state for this file, switch (loads from storage).
-    if (file !== this._currentFile) {
-      this._switchToFile(file);
-      return;
-    }
-
-    // Same file but empty state (e.g., first load): load from storage.
-    this._rehydrateWebviewFromState();
-  }
-
-  private _switchToNoFile() {
+  protected override _switchToNoFile() {
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
     this._fileCancellation = undefined;
@@ -394,10 +333,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._newId = 0;
     this._currentFile = undefined;
 
-    super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
+    this._sendShowMessage(false);
   }
 
-  private _switchToFile(file: string) {
+  protected override _switchToFile(file: string) {
     // Cancel any in-flight operations for the previous file
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
@@ -413,7 +352,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._newId = 0;
 
     this._currentFile = file;
-    super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
+    this._sendShowMessage(true);
 
     const storageData = super.readStorage()[file];
     const fileData = v.parse(FileDataSchema, storageData);
@@ -427,13 +366,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: WebviewMessageType.INITIAL_STATE, timeLimit: this._timeLimit });
   }
 
-  private _rehydrateWebviewFromState() {
-    const file = this._getTargetFile();
-    if (!file) {
-      super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
-      return;
-    }
-    super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
+  protected override _rehydrateWebviewFromState() {
     super._postMessage({ type: WebviewMessageType.INITIAL_STATE, timeLimit: this._timeLimit });
 
     for (const [id, testcase] of this._state.entries()) {

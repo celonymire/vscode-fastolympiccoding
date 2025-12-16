@@ -4,6 +4,7 @@
 
   import { Status } from "~shared/enums";
   import {
+    type InitMessageSchema,
     ProviderMessageType,
     type ShowMessageSchema,
     type StatusMessageSchema,
@@ -16,6 +17,7 @@
 
   type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
   type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
+  type IInitMessage = v.InferOutput<typeof InitMessageSchema>;
 
   interface IStateData {
     data: string;
@@ -57,6 +59,13 @@
     showView = visible;
   }
 
+  function handleInit({ states }: IInitMessage) {
+    for (let i = 0; i < 3; i++) {
+      items[i].data = states[i].data;
+      items[i].status = states[i].status;
+    }
+  }
+
   onMount(() => {
     const handleMessage = (event: MessageEvent<WebviewMessage>) => {
       switch (event.data.type) {
@@ -71,6 +80,9 @@
           break;
         case WebviewMessageType.SHOW:
           handleShow(event.data);
+          break;
+        case WebviewMessageType.INIT:
+          handleInit(event.data);
           break;
       }
     };

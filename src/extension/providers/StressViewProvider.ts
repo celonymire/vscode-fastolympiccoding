@@ -46,7 +46,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _stopFlag = false;
   private _clearFlag = false;
   private _running = false;
-  private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
@@ -71,17 +70,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  onDispose() {
-    this._onDidChangeActiveTextEditorDisposable?.dispose();
+  override onDispose() {
+    super.onDispose();
     this.stop();
   }
 
   onShow() {
-    this._onDidChangeActiveTextEditorDisposable = vscode.window.onDidChangeActiveTextEditor(
-      () => this.loadCurrentFileData(),
-      this
-    );
-    this.loadCurrentFileData();
+    this._ensureActiveEditorListener();
+    this._syncOrSwitchToTargetFile();
   }
 
   constructor(
@@ -103,45 +99,61 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this.onShow();
   }
 
-  loadCurrentFileData() {
+  protected override _sendShowMessage(visible: boolean): void {
+    super._postMessage({ type: WebviewMessageType.SHOW, visible });
+  }
+
+  protected override _switchToNoFile() {
     this.stop();
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
       this._state[id].status = Status.NA;
-      super._postMessage({
-        type: WebviewMessageType.STATUS,
-        id,
-        status: Status.NA,
-      });
     }
-    super._postMessage({ type: WebviewMessageType.CLEAR });
+    this._currentFile = undefined;
+    this._sendShowMessage(false);
+  }
 
-    const file = vscode.window.activeTextEditor?.document.fileName;
-    if (!file) {
-      super._postMessage({ type: WebviewMessageType.SHOW, visible: false });
-      return;
+  protected override _switchToFile(file: string) {
+    // Stop any running stress loop for the previous file.
+    this.stop();
+
+    // Reset in-memory state.
+    for (let id = 0; id < 3; id++) {
+      this._state[id].data.reset();
+      this._state[id].status = Status.NA;
     }
-    super._postMessage({ type: WebviewMessageType.SHOW, visible: true });
 
+    this._currentFile = file;
+    this._sendShowMessage(true);
+
+    // Load persisted state from workspaceState.
     const fileData = super.readStorage()[file];
     const arrayDataSchema = v.fallback(v.array(StressDataSchema), []);
     const state = v.parse(arrayDataSchema, fileData);
     for (let id = 0; id < state.length; id++) {
       const testcase = state[id];
-
       this._state[id].status = testcase.status;
-      super._postMessage({
-        type: WebviewMessageType.STATUS,
-        id,
-        status: testcase.status,
-      });
       this._state[id].data.reset();
       this._state[id].data.write(testcase.data, true);
     }
+
+    // Send full state to webview.
+    this._rehydrateWebviewFromState();
+  }
+
+  protected override _rehydrateWebviewFromState() {
+    super._postMessage({
+      type: WebviewMessageType.INIT,
+      states: [
+        { data: this._state[0].data.data, status: this._state[0].status },
+        { data: this._state[1].data.data, status: this._state[1].status },
+        { data: this._state[2].data.data, status: this._state[2].status },
+      ],
+    });
   }
 
   async run(): Promise<void> {
-    const file = vscode.window.activeTextEditor?.document.fileName;
+    const file = this._currentFile;
     if (!file) {
       return;
     }
@@ -362,7 +374,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _add({ id }: v.InferOutput<typeof AddMessageSchema>) {
-    const file = vscode.window.activeTextEditor?.document.fileName;
+    const file = this._currentFile;
     if (!file) {
       return;
     }
@@ -409,7 +421,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _saveState() {
-    const file = vscode.window.activeTextEditor?.document.fileName;
+    const file = this._currentFile;
     if (!file) {
       return;
     }
