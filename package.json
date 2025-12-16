@@ -359,6 +359,11 @@
         "when": "view.fastolympiccoding.judge.visible"
       },
       {
+        "command": "fastolympiccoding.debugAll",
+        "key": "ctrl+alt+n",
+        "when": "view.fastolympiccoding.judge.visible"
+      },
+      {
         "command": "fastolympiccoding.stopAll",
         "key": "ctrl+alt+k",
         "when": "view.fastolympiccoding.judge.visible"
