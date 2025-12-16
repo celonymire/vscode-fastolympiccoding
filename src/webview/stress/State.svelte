@@ -16,7 +16,7 @@
 
   let { state, id, onView, onAdd }: Props = $props();
 
-  const from = ["Generator", "Solution", "Good Solution"];
+  const from = ["Generator", "Solution", "Judge"];
   const placeholders = ["Generator input...", "Solution output...", "Accepted output..."];
 
   function handleAdd() {
@@ -44,12 +44,19 @@
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <strong class="state-toolbar-text-bubble" data-status={status}>
-          {from[id]}
-        </strong>
-        <strong class="state-toolbar-text-bubble" data-status={status}>COMPILING</strong>
-        <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-loading codicon-modifier-spin"></div>
+        <div class="state-badge state-status" data-status={Status.NA}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-play"></div>
+          </div>
+          <p class="state-badge-text">
+            {from[id]}
+          </p>
+        </div>
+        <div class="state-badge state-status" data-status={status}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-loading codicon-modifier-spin"></div>
+          </div>
+          <p class="state-badge-text">COMPILING</p>
         </div>
       </div>
     </div>
@@ -58,9 +65,14 @@
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <strong class="state-toolbar-text-bubble" data-status={status}>
-          {from[id]}
-        </strong>
+        <div class="state-badge state-status" data-status={Status.NA}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-play"></div>
+          </div>
+          <p class="state-badge-text">
+            {from[id]}
+          </p>
+        </div>
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
@@ -77,10 +89,20 @@
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <strong class="state-toolbar-text-bubble" data-status={Status.NA}>
-          {from[id]}
-        </strong>
-        <strong class="state-toolbar-text-bubble" data-status={status}> Compile Error </strong>
+        <div class="state-badge state-status" data-status={Status.NA}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-play"></div>
+          </div>
+          <p class="state-badge-text">
+            {from[id]}
+          </p>
+        </div>
+        <div class="state-badge state-status" data-status={status}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-terminal-bash"></div>
+          </div>
+          <p class="state-badge-text">Compile Error</p>
+        </div>
       </div>
     </div>
   </div>
@@ -88,12 +110,26 @@
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <strong class="state-toolbar-text-bubble" data-status={Status.NA}>
-          {from[id]}
-        </strong>
-        <strong class="state-toolbar-text-bubble" data-status={status}>
-          {statusText}
-        </strong>
+        <div class="state-badge state-status" data-status={Status.NA}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-play"></div>
+          </div>
+          <p class="state-badge-text">
+            {from[id]}
+          </p>
+        </div>
+        <div class="state-badge state-status" data-status={status}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            {#if status === Status.WA}
+              <div class="codicon codicon-bolded codicon-bug"></div>
+            {:else if status === Status.RE}
+              <div class="codicon codicon-bolded codicon-warning"></div>
+            {:else if status === Status.TL}
+              <div class="codicon codicon-bolded codicon-history"></div>
+            {/if}
+          </div>
+          <p class="state-badge-text">{statusText}</p>
+        </div>
       </div>
       <div class="state-toolbar-right">
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -114,9 +150,14 @@
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <strong class="state-toolbar-text-bubble" data-status={Status.NA}>
-          {from[id]}
-        </strong>
+        <div class="state-badge state-status" data-status={Status.NA}>
+          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-play"></div>
+          </div>
+          <p class="state-badge-text">
+            {from[id]}
+          </p>
+        </div>
       </div>
     </div>
     <AutoresizeTextarea
@@ -167,7 +208,7 @@
     margin-bottom: 28px;
   }
 
-  .state-toolbar-text-bubble {
+  .state-badge {
     display: flex;
     align-items: center;
     height: 22px;
@@ -180,29 +221,42 @@
     color: var(--vscode-badge-foreground);
   }
 
+  .state-badge-text {
+    margin-right: 3px;
+  }
+
+  .codicon-bolded {
+    text-shadow: 0 0 2px currentColor;
+  }
+
   /* Status-specific colors using data-status attribute */
   /* CE=0 */
-  .state-toolbar-text-bubble[data-status="0"] {
+  .state-status[data-status="0"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
   /* RE=1 */
-  .state-toolbar-text-bubble[data-status="1"] {
+  .state-status[data-status="1"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
   /* WA=2 */
-  .state-toolbar-text-bubble[data-status="2"] {
+  .state-status[data-status="2"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
   /* AC=3 */
-  .state-toolbar-text-bubble[data-status="3"] {
+  .state-status[data-status="3"] {
     background-color: var(--vscode-terminal-ansiGreen);
   }
 
   /* TL=5 */
-  .state-toolbar-text-bubble[data-status="5"] {
+  .state-status[data-status="5"] {
     background-color: var(--vscode-terminal-ansiRed);
+  }
+
+  /* CE=6 */
+  .state-status[data-status="6"] {
+    background-color: var(--vscode-terminal-ansiMagenta);
   }
 </style>

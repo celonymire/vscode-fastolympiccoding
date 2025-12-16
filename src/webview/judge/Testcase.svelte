@@ -118,7 +118,12 @@
   <div class="testcase-container">
     <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
       <div class="testcase-toolbar-left">
-        <strong class="testcase-elapsed" data-status={status}>CE</strong>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-terminal-bash"></div>
+          </div>
+          <p class="testcase-elapsed-text">CE</p>
+        </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
@@ -155,9 +160,24 @@
   <div class="testcase-container">
     <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
       <div class="testcase-toolbar-left">
-        <strong class="testcase-elapsed" data-status={status}>
-          {testcase.elapsed}ms
-        </strong>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            {#if status === Status.NA}
+              <div class="codicon codicon-bolded codicon-play"></div>
+            {:else if status === Status.AC}
+              <div class="codicon codicon-bolded codicon-pass"></div>
+            {:else if status === Status.WA}
+              <div class="codicon codicon-bolded codicon-bug"></div>
+            {:else if status === Status.RE}
+              <div class="codicon codicon-bolded codicon-warning"></div>
+            {:else if status === Status.TL}
+              <div class="codicon codicon-bolded codicon-history"></div>
+            {/if}
+          </div>
+          <p class="testcase-elapsed-text">
+            {testcase.elapsed}ms
+          </p>
+        </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="testcase-toolbar-icon" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
@@ -248,9 +268,11 @@
   <div class="testcase-container">
     <div class="testcase-toolbar">
       <div class="testcase-toolbar-left">
-        <strong class="testcase-elapsed" data-status={status}> COMPILING </strong>
-        <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-loading codicon-modifier-spin"></div>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-loading codicon-modifier-spin"></div>
+          </div>
+          <p class="testcase-elapsed-text">COMPILING</p>
         </div>
       </div>
     </div>
@@ -366,7 +388,7 @@
     margin-bottom: 24px;
   }
 
-  .testcase-elapsed {
+  .testcase-elapsed-badge {
     display: flex;
     align-items: center;
     height: 22px;
@@ -377,6 +399,14 @@
     line-height: 1;
     background: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
+  }
+
+  .testcase-elapsed-text {
+    margin-right: 3px;
+  }
+
+  .codicon-bolded {
+    text-shadow: 0 0 2px currentColor;
   }
 
   /* Status-specific colors using data-status attribute */
@@ -403,5 +433,10 @@
   /* TL=5 */
   .testcase-elapsed[data-status="5"] {
     background-color: var(--vscode-terminal-ansiRed);
+  }
+
+  /* CE=6 */
+  .testcase-elapsed[data-status="6"] {
+    background-color: var(--vscode-terminal-ansiMagenta);
   }
 </style>
