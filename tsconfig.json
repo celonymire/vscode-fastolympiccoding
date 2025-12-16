@@ -1,10 +1,5 @@
 {
   "compilerOptions": {
-    "paths": {
-      "~shared/*": ["./src/shared/*"],
-      "~webview/*": ["./src/webview/*"],
-      "~extension/*": ["./src/extension/*"]
-    },
     "strict": true,
     "verbatimModuleSyntax": true,
     "outDir": "./dist/types",

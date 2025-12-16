@@ -4,8 +4,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { ProblemSchema } from "~shared/schemas";
-import type JudgeViewProvider from "~extension/providers/JudgeViewProvider";
+import { ProblemSchema } from "../../shared/schemas";
+import type JudgeViewProvider from "../providers/JudgeViewProvider";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 

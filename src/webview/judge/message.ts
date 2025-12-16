@@ -1,4 +1,4 @@
-import type { ProviderMessage } from "~shared/judge-messages";
+import type { ProviderMessage } from "../../shared/judge-messages";
 
 const vscode = acquireVsCodeApi();
 

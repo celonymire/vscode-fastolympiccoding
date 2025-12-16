@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import { Status } from "~shared/enums";
+  import { Status } from "../../shared/enums";
   import {
     type InitMessageSchema,
     ProviderMessageType,
@@ -11,7 +11,7 @@
     type StdioMessageSchema,
     type WebviewMessage,
     WebviewMessageType,
-  } from "~shared/stress-messages";
+  } from "../../shared/stress-messages";
   import { postProviderMessage } from "./message";
   import State from "./State.svelte";
 

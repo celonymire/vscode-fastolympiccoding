@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { Status, Stdio } from "~shared/enums";
-import { ProblemSchema, TestSchema, TestcaseSchema } from "~shared/schemas";
-import BaseViewProvider from "~extension/providers/BaseViewProvider";
-import { compile, findAvailablePort, Runnable } from "~extension/utils/runtime";
+import { Status, Stdio } from "../../shared/enums";
+import { ProblemSchema, TestSchema, TestcaseSchema } from "../../shared/schemas";
+import BaseViewProvider from "./BaseViewProvider";
+import { compile, findAvailablePort, Runnable } from "../utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -12,7 +12,7 @@ import {
   resolveCommand,
   resolveVariables,
   TextHandler,
-} from "~extension/utils/vscode";
+} from "../utils/vscode";
 import {
   Action,
   ActionMessageSchema,
@@ -24,7 +24,7 @@ import {
   ViewMessageSchema,
   type WebviewMessage,
   WebviewMessageType,
-} from "~shared/judge-messages";
+} from "../../shared/judge-messages";
 
 type IProblem = v.InferOutput<typeof ProblemSchema>;
 type ITest = v.InferOutput<typeof TestSchema>;

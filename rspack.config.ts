@@ -8,11 +8,6 @@ const isProd = process.env.NODE_ENV === "production";
 
 const sharedResolve: Configuration["resolve"] = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".svelte"],
-  alias: {
-    "~shared": path.resolve("./src/shared"),
-    "~webview": path.resolve("./src/webview"),
-    "~extension": path.resolve("./src/extension"),
-  },
 };
 
 const sharedConfig: Configuration = {
@@ -82,9 +77,6 @@ const webviewsConfig: Configuration = {
   target: ["web", "es2015"],
   resolve: {
     ...sharedResolve,
-    alias: {
-      ...sharedResolve.alias,
-    },
     conditionNames: ["svelte", "browser", "import"],
     mainFields: ["svelte", "browser", "module", "main"],
   },

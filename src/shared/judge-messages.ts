@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { Stdio } from "~shared/enums";
+import { Stdio } from "./enums";
 
 export enum Action {
   RUN = 0,

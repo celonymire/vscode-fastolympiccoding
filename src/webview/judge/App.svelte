@@ -2,8 +2,8 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import { Status, Stdio } from "~shared/enums";
-  import type { TestcaseSchema } from "~shared/schemas";
+  import { Status, Stdio } from "../../shared/enums";
+  import type { TestcaseSchema } from "../../shared/schemas";
   import {
     type DeleteMessageSchema,
     type InitialStateSchema,
@@ -14,7 +14,7 @@
     type StdioMessageSchema,
     type WebviewMessage,
     WebviewMessageType,
-  } from "~shared/judge-messages";
+  } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
 

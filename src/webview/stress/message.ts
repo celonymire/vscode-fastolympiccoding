@@ -1,4 +1,4 @@
-import type { ProviderMessage } from "~shared/stress-messages";
+import type { ProviderMessage } from "../../shared/stress-messages";
 
 const vscode = acquireVsCodeApi();
 

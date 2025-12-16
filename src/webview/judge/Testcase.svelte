@@ -1,10 +1,10 @@
 <script lang="ts">
   import type * as v from "valibot";
 
-  import type { TestcaseSchema } from "~shared/schemas";
-  import { Status, Stdio } from "~shared/enums";
+  import type { TestcaseSchema } from "../../shared/schemas";
+  import { Status, Stdio } from "../../shared/enums";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
-  import { Action, ProviderMessageType } from "~shared/judge-messages";
+  import { Action, ProviderMessageType } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
 
   type ITestcase = v.InferOutput<typeof TestcaseSchema>;

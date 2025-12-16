@@ -3,16 +3,16 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { LanguageSettingsSchema } from "~shared/schemas";
-import { compile } from "~extension/utils/runtime";
+import { LanguageSettingsSchema } from "../shared/schemas";
+import { compile } from "./utils/runtime";
 import {
   createStatusBarItem,
   createListener,
   stopCompetitiveCompanion,
-} from "~extension/utils/competitiveCompanion";
-import { ReadonlyStringProvider, resolveVariables } from "~extension/utils/vscode";
-import JudgeViewProvider from "~extension/providers/JudgeViewProvider";
-import StressViewProvider from "~extension/providers/StressViewProvider";
+} from "./utils/competitiveCompanion";
+import { ReadonlyStringProvider, resolveVariables } from "./utils/vscode";
+import JudgeViewProvider from "./providers/JudgeViewProvider";
+import StressViewProvider from "./providers/StressViewProvider";
 
 type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 

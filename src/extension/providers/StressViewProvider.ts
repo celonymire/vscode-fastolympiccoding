@@ -1,17 +1,17 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { Status } from "~shared/enums";
-import BaseViewProvider from "~extension/providers/BaseViewProvider";
-import { compile, Runnable } from "~extension/utils/runtime";
+import { Status } from "../../shared/enums";
+import BaseViewProvider from "./BaseViewProvider";
+import { compile, Runnable } from "../utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
   resolveCommand,
   resolveVariables,
   TextHandler,
-} from "~extension/utils/vscode";
-import type JudgeViewProvider from "~extension/providers/JudgeViewProvider";
+} from "../utils/vscode";
+import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
   ProviderMessageSchema,
@@ -19,7 +19,7 @@ import {
   ViewMessageSchema,
   type WebviewMessage,
   WebviewMessageType,
-} from "~shared/stress-messages";
+} from "../../shared/stress-messages";
 
 const StressDataSchema = v.object({
   data: v.fallback(v.string(), ""),

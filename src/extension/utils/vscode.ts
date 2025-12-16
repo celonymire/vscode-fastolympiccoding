@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { LanguageSettingsSchema } from "~shared/schemas";
+import { LanguageSettingsSchema } from "../../shared/schemas";
 
 export type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 

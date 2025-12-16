@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Status } from "~shared/enums";
+  import { Status } from "../../shared/enums";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
 
   interface IState {

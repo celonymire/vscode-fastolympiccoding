@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { Status } from "~shared/enums";
+import { Status } from "./enums";
 
 export enum WebviewMessageType {
   STATUS = 0,
