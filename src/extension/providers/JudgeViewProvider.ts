@@ -490,6 +490,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
+  debugAll() {
+    for (const id of this._state.keys()) {
+      void this._debug(id);
+    }
+  }
+
   stopAll() {
     for (const id of this._state.keys()) {
       this._stop(id);

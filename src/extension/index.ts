@@ -126,6 +126,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerTextEditorCommand("fastolympiccoding.debugAll", () =>
+      judgeViewProvider.debugAll()
+    )
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerTextEditorCommand("fastolympiccoding.stopAll", () =>
       judgeViewProvider.stopAll()
     )
