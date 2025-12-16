@@ -282,7 +282,7 @@
         "command": "fastolympiccoding.debugAll",
         "title": "Debug All Testcases",
         "category": "Fast Olympic Coding",
-        "icon": "$(debug-alt-small)"
+        "icon": "$(debug-all)"
       },
       {
         "command": "fastolympiccoding.stopAll",
