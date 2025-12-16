@@ -34,6 +34,9 @@ export default [
       ...tseslint.configs.recommended.rules,
       // Rely on TypeScript for undefined symbols in TS files
       "no-undef": "off",
+      // Disable base no-redeclare rule as it conflicts with TypeScript function overloads
+      "no-redeclare": "off",
+      "@typescript-eslint/no-redeclare": "error",
     },
   },
   ...eslintPluginSvelte.configs["flat/recommended"],
