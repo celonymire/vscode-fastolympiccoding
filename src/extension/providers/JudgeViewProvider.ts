@@ -792,8 +792,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // to connect as a client, we might interfere with the debug session because the server
     // treats the first connection as the debuggee. I also tried to check if the port is listening
     // via platform specific means, but then I ran into the problem of mismatching PIDs and
-    // the server running in IPv6 vs IPv4 mode. So for now, we just wait a second.
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // the server running in IPv6 vs IPv4 mode.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
     // We just need to bypass our type system here.
