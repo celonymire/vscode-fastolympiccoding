@@ -73,6 +73,8 @@ export class Runnable {
     }
 
     try {
+      // pidusage on Windows spawns an external process which can be slow.
+      // Use a native addon for better performance.
       if (process.platform === "win32") {
         const addon = getWin32MemoryAddon();
         if (addon) {
@@ -80,6 +82,8 @@ export class Runnable {
           this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
         }
       } else {
+        // pidusage uses efficient /proc access on Linux
+        // Sorry Mac users, you're stuck with the slower method because I don't have a Mac to test on.
         const stats = await pidusage(pid);
         this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
       }
