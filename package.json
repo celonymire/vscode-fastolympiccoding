@@ -104,16 +104,6 @@
     },
     "configuration": [
       {
-        "title": "Font",
-        "properties": {
-          "fastolympiccoding.font": {
-            "type": "string",
-            "default": "Consolas",
-            "description": "The font family used for text in UI elements (requires restarting VSCode)."
-          }
-        }
-      },
-      {
         "title": "File Templates",
         "properties": {
           "fastolympiccoding.fileTemplatesBaseDirectory": {
