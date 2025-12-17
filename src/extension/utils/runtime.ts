@@ -1,14 +1,51 @@
 import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as net from "node:net";
-import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
 import pidusage from "pidusage";
 
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
+
+type Win32MemoryAddon = {
+  getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
+};
+
+let win32MemoryAddon: Win32MemoryAddon | null = null;
+
+function getWin32MemoryAddon(): Win32MemoryAddon | null {
+  if (win32MemoryAddon !== null) {
+    return win32MemoryAddon;
+  }
+
+  try {
+    // Load from the bundled native addon in dist/
+    const addonPath = path.join(__dirname, "win32-memory-stats.node");
+    if (!fs.existsSync(addonPath)) {
+      return null;
+    }
+
+    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "getWin32MemoryStats" in loaded) {
+      const candidate = loaded as any;
+      if (typeof candidate.getWin32MemoryStats === "function") {
+        win32MemoryAddon = candidate as Win32MemoryAddon;
+        return win32MemoryAddon;
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Failed to load Windows memory stats addon:", err);
+    return null;
+  }
+}
 
 export class Runnable {
   // On Linux, memory usage can be sampled more frequently due to more efficient /proc access
@@ -75,7 +112,6 @@ export class Runnable {
     // FIXME: Simplify TL to check a flag once https://github.com/nodejs/node/pull/51608 lands
 
     this._reset();
-    this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
 
     // Memory limit is specified in megabytes (0 = no limit).
     this._memoryLimitBytes =
@@ -98,11 +134,15 @@ export class Runnable {
     this._promise = new Promise((resolve) => {
       this._process?.once("spawn", () => {
         this._startTime = performance.now();
-        setTimeout(() => {
-          if (this._process?.pid) {
-            this._trackMemoryAsync(this._process.pid, this._memoryCancellationTokenSource!.token);
-          }
-        });
+
+        if (process.platform !== "win32") {
+          this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
+          setTimeout(() => {
+            if (this._process?.pid) {
+              this._trackMemoryAsync(this._process.pid, this._memoryCancellationTokenSource!.token);
+            }
+          });
+        }
         resolveSpawn(true);
       });
       this._process?.once("error", () => {
@@ -111,7 +151,22 @@ export class Runnable {
         resolveSpawn(false);
       });
       this._process?.once("close", async (code, signal) => {
-        this._memoryCancellationTokenSource?.cancel();
+        // Query peak RSS on Windows using native addon
+        if (process.platform === "win32" && this._process?.pid) {
+          try {
+            const addon = getWin32MemoryAddon();
+            if (addon) {
+              const memStats = addon.getWin32MemoryStats(this._process.pid);
+              this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+              this._memoryLimitExceeded =
+                this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
+            }
+          } catch (err) {
+            console.error("Failed to query Windows memory stats:", err);
+          }
+        } else {
+          this._memoryCancellationTokenSource?.cancel();
+        }
 
         this._endTime = performance.now();
         this._signal = signal;

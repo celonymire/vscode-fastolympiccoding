@@ -12,6 +12,11 @@ Build and tooling:
 - Use `npm run watch` during development and `npm run prod` for production builds. Rspack bundles the extension and webviews into `dist/`. Styles are co-located within Svelte components.
 - Run `npm run lint` and `npm run format` to apply ESLint (TypeScript + Svelte) and Prettier rules.
 
+Native addon (Windows-only):
+
+- The repo includes an optional Windows-only native addon (`win32-memory-stats`) that provides efficient process memory stats for memory-limit features.
+- It is built with `node-gyp` (`binding.gyp`), copied into `dist/` by Rspack, and loaded lazily from `src/extension/utils/runtime.ts` with a graceful fallback when unavailable.
+
 Design and implementation guidelines:
 
 - All extension ↔ webview communication must use the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Append to enums instead of reordering to keep numeric values and stored data stable.
