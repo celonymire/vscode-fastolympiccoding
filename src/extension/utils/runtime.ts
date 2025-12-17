@@ -73,8 +73,16 @@ export class Runnable {
     }
 
     try {
-      const stats = await pidusage(pid);
-      this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
+      if (process.platform === "win32") {
+        const addon = getWin32MemoryAddon();
+        if (addon) {
+          const memStats = addon.getWin32MemoryStats(pid);
+          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+        }
+      } else {
+        const stats = await pidusage(pid);
+        this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
+      }
 
       if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
         this._memoryCancellationTokenSource?.cancel();
@@ -134,39 +142,21 @@ export class Runnable {
     this._promise = new Promise((resolve) => {
       this._process?.once("spawn", () => {
         this._startTime = performance.now();
+        this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
+        setTimeout(() => {
+          if (this._process?.pid) {
+            this._trackMemoryAsync(this._process.pid, this._memoryCancellationTokenSource!.token);
+          }
+        });
 
-        if (process.platform !== "win32") {
-          this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
-          setTimeout(() => {
-            if (this._process?.pid) {
-              this._trackMemoryAsync(this._process.pid, this._memoryCancellationTokenSource!.token);
-            }
-          });
-        }
         resolveSpawn(true);
       });
       this._process?.once("error", () => {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
-        this._memoryCancellationTokenSource?.cancel();
         resolveSpawn(false);
       });
       this._process?.once("close", async (code, signal) => {
-        // Query peak RSS on Windows using native addon
-        if (process.platform === "win32" && this._process?.pid) {
-          try {
-            const addon = getWin32MemoryAddon();
-            if (addon) {
-              const memStats = addon.getWin32MemoryStats(this._process.pid);
-              this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-              this._memoryLimitExceeded =
-                this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
-            }
-          } catch (err) {
-            console.error("Failed to query Windows memory stats:", err);
-          }
-        } else {
-          this._memoryCancellationTokenSource?.cancel();
-        }
+        this._memoryCancellationTokenSource?.cancel();
 
         this._endTime = performance.now();
         this._signal = signal;

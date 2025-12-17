@@ -217,9 +217,7 @@
         onkeydown={handleMemoryLimitInput}
         class="settings-input"
       />
-      <p class="settings-additional-info">
-        Specify memory limit in megabytes. "0" Means no limit.
-      </p>
+      <p class="settings-additional-info">Specify memory limit in megabytes. "0" Means no limit.</p>
     </div>
     <button type="button" class="text-button" onclick={handleSaveSettings}>
       <div class="codicon codicon-save"></div>
