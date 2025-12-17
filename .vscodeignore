@@ -11,3 +11,4 @@
 !dist/extension.js
 !dist/codicons/codicon.css
 !dist/codicons/codicon.ttf
+!dist/win32-memory-stats.node
