@@ -20,6 +20,7 @@ export const TestcaseSchema = v.object({
   stdout: v.fallback(v.string(), ""),
   acceptedStdout: v.fallback(v.string(), ""),
   elapsed: v.fallback(v.number(), 0),
+  memoryBytes: v.fallback(v.number(), 0),
   status: v.fallback(v.enum(Status), Status.NA),
   shown: v.fallback(v.boolean(), true),
   toggled: v.fallback(v.boolean(), false),

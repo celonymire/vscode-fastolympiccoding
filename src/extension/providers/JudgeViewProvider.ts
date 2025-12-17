@@ -19,6 +19,7 @@ import {
   ProviderMessageSchema,
   ProviderMessageType,
   SaveMessageSchema,
+  SetMemoryLimitSchema,
   SetTimeLimitSchema,
   StdinMessageSchema,
   ViewMessageSchema,
@@ -33,13 +34,15 @@ type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 const FileDataSchema = v.fallback(
   v.object({
     timeLimit: v.fallback(v.number(), 0),
+    memoryLimit: v.fallback(v.number(), 0),
     testcases: v.fallback(v.array(v.unknown()), []),
   }),
-  { timeLimit: 0, testcases: [] }
+  { timeLimit: 0, memoryLimit: 0, testcases: [] }
 );
 
 interface IFileData {
   timeLimit: number;
+  memoryLimit: number;
   testcases: ITestcase[] | unknown;
 }
 interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> {
@@ -51,11 +54,14 @@ interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "accept
   process: Runnable;
 }
 
-function setTestcaseStats(state: IState, timeLimit: number) {
+function setTestcaseStats(state: IState, timeLimit: number, memoryLimit: number) {
   state.elapsed = state.process.elapsed;
+  state.memoryBytes = state.process.maxMemoryBytes;
   if (state.process.timedOut) {
     state.elapsed = timeLimit;
     state.status = Status.TL;
+  } else if (state.process.memoryLimitExceeded) {
+    state.status = Status.ML;
   } else if (state.process.exitCode === null || state.process.exitCode) {
     state.status = Status.RE;
   } else if (state.acceptedStdout.data === "\n") {
@@ -70,6 +76,7 @@ function setTestcaseStats(state: IState, timeLimit: number) {
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
   private _state: Map<number, IState> = new Map(); // Map also remembers insertion order :D
   private _timeLimit = 0;
+  private _memoryLimit = 0;
   private _newId = 0;
   private _fileCancellation?: vscode.CancellationTokenSource;
   private _activeDebugTestcaseId?: number;
@@ -183,10 +190,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     resolvedArgs: string[];
     cwd?: string;
     timeout?: number;
+    memoryLimit?: number;
   }) {
-    const { id, token, testcase, resolvedArgs, cwd, timeout } = params;
+    const { id, token, testcase, resolvedArgs, cwd, timeout, memoryLimit } = params;
 
-    testcase.process.run(resolvedArgs[0], timeout, cwd, ...resolvedArgs.slice(1));
+    testcase.process.run(resolvedArgs[0], timeout, memoryLimit, cwd, ...resolvedArgs.slice(1));
 
     const proc = testcase.process.process;
     if (!proc) {
@@ -225,7 +233,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (token.isCancellationRequested) {
         return;
       }
-      setTestcaseStats(testcase, this._timeLimit);
+      setTestcaseStats(testcase, this._timeLimit, this._memoryLimit);
       super._postMessage({
         type: WebviewMessageType.SET,
         id,
@@ -237,6 +245,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         id,
         property: "elapsed",
         value: testcase.elapsed,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
+        property: "memoryBytes",
+        value: testcase.memoryBytes,
       });
 
       this._saveFileData();
@@ -265,6 +279,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case ProviderMessageType.TL:
         this._setTimeLimit(msg);
+        break;
+      case ProviderMessageType.ML:
+        this._setMemoryLimit(msg);
         break;
     }
   }
@@ -307,7 +324,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   // Judge has state if there are testcases loaded
   protected override _hasState(): boolean {
-    return this._state.size > 0;
+    return this._state.size > 0 || this._timeLimit !== 0 || this._memoryLimit !== 0;
   }
 
   protected override _sendShowMessage(visible: boolean): void {
@@ -325,6 +342,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     this._state.clear();
     this._timeLimit = 0;
+    this._memoryLimit = 0;
     this._newId = 0;
     this._currentFile = undefined;
 
@@ -344,6 +362,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     this._state.clear();
     this._timeLimit = 0;
+    this._memoryLimit = 0;
     this._newId = 0;
 
     this._currentFile = file;
@@ -353,16 +372,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const fileData = v.parse(FileDataSchema, storageData);
     const testcases = fileData.testcases;
     this._timeLimit = fileData.timeLimit;
+    this._memoryLimit = fileData.memoryLimit;
     for (let i = 0; i < testcases.length; i++) {
       const testcase = v.parse(TestcaseSchema, testcases[i]);
       this._addTestcase(testcase);
     }
 
-    super._postMessage({ type: WebviewMessageType.INITIAL_STATE, timeLimit: this._timeLimit });
+    super._postMessage({
+      type: WebviewMessageType.INITIAL_STATE,
+      timeLimit: this._timeLimit,
+      memoryLimit: this._memoryLimit,
+    });
   }
 
   protected override _rehydrateWebviewFromState() {
-    super._postMessage({ type: WebviewMessageType.INITIAL_STATE, timeLimit: this._timeLimit });
+    super._postMessage({
+      type: WebviewMessageType.INITIAL_STATE,
+      timeLimit: this._timeLimit,
+      memoryLimit: this._memoryLimit,
+    });
 
     for (const [id, testcase] of this._state.entries()) {
       // Ensure a clean slate for this id in the webview.
@@ -402,6 +430,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       super._postMessage({
         type: WebviewMessageType.SET,
         id,
+        property: "memoryBytes",
+        value: testcase.memoryBytes,
+      });
+      super._postMessage({
+        type: WebviewMessageType.SET,
+        id,
         property: "status",
         value: testcase.status,
       });
@@ -434,6 +468,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         stdout: "",
         acceptedStdout: test.output,
         elapsed: 0,
+        memoryBytes: 0,
         status: Status.WA,
         shown: true,
         toggled: false,
@@ -445,6 +480,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (file === current) {
       this.deleteAll();
       this._timeLimit = data.timeLimit;
+      this._memoryLimit = data.memoryLimit;
       for (const testcase of testcases) {
         this._addTestcase(testcase);
       }
@@ -453,10 +489,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       super._postMessage({
         type: WebviewMessageType.INITIAL_STATE,
         timeLimit: data.timeLimit,
+        memoryLimit: data.memoryLimit,
       });
     } else {
       const fileData: IFileData = {
         timeLimit: data.timeLimit,
+        memoryLimit: data.memoryLimit,
         testcases,
       };
       super.writeStorage(file, fileData);
@@ -473,11 +511,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     } else {
       const storageData = super.readStorage()[file];
       const parseResult = v.safeParse(FileDataSchema, storageData);
-      const fileData = parseResult.success ? parseResult.output : { timeLimit: 0, testcases: [] };
+      const fileData = parseResult.success
+        ? parseResult.output
+        : { timeLimit: 0, memoryLimit: 0, testcases: [] };
       const testcases = fileData.testcases || [];
       testcases.push(testcase);
       const data: IFileData = {
         timeLimit: fileData.timeLimit ?? 0,
+        memoryLimit: fileData.memoryLimit ?? 0,
         testcases,
       };
       super.writeStorage(file, data);
@@ -560,7 +601,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!file) {
       return;
     }
-    if (this._state.size === 0 && this._timeLimit === 0) {
+    if (this._state.size === 0 && this._timeLimit === 0 && this._memoryLimit === 0) {
       // everything is defaulted, might as well not save it
       super.writeStorage(file, undefined);
       return;
@@ -574,6 +615,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         stdout: testcase.stdout.data,
         acceptedStdout: testcase.acceptedStdout.data,
         elapsed: testcase.elapsed,
+        memoryBytes: testcase.memoryBytes,
         status: testcase.status,
         shown: testcase.shown,
         toggled: testcase.toggled,
@@ -582,6 +624,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     const fileData: IFileData = {
       timeLimit: this._timeLimit,
+      memoryLimit: this._memoryLimit,
       testcases,
     };
     super.writeStorage(file, fileData);
@@ -603,6 +646,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       stdout: new TextHandler(),
       acceptedStdout: new TextHandler(),
       elapsed: testcase?.elapsed ?? 0,
+      memoryBytes: testcase?.memoryBytes ?? 0,
       status: testcase?.status ?? Status.NA,
       shown: testcase?.shown ?? true,
       toggled: testcase?.toggled ?? false,
@@ -660,6 +704,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({
       type: WebviewMessageType.SET,
       id,
+      property: "memoryBytes",
+      value: newTestcase.memoryBytes,
+    });
+    super._postMessage({
+      type: WebviewMessageType.SET,
+      id,
       property: "shown",
       value: newTestcase.shown,
     });
@@ -708,6 +758,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       resolvedArgs,
       cwd,
       timeout: newTestcase ? undefined : this._timeLimit,
+      memoryLimit: newTestcase ? undefined : this._memoryLimit,
     });
   }
 
@@ -990,7 +1041,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.acceptedStdout.reset();
     testcase.stdin.write(stdin, true);
     testcase.acceptedStdout.write(acceptedStdout, true);
-    setTestcaseStats(testcase, this._timeLimit);
+    setTestcaseStats(testcase, this._timeLimit, this._memoryLimit);
 
     super._postMessage({
       type: WebviewMessageType.SET,
@@ -1004,6 +1055,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _setTimeLimit({ limit }: v.InferOutput<typeof SetTimeLimitSchema>) {
     this._timeLimit = limit;
+    this._saveFileData();
+  }
+
+  private _setMemoryLimit({ limit }: v.InferOutput<typeof SetMemoryLimitSchema>) {
+    this._memoryLimit = limit;
     this._saveFileData();
   }
 }

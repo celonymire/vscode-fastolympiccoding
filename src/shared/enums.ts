@@ -10,6 +10,7 @@ export enum Status {
   COMPILING = 6,
   RUNNING = 7,
   EDITING = 8,
+  ML = 9,
 }
 
 export enum Stdio {

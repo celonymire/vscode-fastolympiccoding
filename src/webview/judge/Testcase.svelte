@@ -156,7 +156,7 @@
       </div>
     </div>
   </div>
-{:else if status === Status.NA || status === Status.AC || status === Status.WA || status === Status.RE || status === Status.TL}
+{:else if status === Status.NA || status === Status.AC || status === Status.WA || status === Status.RE || status === Status.TL || status === Status.ML}
   <div class="testcase-container">
     <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
       <div class="testcase-toolbar-left">
@@ -172,10 +172,26 @@
               <div class="codicon codicon-bolded codicon-warning"></div>
             {:else if status === Status.TL}
               <div class="codicon codicon-bolded codicon-history"></div>
+            {:else if status === Status.ML}
+              <div class="codicon codicon-bolded codicon-chip"></div>
             {/if}
           </div>
           <p class="testcase-elapsed-text">
-            {testcase.elapsed}ms
+            {testcase.elapsed >= 1000
+              ? (testcase.elapsed / 1000).toFixed(0) + "s"
+              : testcase.elapsed + "ms"}
+          </p>
+        </div>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chip"></div>
+          </div>
+          <p class="testcase-elapsed-text">
+            {testcase.memoryBytes >= 1024 * 1024
+              ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
+              : testcase.memoryBytes >= 1024
+                ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
+                : testcase.memoryBytes + "B"}
           </p>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -438,5 +454,10 @@
   /* CE=6 */
   .testcase-elapsed[data-status="6"] {
     background-color: var(--vscode-terminal-ansiMagenta);
+  }
+
+  /* ML=9 */
+  .testcase-elapsed[data-status="9"] {
+    background-color: var(--vscode-terminal-ansiRed);
   }
 </style>

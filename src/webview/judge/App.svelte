@@ -25,6 +25,7 @@
   // Reactive state using Svelte 5 runes
   let testcases = $state<{ id: number; data: ITestcase }[]>([]);
   let newTimeLimit = $state(0);
+  let newMemoryLimit = $state(0);
   let show = $state(true);
   let showSettings = $state(false);
 
@@ -45,6 +46,7 @@
           stdout: "",
           acceptedStdout: "",
           elapsed: 0,
+          memoryBytes: 0,
           status: Status.NA,
           shown: true,
           toggled: false,
@@ -105,8 +107,12 @@
     show = visible;
   }
 
-  function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSchema>) {
+  function handleInitialState({
+    timeLimit,
+    memoryLimit,
+  }: v.InferOutput<typeof InitialStateSchema>) {
     newTimeLimit = timeLimit;
+    newMemoryLimit = memoryLimit;
   }
 
   function handleSettingsToggle() {
@@ -121,6 +127,16 @@
   function handleSaveSettings() {
     handleSettingsToggle();
     postProviderMessage({ type: ProviderMessageType.TL, limit: newTimeLimit });
+    postProviderMessage({ type: ProviderMessageType.ML, limit: newMemoryLimit });
+  }
+
+  function handleNumericInputEnforced(e: KeyboardEvent) {
+    if (
+      !/\d/.test(e.key) &&
+      !["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab"].includes(e.key)
+    ) {
+      e.preventDefault();
+    }
   }
 
   function handleTimeLimitInput(e: Event) {
@@ -128,13 +144,9 @@
     newTimeLimit = Number(target.value);
   }
 
-  function handleTimeLimitKeyDown(e: KeyboardEvent) {
-    if (
-      !/\d/.test(e.key) &&
-      !["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab"].includes(e.key)
-    ) {
-      e.preventDefault();
-    }
+  function handleMemoryLimitInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    newMemoryLimit = Number(target.value);
   }
 
   // Update testcase data from child component
@@ -191,12 +203,22 @@
       <p class="settings-label">Time Limit</p>
       <input
         value={newTimeLimit}
-        oninput={handleTimeLimitInput}
-        onkeydown={handleTimeLimitKeyDown}
+        oninput={handleNumericInputEnforced}
+        onkeydown={handleTimeLimitInput}
         class="settings-input"
       />
       <p class="settings-additional-info">
         Specify time limit in milliseconds. "0" Means no limit.
+      </p>
+      <p class="settings-label">Memory Limit</p>
+      <input
+        value={newMemoryLimit}
+        oninput={handleNumericInputEnforced}
+        onkeydown={handleMemoryLimitInput}
+        class="settings-input"
+      />
+      <p class="settings-additional-info">
+        Specify memory limit in megabytes. "0" Means no limit.
       </p>
     </div>
     <button type="button" class="text-button" onclick={handleSaveSettings}>

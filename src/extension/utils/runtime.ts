@@ -2,12 +2,21 @@ import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
+
+import pidusage from "pidusage";
 
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
 
 export class Runnable {
+  // On Linux, memory usage can be sampled more frequently due to more efficient /proc access
+  // So, we set a lower interval there.
+  private static readonly MEMORY_SAMPLE_INTERVAL_MS = 100;
+
+  private static readonly BYTES_PER_MEGABYTE = 1024 * 1024;
+
   private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
   private _promise: Promise<void> | undefined = undefined;
   private _spawnPromise: Promise<boolean> | undefined = undefined;
@@ -16,9 +25,61 @@ export class Runnable {
   private _signal: NodeJS.Signals | null = null;
   private _timedOut = false;
   private _exitCode: number | null = 0;
+  private _memoryCancellationTokenSource: vscode.CancellationTokenSource | null = null;
+  private _maxMemoryBytes = 0;
+  private _memoryLimitBytes = 0;
+  private _memoryLimitExceeded = false;
 
-  run(command: string, timeout?: number, cwd?: string, ...args: string[]) {
+  private async _trackMemoryAsync(pid: number, token: vscode.CancellationToken) {
+    if (token.isCancellationRequested) {
+      return;
+    }
+
+    try {
+      const stats = await pidusage(pid);
+      this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
+
+      if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
+        this._memoryCancellationTokenSource?.cancel();
+        this._process?.kill();
+        return;
+      }
+    } catch {
+      // pidusage can throw if the process exits between samples. Treat as terminal.
+      return;
+    }
+
+    setTimeout(async () => {
+      this._trackMemoryAsync(pid, token);
+    }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
+  }
+
+  private _reset() {
+    this._memoryCancellationTokenSource?.cancel();
+
+    this._process = undefined;
+    this._promise = undefined;
+    this._spawnPromise = undefined;
+    this._startTime = 0;
+    this._endTime = 0;
+    this._signal = null;
+    this._timedOut = false;
+    this._exitCode = 0;
+    this._memoryCancellationTokenSource = null;
+    this._maxMemoryBytes = 0;
+    this._memoryLimitBytes = 0;
+    this._memoryLimitExceeded = false;
+  }
+
+  run(command: string, timeout?: number, memoryLimit?: number, cwd?: string, ...args: string[]) {
     // FIXME: Simplify TL to check a flag once https://github.com/nodejs/node/pull/51608 lands
+
+    this._reset();
+    this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
+
+    // Memory limit is specified in megabytes (0 = no limit).
+    this._memoryLimitBytes =
+      memoryLimit && memoryLimit > 0 ? memoryLimit * Runnable.BYTES_PER_MEGABYTE : 0;
 
     const timeoutSignal = timeout ? AbortSignal.timeout(timeout) : undefined;
     this._process = childProcess.spawn(command, args, {
@@ -37,17 +98,27 @@ export class Runnable {
     this._promise = new Promise((resolve) => {
       this._process?.once("spawn", () => {
         this._startTime = performance.now();
+        setTimeout(() => {
+          if (this._process?.pid) {
+            this._trackMemoryAsync(this._process.pid, this._memoryCancellationTokenSource!.token);
+          }
+        });
         resolveSpawn(true);
       });
       this._process?.once("error", () => {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
+        this._memoryCancellationTokenSource?.cancel();
         resolveSpawn(false);
       });
-      this._process?.once("close", (code, signal) => {
+      this._process?.once("close", async (code, signal) => {
+        this._memoryCancellationTokenSource?.cancel();
+
         this._endTime = performance.now();
         this._signal = signal;
         this._exitCode = code;
         this._timedOut = timeoutSignal?.aborted ?? false;
+        this._memoryLimitExceeded =
+          this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
         resolve();
       });
     });
@@ -78,6 +149,12 @@ export class Runnable {
   }
   get exitCode(): number | null {
     return this._exitCode;
+  }
+  get maxMemoryBytes(): number {
+    return this._maxMemoryBytes;
+  }
+  get memoryLimitExceeded(): boolean {
+    return this._memoryLimitExceeded;
   }
 }
 
@@ -133,7 +210,7 @@ export async function compile(
       context.subscriptions.push(compilationStatusItem);
 
       const process = new Runnable();
-      process.run(resolvedArgs[0], undefined, undefined, ...resolvedArgs.slice(1));
+      process.run(resolvedArgs[0], undefined, undefined, undefined, ...resolvedArgs.slice(1));
 
       let err = "";
       process.process?.stderr.on("data", (data: string) => {
