@@ -178,7 +178,7 @@
           </div>
           <p class="testcase-elapsed-text">
             {testcase.elapsed >= 1000
-              ? (testcase.elapsed / 1000).toFixed(0) + "s"
+              ? (testcase.elapsed / 1000).toFixed(1) + "s"
               : testcase.elapsed + "ms"}
           </p>
         </div>
