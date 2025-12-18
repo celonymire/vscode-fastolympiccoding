@@ -15,7 +15,7 @@
       "cflags_cc!": ["-fno-exceptions"],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
       "conditions": [
-        ["OS != \"win32\"", {
+        ["OS != \"win\"", {
           "type": "none"
         }]
       ]
