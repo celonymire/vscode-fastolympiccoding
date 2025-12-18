@@ -244,6 +244,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._state[0].process.run(
         generatorRunArguments[0],
         testcaseTimeLimit,
+        0, // don't impose memory limit within stress tester
         cwd,
         ...generatorRunArguments.slice(1)
       );
@@ -267,6 +268,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._state[1].process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
+        0, // don't impose memory limit within stress tester
         cwd,
         ...solutionRunArguments.slice(1)
       );
@@ -287,6 +289,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._state[2].process.run(
         goodSolutionRunArguments[0],
         testcaseTimeLimit,
+        0, // don't impose memory limit within stress tester
         cwd,
         ...goodSolutionRunArguments.slice(1)
       );
@@ -398,6 +401,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       stdout: this._state[1].data.data,
       acceptedStdout: this._state[2].data.data,
       elapsed: 0,
+      memoryBytes: 0,
       status: this._state[id].status,
       shown: true,
       toggled: false,

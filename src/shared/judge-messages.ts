@@ -22,6 +22,7 @@ export enum ProviderMessageType {
   VIEW = 4,
   STDIN = 5,
   TL = 6,
+  ML = 7,
 }
 
 export const LoadedMessageSchema = v.object({
@@ -62,6 +63,11 @@ export const SetTimeLimitSchema = v.object({
   limit: v.number(),
 });
 
+export const SetMemoryLimitSchema = v.object({
+  type: v.literal(ProviderMessageType.ML),
+  limit: v.number(),
+});
+
 export const ProviderMessageSchema = v.union([
   LoadedMessageSchema,
   NextMessageSchema,
@@ -70,6 +76,7 @@ export const ProviderMessageSchema = v.union([
   ViewMessageSchema,
   StdinMessageSchema,
   SetTimeLimitSchema,
+  SetMemoryLimitSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;
@@ -99,6 +106,7 @@ export const SetMessageSchema = v.object({
     "stdout",
     "acceptedStdout",
     "elapsed",
+    "memoryBytes",
     "status",
     "shown",
     "toggled",
@@ -131,6 +139,7 @@ export const ShowMessageSchema = v.object({
 export const InitialStateSchema = v.object({
   type: v.literal(WebviewMessageType.INITIAL_STATE),
   timeLimit: v.number(),
+  memoryLimit: v.number(),
 });
 
 export const SettingsToggleSchema = v.object({

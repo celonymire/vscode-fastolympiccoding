@@ -58,6 +58,15 @@ const extensionConfig: Configuration = {
         configFile: "tsconfig.node.json",
       },
     }),
+    new CopyRspackPlugin({
+      patterns: [
+        {
+          from: "build/Release/win32-memory-stats.node",
+          to: "win32-memory-stats.node",
+          noErrorOnMissing: true,
+        },
+      ],
+    }),
   ],
 };
 

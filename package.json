@@ -385,12 +385,14 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run prod",
+    "vscode:prepublish": "npm run build:addon && npm run prod",
+    "build:addon": "node-gyp rebuild",
+    "build:addon:clean": "node-gyp clean",
     "lint": "eslint .",
     "format": "prettier --write src",
     "check": "prettier --check src",
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json",
-    "build": "rspack build",
+    "build": "npm run build:addon && rspack build",
     "prod": "NODE_ENV=production rspack build",
     "watch": "rspack build --watch"
   },
@@ -399,6 +401,7 @@
   "devDependencies": {
     "@rspack/cli": "^1.6.7",
     "@types/node": "^22.19.2",
+    "@types/pidusage": "^2.0.5",
     "@types/vscode": "^1.107.0",
     "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
@@ -409,6 +412,9 @@
     "eslint-plugin-svelte": "^3.13.1",
     "fork-ts-checker-webpack-plugin": "^9.1.0",
     "globals": "^16.5.0",
+    "node-addon-api": "^8.5.0",
+    "node-api-headers": "^1.7.0",
+    "node-gyp": "^10.1.0",
     "prettier": "3.6.2",
     "prettier-plugin-svelte": "^3.4.0",
     "svelte": "^5.46.0",
@@ -418,6 +424,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "pidusage": "^4.0.1",
     "valibot": "^1.2.0"
   }
 }

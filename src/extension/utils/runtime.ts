@@ -1,13 +1,57 @@
 import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as net from "node:net";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import pidusage from "pidusage";
+
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
 
+type Win32MemoryAddon = {
+  getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
+};
+
+let win32MemoryAddon: Win32MemoryAddon | null = null;
+
+function getWin32MemoryAddon(): Win32MemoryAddon | null {
+  if (win32MemoryAddon !== null) {
+    return win32MemoryAddon;
+  }
+
+  try {
+    // Load from the bundled native addon in dist/
+    const addonPath = path.join(__dirname, "win32-memory-stats.node");
+    if (!fs.existsSync(addonPath)) {
+      return null;
+    }
+
+    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "getWin32MemoryStats" in loaded) {
+      win32MemoryAddon = loaded as Win32MemoryAddon;
+      return win32MemoryAddon;
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Failed to load Windows memory stats addon:", err);
+    return null;
+  }
+}
+
 export class Runnable {
+  // Use a short interval to get more accurate peak memory usage.
+  // pidusage uses /proc on Linux which is very cheap to read, Windows uses a native addon,
+  // TODO: Test on MacOS and see if we need a native addon there as well.
+  private static readonly MEMORY_SAMPLE_INTERVAL_MS = 100;
+
+  private static readonly BYTES_PER_MEGABYTE = 1024 * 1024;
+
   private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
   private _promise: Promise<void> | undefined = undefined;
   private _spawnPromise: Promise<boolean> | undefined = undefined;
@@ -16,9 +60,78 @@ export class Runnable {
   private _signal: NodeJS.Signals | null = null;
   private _timedOut = false;
   private _exitCode: number | null = 0;
+  private _memoryCancellationTokenSource: vscode.CancellationTokenSource | null = null;
+  private _maxMemoryBytes = 0;
+  private _memoryLimitBytes = 0;
+  private _memoryLimitExceeded = false;
 
-  run(command: string, timeout?: number, cwd?: string, ...args: string[]) {
+  private async _sampleMemory(pid: number) {
+    if (process.platform === "win32") {
+      const addon = getWin32MemoryAddon();
+      if (addon) {
+        const memStats = addon.getWin32MemoryStats(pid);
+        this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+        return;
+      } else {
+        // fallback to pidusage if addon not available
+      }
+    }
+
+    try {
+      const stats = await pidusage(pid);
+      this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
+    } catch {
+      // pidusage can throw if the process exits between samples. Treat as terminal.
+      return;
+    }
+  }
+
+  private async _sampleMemoryRepeatedly(pid: number, token: vscode.CancellationToken) {
+    if (token.isCancellationRequested) {
+      return;
+    }
+
+    await this._sampleMemory(pid);
+
+    if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
+      this._memoryLimitExceeded = true;
+      this._memoryCancellationTokenSource?.cancel();
+      this._process?.kill();
+      return;
+    }
+
+    if (!token.isCancellationRequested) {
+      setTimeout(() => {
+        void this._sampleMemoryRepeatedly(pid, token);
+      }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
+    }
+  }
+
+  private _reset() {
+    this._memoryCancellationTokenSource?.cancel();
+
+    this._process = undefined;
+    this._promise = undefined;
+    this._spawnPromise = undefined;
+    this._startTime = 0;
+    this._endTime = 0;
+    this._signal = null;
+    this._timedOut = false;
+    this._exitCode = 0;
+    this._memoryCancellationTokenSource = null;
+    this._maxMemoryBytes = 0;
+    this._memoryLimitBytes = 0;
+    this._memoryLimitExceeded = false;
+  }
+
+  run(command: string, timeout?: number, memoryLimit?: number, cwd?: string, ...args: string[]) {
     // FIXME: Simplify TL to check a flag once https://github.com/nodejs/node/pull/51608 lands
+
+    this._reset();
+
+    // Memory limit is specified in megabytes (0 = no limit).
+    this._memoryLimitBytes =
+      memoryLimit && memoryLimit > 0 ? memoryLimit * Runnable.BYTES_PER_MEGABYTE : 0;
 
     const timeoutSignal = timeout ? AbortSignal.timeout(timeout) : undefined;
     this._process = childProcess.spawn(command, args, {
@@ -37,17 +150,31 @@ export class Runnable {
     this._promise = new Promise((resolve) => {
       this._process?.once("spawn", () => {
         this._startTime = performance.now();
+        this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
+        setTimeout(() => {
+          if (this._process?.pid) {
+            this._sampleMemoryRepeatedly(
+              this._process.pid,
+              this._memoryCancellationTokenSource!.token
+            );
+          }
+        });
+
         resolveSpawn(true);
       });
       this._process?.once("error", () => {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
         resolveSpawn(false);
       });
-      this._process?.once("close", (code, signal) => {
+      this._process?.once("close", async (code, signal) => {
+        this._memoryCancellationTokenSource?.cancel();
+
         this._endTime = performance.now();
         this._signal = signal;
         this._exitCode = code;
         this._timedOut = timeoutSignal?.aborted ?? false;
+        this._memoryLimitExceeded =
+          this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
         resolve();
       });
     });
@@ -78,6 +205,12 @@ export class Runnable {
   }
   get exitCode(): number | null {
     return this._exitCode;
+  }
+  get maxMemoryBytes(): number {
+    return this._maxMemoryBytes;
+  }
+  get memoryLimitExceeded(): boolean {
+    return this._memoryLimitExceeded;
   }
 }
 
@@ -133,7 +266,7 @@ export async function compile(
       context.subscriptions.push(compilationStatusItem);
 
       const process = new Runnable();
-      process.run(resolvedArgs[0], undefined, undefined, ...resolvedArgs.slice(1));
+      process.run(resolvedArgs[0], undefined, undefined, undefined, ...resolvedArgs.slice(1));
 
       let err = "";
       process.process?.stderr.on("data", (data: string) => {

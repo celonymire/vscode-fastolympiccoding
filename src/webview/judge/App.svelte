@@ -25,6 +25,7 @@
   // Reactive state using Svelte 5 runes
   let testcases = $state<{ id: number; data: ITestcase }[]>([]);
   let newTimeLimit = $state(0);
+  let newMemoryLimit = $state(0);
   let show = $state(true);
   let showSettings = $state(false);
 
@@ -45,6 +46,7 @@
           stdout: "",
           acceptedStdout: "",
           elapsed: 0,
+          memoryBytes: 0,
           status: Status.NA,
           shown: true,
           toggled: false,
@@ -105,8 +107,12 @@
     show = visible;
   }
 
-  function handleInitialState({ timeLimit }: v.InferOutput<typeof InitialStateSchema>) {
+  function handleInitialState({
+    timeLimit,
+    memoryLimit,
+  }: v.InferOutput<typeof InitialStateSchema>) {
     newTimeLimit = timeLimit;
+    newMemoryLimit = memoryLimit;
   }
 
   function handleSettingsToggle() {
@@ -121,6 +127,7 @@
   function handleSaveSettings() {
     handleSettingsToggle();
     postProviderMessage({ type: ProviderMessageType.TL, limit: newTimeLimit });
+    postProviderMessage({ type: ProviderMessageType.ML, limit: newMemoryLimit });
   }
 
   function handleTimeLimitInput(e: Event) {
@@ -128,13 +135,9 @@
     newTimeLimit = Number(target.value);
   }
 
-  function handleTimeLimitKeyDown(e: KeyboardEvent) {
-    if (
-      !/\d/.test(e.key) &&
-      !["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab"].includes(e.key)
-    ) {
-      e.preventDefault();
-    }
+  function handleMemoryLimitInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    newMemoryLimit = Number(target.value);
   }
 
   // Update testcase data from child component
@@ -190,14 +193,22 @@
     <div class="settings-section">
       <p class="settings-label">Time Limit</p>
       <input
+        type="number"
         value={newTimeLimit}
         oninput={handleTimeLimitInput}
-        onkeydown={handleTimeLimitKeyDown}
         class="settings-input"
       />
       <p class="settings-additional-info">
-        Specify time limit in milliseconds. "0" Means no limit.
+        Specify time limit in milliseconds. "0" means no limit.
       </p>
+      <p class="settings-label">Memory Limit</p>
+      <input
+        type="number"
+        value={newMemoryLimit}
+        oninput={handleMemoryLimitInput}
+        class="settings-input"
+      />
+      <p class="settings-additional-info">Specify memory limit in megabytes. "0" means no limit.</p>
     </div>
     <button type="button" class="text-button" onclick={handleSaveSettings}>
       <div class="codicon codicon-save"></div>
@@ -295,6 +306,18 @@
 
   .settings-input:focus {
     border: 1px solid var(--vscode-inputOption-activeBorder);
+  }
+
+  /* Hide number input spinner buttons */
+  .settings-input::-webkit-outer-spin-button,
+  .settings-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .settings-input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   /* Testcase View */
