@@ -130,15 +130,6 @@
     postProviderMessage({ type: ProviderMessageType.ML, limit: newMemoryLimit });
   }
 
-  function handleNumericInputEnforced(e: KeyboardEvent) {
-    if (
-      !/\d/.test(e.key) &&
-      !["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab"].includes(e.key)
-    ) {
-      e.preventDefault();
-    }
-  }
-
   function handleTimeLimitInput(e: Event) {
     const target = e.target as HTMLInputElement;
     newTimeLimit = Number(target.value);
@@ -202,9 +193,9 @@
     <div class="settings-section">
       <p class="settings-label">Time Limit</p>
       <input
+        type="number"
         value={newTimeLimit}
-        oninput={handleNumericInputEnforced}
-        onkeydown={handleTimeLimitInput}
+        onchange={handleTimeLimitInput}
         class="settings-input"
       />
       <p class="settings-additional-info">
@@ -212,9 +203,9 @@
       </p>
       <p class="settings-label">Memory Limit</p>
       <input
+        type="number"
         value={newMemoryLimit}
-        oninput={handleNumericInputEnforced}
-        onkeydown={handleMemoryLimitInput}
+        onchange={handleMemoryLimitInput}
         class="settings-input"
       />
       <p class="settings-additional-info">Specify memory limit in megabytes. "0" Means no limit.</p>
@@ -315,6 +306,18 @@
 
   .settings-input:focus {
     border: 1px solid var(--vscode-inputOption-activeBorder);
+  }
+
+  /* Hide number input spinner buttons */
+  .settings-input::-webkit-outer-spin-button,
+  .settings-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .settings-input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   /* Testcase View */
