@@ -89,6 +89,7 @@ export class Runnable {
       }
 
       if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
+        this._memoryLimitExceeded = true;
         this._memoryCancellationTokenSource?.cancel();
         this._process?.kill();
         return;
