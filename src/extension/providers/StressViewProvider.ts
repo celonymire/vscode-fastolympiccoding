@@ -223,6 +223,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       ? resolveVariables(languageSettings.currentWorkingDirectory)
       : undefined;
     const testcaseTimeLimit = config.get<number>("stressTestcaseTimeLimit")!;
+    const testcaseMemoryLimit = config.get<number>("stressTestcaseMemoryLimit")!;
     const timeLimit = config.get<number>("stressTimeLimit")!;
     const start = Date.now();
 
@@ -244,7 +245,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._state[0].process.run(
         generatorRunArguments[0],
         testcaseTimeLimit,
-        0, // don't impose memory limit within stress tester
+        testcaseMemoryLimit,
         cwd,
         ...generatorRunArguments.slice(1)
       );
@@ -268,7 +269,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._state[1].process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
-        0, // don't impose memory limit within stress tester
+        testcaseMemoryLimit,
         cwd,
         ...solutionRunArguments.slice(1)
       );
@@ -289,7 +290,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._state[2].process.run(
         goodSolutionRunArguments[0],
         testcaseTimeLimit,
-        0, // don't impose memory limit within stress tester
+        testcaseMemoryLimit,
         cwd,
         ...goodSolutionRunArguments.slice(1)
       );
@@ -322,7 +323,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       await Promise.allSettled(this._state.map((value) => value.process.promise));
       for (let i = 0; i < 3; i++) {
-        if (this._state[i].process.timedOut) {
+        if (this._state[i].process.memoryLimitExceeded) {
+          anyFailed = true;
+          this._state[i].status = Status.ML;
+        } else if (this._state[i].process.timedOut) {
           anyFailed = true;
           this._state[i].status = Status.TL;
         } else if (this._state[i].process.signal === "SIGUSR1") {
@@ -401,7 +405,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       stdout: this._state[1].data.data,
       acceptedStdout: this._state[2].data.data,
       elapsed: 0,
-      memoryBytes: 0,
+      memoryBytes: this._state[id].process.maxMemoryBytes,
       status: this._state[id].status,
       shown: true,
       toggled: false,

@@ -36,7 +36,9 @@
         ? "Runtime Error"
         : status === Status.TL
           ? "Time Limit Exceeded"
-          : ""
+          : status === Status.ML
+            ? "Memory Limit Exceeded"
+            : ""
   );
 </script>
 
@@ -106,7 +108,7 @@
       </div>
     </div>
   </div>
-{:else if status === Status.WA || status === Status.RE || status === Status.TL}
+{:else if status === Status.WA || status === Status.RE || status === Status.TL || status === Status.ML}
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
@@ -126,6 +128,8 @@
               <div class="codicon codicon-bolded codicon-warning"></div>
             {:else if status === Status.TL}
               <div class="codicon codicon-bolded codicon-history"></div>
+            {:else if status === Status.ML}
+              <div class="codicon codicon-bolded codicon-chip"></div>
             {/if}
           </div>
           <p class="state-badge-text">{statusText}</p>
@@ -258,5 +262,10 @@
   /* CE=6 */
   .state-status[data-status="6"] {
     background-color: var(--vscode-terminal-ansiMagenta);
+  }
+
+  /* ML=9 */
+  .state-status[data-status="9"] {
+    background-color: var(--vscode-terminal-ansiRed);
   }
 </style>

@@ -155,6 +155,12 @@
             "description": "Maximum time (in milliseconds) to let each file run a testcase. Use 0 to let it run infinitely.",
             "minimum": 0
           },
+          "fastolympiccoding.stressTestcaseMemoryLimit": {
+            "type": "integer",
+            "default": 0,
+            "description": "Maximum memory (in megabytes) to let each file use per testcase. Use 0 to disable the memory limit.",
+            "minimum": 0
+          },
           "fastolympiccoding.stressTimeLimit": {
             "type": "integer",
             "default": 60000,
