@@ -45,8 +45,9 @@ function getWin32MemoryAddon(): Win32MemoryAddon | null {
 }
 
 export class Runnable {
-  // On Linux, memory usage can be sampled more frequently due to more efficient /proc access
-  // So, we set a lower interval there.
+  // Use a short interval to get more accurate peak memory usage.
+  // pidusage uses /proc on Linux which is very cheap to read, Windows uses a native addon,
+  // TODO: Test on MacOS and see if we need a native addon there as well.
   private static readonly MEMORY_SAMPLE_INTERVAL_MS = 100;
 
   private static readonly BYTES_PER_MEGABYTE = 1024 * 1024;
