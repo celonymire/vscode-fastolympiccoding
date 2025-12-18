@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
+import { ReadonlyStringProvider } from "../utils/vscode";
 
 interface IWorkspaceState {
   [key: string]: unknown;
@@ -66,17 +67,20 @@ export default abstract class BaseViewProvider<
   }
 
   protected _handleActiveEditorChange(editor?: vscode.TextEditor): void {
-    const file = editor?.document.fileName;
+    const document = editor?.document;
 
-    // When focusing a webview/panel, VS Code may temporarily report no active editor.
-    // Only treat "no editor" as real if there are actually no visible text editors.
-    if (!file) {
+    if (
+      !document ||
+      (document.uri.scheme !== "file" && document.uri.scheme !== "untitled") ||
+      document.uri.scheme === ReadonlyStringProvider.SCHEME
+    ) {
       if (vscode.window.visibleTextEditors.length === 0) {
         this._switchToNoFile();
       }
       return;
     }
 
+    const file = document.fileName;
     if (file !== this._currentFile) {
       this._switchToFile(file);
     }

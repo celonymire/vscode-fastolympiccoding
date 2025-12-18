@@ -986,11 +986,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _compare(id: number) {
     const testcase = this._state.get(id)!;
-    const stdout = vscode.Uri.parse(
-      `${ReadonlyStringProvider.SCHEME}:OUTPUT:\n\n${testcase.stdout.data}`
-    );
-    const acStdout = vscode.Uri.parse(
-      `${ReadonlyStringProvider.SCHEME}:ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
+    const stdout = ReadonlyStringProvider.createUri(`OUTPUT:\n\n${testcase.stdout.data}`);
+    const acStdout = ReadonlyStringProvider.createUri(
+      `ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
     );
 
     vscode.commands.executeCommand("vscode.diff", stdout, acStdout, `Diff: Testcase #${id + 1}`);

@@ -84,6 +84,13 @@ function registerDocumentContentProviders(context: vscode.ExtensionContext): voi
       new ReadonlyStringProvider()
     )
   );
+
+  // Clean up the content map when documents are closed to prevent memory leaks
+  context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      ReadonlyStringProvider.cleanup(document.uri);
+    })
+  );
 }
 
 function registerCommands(context: vscode.ExtensionContext): void {

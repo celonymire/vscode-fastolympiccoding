@@ -172,8 +172,25 @@ export async function getDefaultBuildTaskName() {
 
 export class ReadonlyStringProvider implements vscode.TextDocumentContentProvider {
   static SCHEME = "fastolympiccoding";
+  private static _contents = new Map<string, string>();
+  private static _nextId = 0;
+
+  static createUri(content: string): vscode.Uri {
+    const id = (this._nextId++).toString();
+    this._contents.set(id, content);
+    return vscode.Uri.parse(`${this.SCHEME}:/data-${id}`);
+  }
+
+  static cleanup(uri: vscode.Uri): void {
+    if (uri.scheme === this.SCHEME) {
+      const id = uri.path.replace(/^\/data-/, "");
+      this._contents.delete(id);
+    }
+  }
+
   provideTextDocumentContent(uri: vscode.Uri): vscode.ProviderResult<string> {
-    return uri.path;
+    const id = uri.path.replace(/^\/data-/, "");
+    return ReadonlyStringProvider._contents.get(id);
   }
 }
 
@@ -320,7 +337,8 @@ export function resolveCommand(
 }
 
 export async function openInNewEditor(content: string): Promise<void> {
-  const document = await vscode.workspace.openTextDocument({ content });
+  const uri = ReadonlyStringProvider.createUri(content);
+  const document = await vscode.workspace.openTextDocument(uri);
   vscode.window.showTextDocument(document);
 }
 
