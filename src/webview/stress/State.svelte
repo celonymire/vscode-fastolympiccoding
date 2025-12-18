@@ -123,11 +123,11 @@
         <div class="state-badge state-status" data-status={status}>
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             {#if status === Status.WA}
-              <div class="codicon codicon-bolded codicon-bug"></div>
+              <div class="codicon codicon-bolded codicon-error"></div>
             {:else if status === Status.RE}
               <div class="codicon codicon-bolded codicon-warning"></div>
             {:else if status === Status.TL}
-              <div class="codicon codicon-bolded codicon-history"></div>
+              <div class="codicon codicon-bolded codicon-clock"></div>
             {:else if status === Status.ML}
               <div class="codicon codicon-bolded codicon-chip"></div>
             {/if}
