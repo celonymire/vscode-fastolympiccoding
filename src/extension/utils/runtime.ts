@@ -33,11 +33,8 @@ function getWin32MemoryAddon(): Win32MemoryAddon | null {
     const loaded: unknown = nodeRequire(addonPath);
 
     if (loaded && typeof loaded === "object" && "getWin32MemoryStats" in loaded) {
-      const candidate = loaded as any;
-      if (typeof candidate.getWin32MemoryStats === "function") {
-        win32MemoryAddon = candidate as Win32MemoryAddon;
-        return win32MemoryAddon;
-      }
+      win32MemoryAddon = loaded as Win32MemoryAddon;
+      return win32MemoryAddon;
     }
 
     return null;

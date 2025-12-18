@@ -54,7 +54,7 @@ interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "accept
   process: Runnable;
 }
 
-function setTestcaseStats(state: IState, timeLimit: number, memoryLimit: number) {
+function setTestcaseStats(state: IState, timeLimit: number) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
   if (state.process.timedOut) {
@@ -233,7 +233,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (token.isCancellationRequested) {
         return;
       }
-      setTestcaseStats(testcase, this._timeLimit, this._memoryLimit);
+      setTestcaseStats(testcase, this._timeLimit);
       super._postMessage({
         type: WebviewMessageType.SET,
         id,
@@ -1041,7 +1041,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.acceptedStdout.reset();
     testcase.stdin.write(stdin, true);
     testcase.acceptedStdout.write(acceptedStdout, true);
-    setTestcaseStats(testcase, this._timeLimit, this._memoryLimit);
+    setTestcaseStats(testcase, this._timeLimit);
 
     super._postMessage({
       type: WebviewMessageType.SET,
