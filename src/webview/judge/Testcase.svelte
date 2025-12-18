@@ -187,11 +187,13 @@
             <div class="codicon codicon-bolded codicon-chip"></div>
           </div>
           <p class="testcase-elapsed-text">
-            {testcase.memoryBytes >= 1024 * 1024
-              ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
-              : testcase.memoryBytes >= 1024
-                ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
-                : testcase.memoryBytes + "B"}
+            {testcase.memoryBytes >= 1024 * 1024 * 1024
+              ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
+              : testcase.memoryBytes >= 1024 * 1024
+                ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
+                : testcase.memoryBytes >= 1024
+                  ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
+                  : testcase.memoryBytes + "B"}
           </p>
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
