@@ -195,7 +195,7 @@
       <input
         type="number"
         value={newTimeLimit}
-        onchange={handleTimeLimitInput}
+        oninput={handleTimeLimitInput}
         class="settings-input"
       />
       <p class="settings-additional-info">
@@ -205,7 +205,7 @@
       <input
         type="number"
         value={newMemoryLimit}
-        onchange={handleMemoryLimitInput}
+        oninput={handleMemoryLimitInput}
         class="settings-input"
       />
       <p class="settings-additional-info">Specify memory limit in megabytes. "0" means no limit.</p>
