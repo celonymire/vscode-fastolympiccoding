@@ -64,41 +64,44 @@ export class Runnable {
   private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
 
-  private async _trackMemoryAsync(pid: number, token: vscode.CancellationToken) {
+  private async _sampleMemory(pid: number) {
+    if (process.platform === "win32") {
+      const addon = getWin32MemoryAddon();
+      if (addon) {
+        const memStats = addon.getWin32MemoryStats(pid);
+        this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+        return;
+      } else {
+        // fallback to pidusage if addon not available
+      }
+    }
+
+    try {
+      const stats = await pidusage(pid);
+      this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
+    } catch {
+      // pidusage can throw if the process exits between samples. Treat as terminal.
+      return;
+    }
+  }
+
+  private async _sampleMemoryRepeatedly(pid: number, token: vscode.CancellationToken) {
     if (token.isCancellationRequested) {
       return;
     }
 
-    try {
-      // pidusage on Windows spawns an external process which can be slow.
-      // Use a native addon for better performance.
-      if (process.platform === "win32") {
-        const addon = getWin32MemoryAddon();
-        if (addon) {
-          const memStats = addon.getWin32MemoryStats(pid);
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-        }
-      } else {
-        // pidusage uses efficient /proc access on Linux
-        // Sorry Mac users, you're stuck with the slower method because I don't have a Mac to test on.
-        const stats = await pidusage(pid);
-        this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
-      }
+    await this._sampleMemory(pid);
 
-      if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
-        this._memoryLimitExceeded = true;
-        this._memoryCancellationTokenSource?.cancel();
-        this._process?.kill();
-        return;
-      }
-    } catch {
-      // pidusage can throw if the process exits between samples. Treat as terminal.
+    if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
+      this._memoryLimitExceeded = true;
+      this._memoryCancellationTokenSource?.cancel();
+      this._process?.kill();
       return;
     }
 
     if (!token.isCancellationRequested) {
       setTimeout(() => {
-        void this._trackMemoryAsync(pid, token);
+        void this._sampleMemoryRepeatedly(pid, token);
       }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
     }
   }
@@ -149,7 +152,10 @@ export class Runnable {
         this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
         setTimeout(() => {
           if (this._process?.pid) {
-            this._trackMemoryAsync(this._process.pid, this._memoryCancellationTokenSource!.token);
+            this._sampleMemoryRepeatedly(
+              this._process.pid,
+              this._memoryCancellationTokenSource!.token
+            );
           }
         });
 
