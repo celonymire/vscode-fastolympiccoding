@@ -66,18 +66,19 @@ export class Runnable {
   private _memoryLimitExceeded = false;
 
   private async _sampleMemory(pid: number) {
-    if (process.platform === "win32") {
-      const addon = getWin32MemoryAddon();
-      if (addon) {
-        const memStats = addon.getWin32MemoryStats(pid);
-        this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-        return;
-      } else {
-        // fallback to pidusage if addon not available
-      }
-    }
-
     try {
+      if (process.platform === "win32") {
+        const addon = getWin32MemoryAddon();
+        if (addon) {
+          const memStats = addon.getWin32MemoryStats(pid);
+          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+          return;
+        } else {
+          // fallback to pidusage if addon not available or the addon failed
+          // to get the memory stats
+        }
+      }
+
       const stats = await pidusage(pid);
       this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
     } catch {
