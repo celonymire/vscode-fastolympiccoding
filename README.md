@@ -258,6 +258,7 @@ Required files (naming scheme can be configured in settings):
 - `generatorFile`: Full path for generator file (supports `${...}`)
 - `delayBetweenTestcases`: Amount of delay between generated testcases in milliseconds **(minimum: `5`)**
 - `stressTestcaseTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to spend on one testcase **(`0` for no limit)**
+- `stressTestcaseMemoryLimit`: Maximum time in megabytes the Stress Tester is allowed to use on one testcase **(`0` for no limit)**
 - `stressTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to run **(`0` for no limit)**
 </details>
 
