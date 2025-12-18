@@ -396,7 +396,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:addon && npm run prod",
-    "build:addon": "node-gyp rebuild --target=20.0.0",
+    "build:addon": "node-gyp rebuild",
     "build:addon:clean": "node-gyp clean",
     "lint": "eslint .",
     "format": "prettier --write src",
