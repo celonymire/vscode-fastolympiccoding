@@ -167,11 +167,11 @@
             {:else if status === Status.AC}
               <div class="codicon codicon-bolded codicon-pass"></div>
             {:else if status === Status.WA}
-              <div class="codicon codicon-bolded codicon-bug"></div>
+              <div class="codicon codicon-bolded codicon-error"></div>
             {:else if status === Status.RE}
               <div class="codicon codicon-bolded codicon-warning"></div>
             {:else if status === Status.TL}
-              <div class="codicon codicon-bolded codicon-history"></div>
+              <div class="codicon codicon-bolded codicon-clock"></div>
             {:else if status === Status.ML}
               <div class="codicon codicon-bolded codicon-chip"></div>
             {/if}
