@@ -18,7 +18,8 @@ Napi::Value GetWin32MemoryStats(const Napi::CallbackInfo &info) {
       OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   if (handle == NULL) {
-    napi_throw_error(env, nullptr, "Failed to open process with given PID");
+    Napi::Error::New(env, "Failed to open process with given PID")
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -31,7 +32,8 @@ Napi::Value GetWin32MemoryStats(const Napi::CallbackInfo &info) {
                Napi::Number::New(env, (double)pmc.PeakWorkingSetSize));
   } else {
     CloseHandle(handle);
-    napi_throw_error(env, nullptr, "Failed to get process memory info");
+    Napi::Error::New(env, "Failed to get process memory info")
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 
