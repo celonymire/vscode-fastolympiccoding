@@ -96,9 +96,11 @@ export class Runnable {
       return;
     }
 
-    setTimeout(async () => {
-      this._trackMemoryAsync(pid, token);
-    }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
+    if (!token.isCancellationRequested) {
+      setTimeout(() => {
+        void this._trackMemoryAsync(pid, token);
+      }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
+    }
   }
 
   private _reset() {
