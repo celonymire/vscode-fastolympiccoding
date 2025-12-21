@@ -9,6 +9,7 @@ import * as vscode from "vscode";
 import pidusage from "pidusage";
 
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
+import { getLogger } from "./logging";
 
 type Win32MemoryAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
@@ -39,7 +40,8 @@ function getWin32MemoryAddon(): Win32MemoryAddon | null {
 
     return null;
   } catch (err) {
-    console.error("Failed to load Windows memory stats addon:", err);
+    const logger = getLogger("runtime");
+    logger.warn("Windows memory addon unavailable, using pidusage fallback (performance degraded)", err);
     return null;
   }
 }
@@ -97,6 +99,12 @@ export class Runnable {
     if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
       this._memoryLimitExceeded = true;
       this._memoryCancellationTokenSource?.cancel();
+      const logger = getLogger("runtime");
+      logger.debug("Memory limit exceeded, killing process", {
+        pid,
+        maxMemoryMB: Math.round(this._maxMemoryBytes / Runnable.BYTES_PER_MEGABYTE),
+        limitMB: Math.round(this._memoryLimitBytes / Runnable.BYTES_PER_MEGABYTE),
+      });
       this._process?.kill();
       return;
     }
@@ -163,8 +171,15 @@ export class Runnable {
 
         resolveSpawn(true);
       });
-      this._process?.once("error", () => {
+      this._process?.once("error", (err) => {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
+        const logger = getLogger("runtime");
+        logger.error("Process spawn failed", {
+          command,
+          args,
+          cwd,
+          error: err,
+        });
         resolveSpawn(false);
       });
       this._process?.once("close", async (code, signal) => {
@@ -254,6 +269,9 @@ export async function compile(
   let promise = compilePromise.get(file);
   if (!promise) {
     promise = (async () => {
+      const logger = getLogger("compilation");
+      logger.info(`Compilation started: ${file} (${currentCommand})`);
+
       const compilationStatusItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
         10000
@@ -281,8 +299,17 @@ export async function compile(
       compilationStatusItem.dispose();
       if (!process.exitCode) {
         lastCompiled.set(file, [currentChecksum, currentCommand]);
+        logger.info("Compilation succeeded", { file });
         return 0;
       }
+
+      logger.error("Compilation failed", {
+        file,
+        command: currentCommand,
+        exitCode: process.exitCode,
+        signal: process.signal,
+        stderr: err.substring(0, 500), // Truncate for readability
+      });
 
       const dummy = new ReadonlyTerminal();
       const terminal = vscode.window.createTerminal({

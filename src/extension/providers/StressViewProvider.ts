@@ -11,6 +11,7 @@ import {
   resolveVariables,
   TextHandler,
 } from "../utils/vscode";
+import { getLogger } from "../utils/logging";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
@@ -251,6 +252,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
       this._state[0].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
+          const logger = getLogger("stress");
+          logger.error("Generator process error", {
+            file: this._currentFile,
+            generatorFile: config.get("generatorFile"),
+            error: data.message,
+            command: generatorRunArguments,
+            cwd,
+          });
           this._state[0].data.write(data.message, true);
         }
       });
@@ -275,6 +284,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
       this._state[1].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
+          const logger = getLogger("stress");
+          logger.error("Solution process error", {
+            file: this._currentFile,
+            error: data.message,
+            command: solutionRunArguments,
+            cwd,
+          });
           this._state[1].data.write(data.message, true);
         }
       });
@@ -296,6 +312,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
       this._state[2].process.process?.on("error", (data) => {
         if (data.name !== "AbortError") {
+          const logger = getLogger("stress");
+          logger.error("Good solution process error", {
+            file: this._currentFile,
+            goodSolutionFile: config.get("goodSolutionFile"),
+            error: data.message,
+            command: goodSolutionRunArguments,
+            cwd,
+          });
           this._state[2].data.write(data.message, true);
         }
       });

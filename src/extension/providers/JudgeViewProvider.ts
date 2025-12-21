@@ -13,6 +13,7 @@ import {
   resolveVariables,
   TextHandler,
 } from "../utils/vscode";
+import { getLogger } from "../utils/logging";
 import {
   Action,
   ActionMessageSchema,
@@ -217,6 +218,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (token.isCancellationRequested) {
         return;
       }
+      const logger = getLogger("judge");
+      logger.error("Process error during testcase execution", {
+        testcaseId: id,
+        file: this._currentFile,
+        error: data.message,
+        command: proc.spawnargs,
+      });
       testcase.stderr.write(data.message, true);
       testcase.status = Status.RE;
       super._postMessage({
@@ -771,6 +779,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const { token, file, testcase, languageSettings } = ctx;
 
     if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
+      const logger = getLogger("judge");
+      logger.warn("Debug settings missing for language", {
+        file,
+        hasDebugCommand: !!languageSettings.debugCommand,
+        hasDebugAttachConfig: !!languageSettings.debugAttachConfig,
+      });
       vscode.window.showWarningMessage("Missing debug settings for this language.");
       return;
     }
@@ -787,6 +801,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     try {
       debugPort = await findAvailablePort();
     } catch (error) {
+      const logger = getLogger("judge");
+      logger.error("Failed to allocate debug port", {
+        file,
+        testcaseId: id,
+        error,
+      });
       vscode.window.showErrorMessage(
         `Failed to find available port for debugging: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -803,6 +823,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       .get<vscode.DebugConfiguration[]>("configurations", [])
       .find((config) => config.name === languageSettings.debugAttachConfig);
     if (!attachConfig) {
+      const logger = getLogger("judge");
+      logger.warn(`Debug attach configuration not found: ${languageSettings.debugAttachConfig}`);
       vscode.window.showWarningMessage("Debug attach configuration not found.");
       return;
     }
@@ -830,6 +852,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       await testcase.process.promise;
       const exitCode = testcase.process.exitCode;
       const signal = testcase.process.signal;
+      const logger = getLogger("judge");
+      logger.error("Debug process failed to spawn", {
+        file,
+        testcaseId: id,
+        command: resolvedArgs,
+        cwd,
+        exitCode,
+        signal,
+      });
       vscode.window.showErrorMessage(
         `Debug process failed to start (exit code ${exitCode}, signal ${signal})`
       );

@@ -11,6 +11,7 @@ import {
   stopCompetitiveCompanion,
 } from "./utils/competitiveCompanion";
 import { ReadonlyStringProvider, resolveVariables } from "./utils/vscode";
+import { initLogging } from "./utils/logging";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
 
@@ -248,6 +249,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  initLogging(context);
+
   registerViewProviders(context);
   registerCommands(context);
   registerDocumentContentProviders(context);

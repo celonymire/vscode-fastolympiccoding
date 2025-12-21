@@ -25,3 +25,10 @@ When extending functionality from the extension side:
 - For a new Judge action (for example, a new testcase operation), extend the `Action` enum and interfaces in `src/shared/judge-messages.ts`, handle the new case in the provider’s action switch, and wire a matching UI trigger in the Judge webview.
 - Debugging is supported from Judge as an **attach-mode** workflow: start the debug-wrapped process via `Runnable` (so stdin can be supplied by the extension), then call `vscode.debug.startDebugging(...)` using the configured `debugAttachConfig` name. Per-language settings are stored under `fastolympiccoding.runSettings` (`debugCommand`, `debugAttachConfig`).
 - When unsure about control flow, message patterns, or state persistence, inspect the existing implementations in `JudgeViewProvider` and `StressViewProvider` and stay consistent with those designs.
+
+**Logging:**
+
+- Use `getLogger(component)` from `src/extension/utils/logging.ts` to create component-scoped loggers. Component names should match the module (e.g., `"runtime"`, `"judge"`, `"stress"`, `"competitive-companion"`).
+- Log levels are controlled via VS Code's built-in "Developer: Set Log Level" UI (no custom settings). Use `trace` for high-frequency events (per-iteration), `debug` for sampling/diagnostics, `info` for lifecycle events (process start/stop), `warn` for recoverable issues (invalid input, missing config), and `error` for failures (process spawn, file I/O, schema validation).
+- Log only information not visible in the webview or notifications: internal diagnostic context (command args, cwd, exit codes), schema validation details, port allocations, and file system operations. Do not log full stdin/stdout/stderr or Competitive Companion payloads; log sizes/errors instead.
+- Inline metadata directly into log messages as strings (e.g., "Compilation started: /path/to/file (gcc -o out main.c)") rather than passing objects. Use `...args` to pass Error objects when needed.

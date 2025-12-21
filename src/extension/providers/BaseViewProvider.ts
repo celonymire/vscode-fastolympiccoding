@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 import { ReadonlyStringProvider } from "../utils/vscode";
+import { getLogger } from "../utils/logging";
 
 interface IWorkspaceState {
   [key: string]: unknown;
@@ -128,7 +129,8 @@ export default abstract class BaseViewProvider<
       if (result.success) {
         this.onMessage(result.output);
       } else {
-        console.error("Invalid message received:", result.issues);
+        const logger = getLogger(this.view);
+        logger.trace("Invalid webview message", result.issues[0]);
       }
     });
     webviewView.onDidDispose(() => this.onDispose());

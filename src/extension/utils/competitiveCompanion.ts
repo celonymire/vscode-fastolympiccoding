@@ -6,6 +6,7 @@ import * as v from "valibot";
 
 import { ProblemSchema } from "../../shared/schemas";
 import type JudgeViewProvider from "../providers/JudgeViewProvider";
+import { getLogger } from "./logging";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 
@@ -101,7 +102,14 @@ async function processProblem(
   }
 
   const absolutePath = path.join(workspaceRoot, relativePath);
-  await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
+  try {
+    await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
+  } catch (error) {
+    const logger = getLogger("competitive-companion");
+    logger.error(`Failed to create/write target file: ${absolutePath}`, error);
+    vscode.window.showErrorMessage(`Failed to write file: ${absolutePath}`);
+    return;
+  }
 
   judge.addFromCompetitiveCompanion(absolutePath, problem);
 
@@ -144,7 +152,9 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
       try {
         problem = v.parse(ProblemSchema, JSON.parse(body));
       } catch (error) {
-        console.error("Invalid data from Competitive Companion received:", error);
+        const logger = getLogger("competitive-companion");
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logger.warn(`Invalid data received (${body.length} bytes): ${errorMsg}`);
         res.statusCode = 400;
         res.end("Bad Request");
         return;
@@ -187,8 +197,16 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
   server = http.createServer(createRequestHandler(judgeViewProvider));
 
   server.once("connection", (socket) => socket.unref());
-  server.once("listening", () => statusBarItem?.show());
+  server.once("listening", () => {
+    const config = vscode.workspace.getConfiguration("fastolympiccoding");
+    const port = config.get<number>("port")!;
+    const logger = getLogger("competitive-companion");
+    logger.info(`Listener started on port ${port}`);
+    statusBarItem?.show();
+  });
   server.once("error", (error) => {
+    const logger = getLogger("competitive-companion");
+    logger.error(`Listener error: ${error}`);
     vscode.window.showErrorMessage(`Competitive Companion listener error: ${error}`);
     server?.close();
     server = undefined;
