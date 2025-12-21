@@ -13,7 +13,15 @@ Napi::Value GetWin32MemoryStats(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
-  auto pid = info[0].As<Napi::Number>().Uint32Value();
+  // Validate the argument type before converting. N-API C++ wrapper's As<T>()
+  // does not perform a JS-to-C++ conversion or produce a helpful JS exception
+  // if the value is not already the expected JS type.
+  if (!info[0].IsNumber()) {
+    napi_throw_type_error(env, nullptr, "PID must be a number");
+    return env.Null();
+  }
+
+  uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
   auto handle =
       OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
