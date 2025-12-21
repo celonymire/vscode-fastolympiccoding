@@ -131,7 +131,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const fileData = super.readStorage()[file];
     const arrayDataSchema = v.fallback(v.array(StressDataSchema), []);
     const state = v.parse(arrayDataSchema, fileData);
-    for (let id = 0; id < state.length; id++) {
+    for (let id = 0; id < Math.min(state.length, this._state.length); id++) {
       const testcase = state[id];
       this._state[id].status = testcase.status;
       this._state[id].data.reset();
@@ -463,7 +463,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       isDefault &&= state.data.data === "";
       isDefault &&= state.status === Status.NA;
     }
-    super.writeStorage(
+    void super.writeStorage(
       file,
       isDefault
         ? undefined

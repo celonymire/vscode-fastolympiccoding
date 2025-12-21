@@ -505,7 +505,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         memoryLimit: data.memoryLimit,
         testcases,
       };
-      super.writeStorage(file, fileData);
+      void super.writeStorage(file, fileData);
     }
   }
 
@@ -529,7 +529,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         memoryLimit: fileData.memoryLimit ?? 0,
         testcases,
       };
-      super.writeStorage(file, data);
+      void super.writeStorage(file, data);
     }
   }
 
@@ -611,7 +611,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     if (this._state.size === 0 && this._timeLimit === 0 && this._memoryLimit === 0) {
       // everything is defaulted, might as well not save it
-      super.writeStorage(file, undefined);
+      void super.writeStorage(file, undefined);
       return;
     }
 
@@ -635,7 +635,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       memoryLimit: this._memoryLimit,
       testcases,
     };
-    super.writeStorage(file, fileData);
+    void super.writeStorage(file, fileData);
   }
 
   private _addTestcase(testcase?: Partial<ITestcase>) {

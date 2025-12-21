@@ -153,16 +153,23 @@ export default abstract class BaseViewProvider<
     return data;
   }
 
-  writeStorage(file: string, data?: object) {
-    const fileData = this._context.workspaceState.get(this.view, {});
-    this._context.workspaceState.update(this.view, {
-      ...fileData,
-      [`${file}`]: data,
-    });
+  async writeStorage(file: string, data?: object): Promise<void> {
+    const fileData = this._context.workspaceState.get(this.view, {}) as Record<string, unknown>;
+    if (data === undefined) {
+      // Delete the key when data is undefined (PERS-006)
+      const updated = { ...fileData };
+      delete updated[file];
+      await this._context.workspaceState.update(this.view, updated);
+    } else {
+      await this._context.workspaceState.update(this.view, {
+        ...fileData,
+        [`${file}`]: data,
+      });
+    }
   }
 
-  clearData() {
-    this._context.workspaceState.update(this.view, undefined);
+  async clearData(): Promise<void> {
+    await this._context.workspaceState.update(this.view, undefined);
   }
 
   protected _postMessage(msg: WebviewMessageType): void {
