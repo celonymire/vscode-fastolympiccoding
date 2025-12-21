@@ -10,10 +10,67 @@ import pidusage from "pidusage";
 
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
 import { getLogger } from "./logging";
+import { Status } from "../../shared/enums";
 
 type Win32MemoryAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
 };
+
+// ============================================================================
+// RunSession API Types
+// ============================================================================
+
+export type RunTermination =
+  | "spawn-failed" // process failed to start
+  | "timeout" // killed by timeout
+  | "memory" // killed by memory limit
+  | "stopped" // stopped by caller
+  | "exit" // normal exit
+  | "signal"; // killed by OS signal
+
+export function mapCompilationTermination(
+  termination: RunTermination,
+  exitCode?: number | null
+): Status {
+  switch (termination) {
+    case "timeout":
+      return Status.TL;
+    case "memory":
+      return Status.ML;
+    case "stopped":
+      return Status.NA;
+    case "spawn-failed":
+      return Status.RE;
+    case "signal":
+      return Status.RE;
+    case "exit":
+      return exitCode === 0 ? Status.NA : Status.CE;
+    default:
+      return Status.RE;
+  }
+}
+
+export function mapTestcaseTermination(
+  termination: RunTermination,
+  exitCode?: number | null
+): Status {
+  switch (termination) {
+    case "timeout":
+      return Status.TL;
+    case "memory":
+      return Status.ML;
+    case "stopped":
+      return Status.NA;
+    case "spawn-failed":
+      return Status.RE;
+    case "signal":
+      return Status.RE;
+    case "exit":
+      return exitCode === 0 ? Status.NA : Status.RE;
+    default:
+      return Status.RE;
+  }
+}
 
 let win32MemoryAddon: Win32MemoryAddon | null = null;
 
@@ -41,10 +98,24 @@ function getWin32MemoryAddon(): Win32MemoryAddon | null {
     return null;
   } catch (err) {
     const logger = getLogger("runtime");
-    logger.warn("Windows memory addon unavailable, using pidusage fallback (performance degraded)", err);
+    logger.warn(
+      "Windows memory addon unavailable, using pidusage fallback (performance degraded)",
+      err
+    );
     return null;
   }
 }
+
+// ============================================================================
+// Runnable - Process runner with session-based listener API
+// ============================================================================
+
+type ListenerCallback =
+  | (() => void)
+  | ((data: string) => void)
+  | ((data: string | Error) => void)
+  | ((code: number | null, signal: NodeJS.Signals | null) => void)
+  | ((err: Error) => void);
 
 export class Runnable {
   // Use a short interval to get more accurate peak memory usage.
@@ -67,6 +138,10 @@ export class Runnable {
   private _maxMemoryBytes = 0;
   private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
+
+  // Listener management for session API
+  private _disposed = false;
+  private _stopRequested = false;
 
   private async _sampleMemory(pid: number) {
     try {
@@ -218,9 +293,6 @@ export class Runnable {
   get process() {
     return this._process;
   }
-  get promise() {
-    return this._promise;
-  }
   get elapsed(): number {
     return Math.round(this._endTime - this._startTime);
   }
@@ -238,6 +310,112 @@ export class Runnable {
   }
   get memoryLimitExceeded(): boolean {
     return this._memoryLimitExceeded;
+  }
+  get spawned(): Promise<boolean> {
+    return this._spawnPromise ?? Promise.resolve(false);
+  }
+  get done(): Thenable<RunTermination> {
+    const promise = this._promise ?? Promise.resolve();
+    return promise.then(() => this._computeTermination());
+  }
+
+  /**
+   * Attach a listener to a process event. Returns this for method chaining.
+   * Listeners are automatically removed on dispose().
+   */
+  on(event: "spawn", listener: () => void): Runnable;
+  on(event: "error", listener: (err: Error) => void): Runnable;
+  on(event: "stderr:data" | "stdout:data", listener: (data: string) => void): Runnable;
+  on(event: "stderr:end" | "stdout:end", listener: () => void): Runnable;
+  on(
+    event: "close",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void
+  ): Runnable;
+  on(event: string, listener: ListenerCallback): Runnable {
+    if (this._disposed) {
+      return this;
+    }
+
+    this._attachListener(event, listener);
+    return this;
+  }
+
+  /**
+   * Dispose of the process and remove all attached listeners.
+   * Returns a thenable that resolves when cleanup is complete.
+   */
+  dispose(): Thenable<void> {
+    if (this._disposed) {
+      return Promise.resolve();
+    }
+    this._disposed = true;
+    this._stopRequested = true;
+
+    // Stop the process gracefully
+    this._process?.kill();
+
+    // Remove all attached listeners via EventEmitter's built-in registry
+    this._process?.removeAllListeners();
+    this._process?.stdout.removeAllListeners();
+    this._process?.stderr.removeAllListeners();
+
+    return Promise.resolve();
+  }
+
+  private _attachListener(event: string, listener: ListenerCallback): void {
+    const proc = this._process;
+    if (!proc) return;
+
+    switch (event) {
+      case "spawn":
+        proc.once("spawn", listener as () => void);
+        break;
+      case "error":
+        proc.on("error", listener as (err: Error) => void);
+        break;
+      case "stderr:data":
+        proc.stderr.on("data", listener as (data: string) => void);
+        break;
+      case "stdout:data":
+        proc.stdout.on("data", listener as (data: string) => void);
+        break;
+      case "stderr:end":
+        proc.stderr.once("end", listener as () => void);
+        break;
+      case "stdout:end":
+        proc.stdout.once("end", listener as () => void);
+        break;
+      case "close":
+        proc.once(
+          "close",
+          listener as (code: number | null, signal: NodeJS.Signals | null) => void
+        );
+        break;
+    }
+  }
+
+  private _computeTermination(): RunTermination {
+    // If user called dispose(), mark as stopped
+    if (this._stopRequested) {
+      return "stopped";
+    }
+
+    // Check termination reasons in priority order
+    if (this._timedOut) {
+      return "timeout";
+    }
+    if (this._memoryLimitExceeded) {
+      return "memory";
+    }
+    if (this._signal) {
+      return "signal";
+    }
+    if (this._exitCode !== null) {
+      return "exit";
+    }
+
+    // Fallback: if spawn never succeeded, classify as spawn-failed
+    return "exit";
   }
 }
 
@@ -295,48 +473,53 @@ export async function compile(
       compilationStatusItem.show();
       context.subscriptions.push(compilationStatusItem);
 
-      const process = new Runnable();
-      process.run(resolvedArgs[0], undefined, undefined, undefined, ...resolvedArgs.slice(1));
+      const runnable = new Runnable();
+      runnable.run(resolvedArgs[0], undefined, undefined, undefined, ...resolvedArgs.slice(1));
 
       let err = "";
-      process.process?.stderr.on("data", (data: string) => {
-        err += data;
-      });
-      process.process?.once("error", (data) => {
-        err += data.stack;
-      });
+      runnable
+        .on("stderr:data", (data) => {
+          err += data;
+        })
+        .on("error", (data) => {
+          err += data.stack;
+        });
 
-      await process.promise;
+      const termination = await runnable.done;
+      void runnable.dispose();
       compilationStatusItem.dispose();
-      if (!process.exitCode) {
-        lastCompiled.set(file, [currentChecksum, currentCommand]);
-        logger.info("Compilation succeeded", { file });
-        return 0;
+
+      const status = mapCompilationTermination(termination, runnable.exitCode);
+
+      if (status === Status.CE || status === Status.RE) {
+        logger.error("Compilation failed", {
+          file,
+          command: currentCommand,
+          exitCode: runnable.exitCode,
+          termination,
+          stderr: err.substring(0, 500), // Truncate for readability
+        });
+
+        const dummy = new ReadonlyTerminal();
+        const terminal = vscode.window.createTerminal({
+          name: path.basename(file),
+          pty: dummy,
+          iconPath: { id: "zap" },
+          location: { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+        });
+        errorTerminal.set(file, terminal);
+
+        terminal.show(true);
+
+        // Ensure the pseudoterminal is opened before writing errors
+        await dummy.ready;
+        dummy.write(err);
+        return runnable.exitCode ?? 1;
       }
 
-      logger.error("Compilation failed", {
-        file,
-        command: currentCommand,
-        exitCode: process.exitCode,
-        signal: process.signal,
-        stderr: err.substring(0, 500), // Truncate for readability
-      });
-
-      const dummy = new ReadonlyTerminal();
-      const terminal = vscode.window.createTerminal({
-        name: path.basename(file),
-        pty: dummy,
-        iconPath: { id: "zap" },
-        location: { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-      });
-      errorTerminal.set(file, terminal);
-
-      terminal.show(true);
-
-      // Ensure the pseudoterminal is opened before writing errors
-      await dummy.ready;
-      dummy.write(err);
-      return process.exitCode;
+      lastCompiled.set(file, [currentChecksum, currentCommand]);
+      logger.info("Compilation succeeded", { file });
+      return 0;
     })();
     compilePromise.set(file, promise);
   }

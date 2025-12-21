@@ -3,7 +3,7 @@ import * as v from "valibot";
 
 import { Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
-import { compile, Runnable } from "../utils/runtime";
+import { compile, mapTestcaseTermination, Runnable } from "../utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -288,10 +288,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...generatorRunArguments.slice(1)
       );
-      this._state[0].process.process?.on("error", this._errorHandlers[0]);
-      this._state[0].process.process?.stdin.write(`${seed}\n`);
-      this._state[0].process.process?.stdout.on("data", this._stdoutDataHandlers[0]);
-      this._state[0].process.process?.stdout.once("end", this._stdoutEndHandlers[0]);
+      this._state[0].process
+        .on("spawn", () => {
+          this._state[0].process.process?.stdin.write(`${seed}\n`);
+        })
+        .on("error", this._errorHandlers[0])
+        .on("stdout:data", this._stdoutDataHandlers[0])
+        .on("stdout:end", this._stdoutEndHandlers[0]);
 
       const solutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
@@ -305,9 +308,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...solutionRunArguments.slice(1)
       );
-      this._state[1].process.process?.on("error", this._errorHandlers[1]);
-      this._state[1].process.process?.stdout.on("data", this._stdoutDataHandlers[1]);
-      this._state[1].process.process?.stdout.once("end", this._stdoutEndHandlers[1]);
+      this._state[1].process
+        .on("error", this._errorHandlers[1])
+        .on("stdout:data", this._stdoutDataHandlers[1])
+        .on("stdout:end", this._stdoutEndHandlers[1]);
 
       const goodSolutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
@@ -321,29 +325,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...goodSolutionRunArguments.slice(1)
       );
-      this._state[2].process.process?.on("error", this._errorHandlers[2]);
-      this._state[2].process.process?.stdout.on("data", this._stdoutDataHandlers[2]);
-      this._state[2].process.process?.stdout.once("end", this._stdoutEndHandlers[2]);
+      this._state[2].process
+        .on("error", this._errorHandlers[2])
+        .on("stdout:data", this._stdoutDataHandlers[2])
+        .on("stdout:end", this._stdoutEndHandlers[2])
+        .on("close", this._closeHandlers[2]);
 
-      this._state[0].process.process?.once("close", this._closeHandlers[0]);
-      this._state[1].process.process?.once("close", this._closeHandlers[1]);
-      this._state[2].process.process?.once("close", this._closeHandlers[2]);
+      this._state[0].process.on("close", this._closeHandlers[0]);
+      this._state[1].process.on("close", this._closeHandlers[1]);
 
-      await Promise.allSettled(this._state.map((value) => value.process.promise));
+      const terminations = await Promise.all(this._state.map((value) => value.process.done));
       for (let i = 0; i < 3; i++) {
-        if (this._state[i].process.memoryLimitExceeded) {
-          anyFailed = true;
-          this._state[i].status = Status.ML;
-        } else if (this._state[i].process.timedOut) {
-          anyFailed = true;
-          this._state[i].status = Status.TL;
-        } else if (this._stopRequested[i]) {
+        this._state[i].status = mapTestcaseTermination(terminations[i], this._state[i].process.exitCode);
+        if (this._stopRequested[i]) {
           this._state[i].status = Status.NA;
-        } else if (this._state[i].process.exitCode !== 0) {
+        } else if (this._state[i].status !== Status.NA) {
           anyFailed = true;
-          this._state[i].status = Status.RE;
-        } else {
-          this._state[i].status = Status.NA;
         }
       }
       if (anyFailed || this._state[1].data.data !== this._state[2].data.data) {

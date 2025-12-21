@@ -4,7 +4,8 @@ import * as v from "valibot";
 import { Status, Stdio } from "../../shared/enums";
 import { ProblemSchema, TestSchema, TestcaseSchema } from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
-import { compile, findAvailablePort, Runnable } from "../utils/runtime";
+import { compile, findAvailablePort, mapTestcaseTermination, Runnable } from "../utils/runtime";
+import type { RunTermination } from "../utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -55,7 +56,7 @@ interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "accept
   process: Runnable;
 }
 
-function setTestcaseStats(state: IState, timeLimit: number) {
+function setTestcaseStats(state: IState, timeLimit: number, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
   if (state.process.timedOut) {
@@ -63,14 +64,19 @@ function setTestcaseStats(state: IState, timeLimit: number) {
     state.status = Status.TL;
   } else if (state.process.memoryLimitExceeded) {
     state.status = Status.ML;
-  } else if (state.process.exitCode === null || state.process.exitCode) {
-    state.status = Status.RE;
-  } else if (state.acceptedStdout.data === "\n") {
-    state.status = Status.NA;
-  } else if (state.stdout.data === state.acceptedStdout.data) {
-    state.status = Status.AC;
   } else {
-    state.status = Status.WA;
+    // Use helper to determine base status from termination
+    state.status = mapTestcaseTermination(termination, state.process.exitCode);
+    if (state.status === Status.NA) {
+      // Exit succeeded; refine with output comparison
+      if (state.acceptedStdout.data === "\n") {
+        state.status = Status.NA;
+      } else if (state.stdout.data === state.acceptedStdout.data) {
+        state.status = Status.AC;
+      } else {
+        state.status = Status.WA;
+      }
+    }
   }
 }
 
@@ -108,7 +114,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     // stop already-running process
     this._stop(id);
-    await testcase.process.promise;
+    await testcase.process.done;
 
     if (token.isCancellationRequested || testcase.skipped) {
       return;
@@ -203,45 +209,45 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     // Write stdin once the process is spawned (more reliable than writing immediately).
-    proc.once("spawn", () => {
+    testcase.process.on("spawn", () => {
       if (token.isCancellationRequested) {
         return;
       }
       proc.stdin.write(testcase.stdin.data);
     });
 
-    proc.stderr.on("data", (data: string) => testcase.stderr.write(data, false));
-    proc.stdout.on("data", (data: string) => testcase.stdout.write(data, false));
-    proc.stderr.once("end", () => testcase.stderr.write("", true));
-    proc.stdout.once("end", () => testcase.stdout.write("", true));
-    proc.once("error", (data: Error) => {
-      if (token.isCancellationRequested) {
-        return;
-      }
-      const logger = getLogger("judge");
-      logger.error("Process error during testcase execution", {
-        testcaseId: id,
-        file: this._currentFile,
-        error: data.message,
-        command: proc.spawnargs,
-      });
-      testcase.stderr.write(data.message, true);
-      testcase.status = Status.RE;
-      super._postMessage({
+    testcase.process
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, false))
+      .on("stdout:data", (data: string) => testcase.stdout.write(data, false))
+      .on("stderr:end", () => testcase.stderr.write("", true))
+      .on("stdout:end", () => testcase.stdout.write("", true))
+      .on("error", (data: Error) => {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        const logger = getLogger("judge");
+        logger.error("Process error during testcase execution", {
+          testcaseId: id,
+          file: this._currentFile,
+          error: data.message,
+          command: proc.spawnargs,
+        });
+        testcase.stderr.write(data.message, true);
+        testcase.status = Status.RE;
+        super._postMessage({
         type: WebviewMessageType.SET,
         id,
         property: "status",
         value: Status.RE,
       });
       this._saveFileData();
-    });
-    proc.once("close", () => {
-      proc.stderr.removeAllListeners("data");
-      proc.stdout.removeAllListeners("data");
+    })
+    .on("close", async () => {
       if (token.isCancellationRequested) {
         return;
       }
-      setTestcaseStats(testcase, this._timeLimit);
+      const termination = await testcase.process.done;
+      setTestcaseStats(testcase, this._timeLimit, termination);
       super._postMessage({
         type: WebviewMessageType.SET,
         id,
@@ -849,7 +855,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Wait for the debug process to spawn before attaching
     const spawned = await testcase.process.waitForSpawn();
     if (!spawned || token.isCancellationRequested) {
-      await testcase.process.promise;
+      await testcase.process.done;
       const exitCode = testcase.process.exitCode;
       const signal = testcase.process.signal;
       const logger = getLogger("judge");
@@ -1070,7 +1076,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.acceptedStdout.reset();
     testcase.stdin.write(stdin, true);
     testcase.acceptedStdout.write(acceptedStdout, true);
-    setTestcaseStats(testcase, this._timeLimit);
+    
+    // Manual save: determine status from output comparison only
+    if (testcase.acceptedStdout.data === "\n") {
+      testcase.status = Status.NA;
+    } else if (testcase.stdout.data === testcase.acceptedStdout.data) {
+      testcase.status = Status.AC;
+    } else {
+      testcase.status = Status.WA;
+    }
 
     super._postMessage({
       type: WebviewMessageType.SET,
