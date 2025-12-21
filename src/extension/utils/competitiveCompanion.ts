@@ -129,7 +129,9 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
 
   return (req, res) => {
     if (req.method !== "POST") {
-      res.end();
+      res.statusCode = 405;
+      res.setHeader("Allow", "POST");
+      res.end("Method Not Allowed");
       return;
     }
 
@@ -137,16 +139,19 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
     req.setEncoding("utf-8");
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
-      res.end(() => req.socket.unref());
-
       // Parse and validate the problem data
       let problem: Problem;
       try {
         problem = v.parse(ProblemSchema, JSON.parse(body));
       } catch (error) {
         console.error("Invalid data from Competitive Companion received:", error);
+        res.statusCode = 400;
+        res.end("Bad Request");
         return;
       }
+
+      res.statusCode = 200;
+      res.end(() => req.socket.unref());
 
       vscode.window.showInformationMessage(`Received data for "${problem.name}"`);
       problemQueue.enqueue(problem);
