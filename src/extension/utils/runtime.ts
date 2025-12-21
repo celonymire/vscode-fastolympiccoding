@@ -63,6 +63,7 @@ export class Runnable {
   private _timedOut = false;
   private _exitCode: number | null = 0;
   private _memoryCancellationTokenSource: vscode.CancellationTokenSource | null = null;
+  private _memorySampleTimeout: NodeJS.Timeout | null = null;
   private _maxMemoryBytes = 0;
   private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
@@ -110,7 +111,7 @@ export class Runnable {
     }
 
     if (!token.isCancellationRequested) {
-      setTimeout(() => {
+      this._memorySampleTimeout = setTimeout(() => {
         void this._sampleMemoryRepeatedly(pid, token);
       }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
     }
@@ -118,6 +119,11 @@ export class Runnable {
 
   private _reset() {
     this._memoryCancellationTokenSource?.cancel();
+    this._memoryCancellationTokenSource?.dispose();
+    if (this._memorySampleTimeout) {
+      clearTimeout(this._memorySampleTimeout);
+      this._memorySampleTimeout = null;
+    }
 
     this._process = undefined;
     this._promise = undefined;
@@ -184,6 +190,11 @@ export class Runnable {
       });
       this._process?.once("close", async (code, signal) => {
         this._memoryCancellationTokenSource?.cancel();
+        this._memoryCancellationTokenSource?.dispose();
+        if (this._memorySampleTimeout) {
+          clearTimeout(this._memorySampleTimeout);
+          this._memorySampleTimeout = null;
+        }
 
         this._endTime = performance.now();
         this._signal = signal;
