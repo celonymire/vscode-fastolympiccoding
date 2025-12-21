@@ -45,8 +45,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     { data: new TextHandler(), status: Status.NA, process: new Runnable() },
   ]; // [generator, solution, good solution]
   private _stopFlag = false;
+  private _stopRequested = [false, false, false]; // track intentional stops per process
   private _clearFlag = false;
   private _running = false;
+  // Context for current run (used by handlers)
+  private _runCommands: string[][] = [[], [], []];
+  private _runCwd: string | undefined;
+  // Bound handlers (created once, reused across iterations)
+  private readonly _errorHandlers: [(err: Error) => void, (err: Error) => void, (err: Error) => void];
+  private readonly _stdoutDataHandlers: [(data: string) => void, (data: string) => void, (data: string) => void];
+  private readonly _stdoutEndHandlers: [() => void, () => void, () => void];
+  private readonly _closeHandlers: [(code: number | null) => void, (code: number | null) => void, (code: number | null) => void];
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
@@ -87,6 +96,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   ) {
     super("stress", context, ProviderMessageSchema);
 
+    // Initialize bound handlers once
+    this._errorHandlers = [
+      this._onProcessError.bind(this, 0),
+      this._onProcessError.bind(this, 1),
+      this._onProcessError.bind(this, 2),
+    ];
+    this._stdoutDataHandlers = [
+      this._onStdoutData.bind(this, 0),
+      this._onStdoutData.bind(this, 1),
+      this._onStdoutData.bind(this, 2),
+    ];
+    this._stdoutEndHandlers = [
+      this._onStdoutEnd.bind(this, 0),
+      this._onStdoutEnd.bind(this, 1),
+      this._onStdoutEnd.bind(this, 2),
+    ];
+    this._closeHandlers = [
+      this._onProcessClose.bind(this, 0),
+      this._onProcessClose.bind(this, 1),
+      this._onProcessClose.bind(this, 2),
+    ];
+
     for (let id = 0; id < 3; id++) {
       this._state[id].data.callback = (data: string) => {
         super._postMessage({
@@ -109,6 +140,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
       this._state[id].status = Status.NA;
+      this._stopRequested[id] = false;
     }
     this._currentFile = undefined;
     this._sendShowMessage(false);
@@ -122,6 +154,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
       this._state[id].status = Status.NA;
+      this._stopRequested[id] = false;
     }
 
     this._currentFile = file;
@@ -223,6 +256,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const cwd = languageSettings.currentWorkingDirectory
       ? resolveVariables(languageSettings.currentWorkingDirectory)
       : undefined;
+    this._runCwd = cwd;
     const testcaseTimeLimit = config.get<number>("stressTestcaseTimeLimit")!;
     const testcaseMemoryLimit = config.get<number>("stressTestcaseMemoryLimit")!;
     const timeLimit = config.get<number>("stressTimeLimit")!;
@@ -230,6 +264,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     let anyFailed = false;
     this._stopFlag = false;
+    for (let i = 0; i < 3; i++) {
+      this._stopRequested[i] = false;
+    }
     this._clearFlag = false;
     this._running = true;
     while (!this._stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
@@ -243,6 +280,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         languageSettings.runCommand,
         config.get("generatorFile")!
       );
+      this._runCommands[0] = generatorRunArguments;
       this._state[0].process.run(
         generatorRunArguments[0],
         testcaseTimeLimit,
@@ -250,31 +288,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...generatorRunArguments.slice(1)
       );
-      this._state[0].process.process?.on("error", (data) => {
-        if (data.name !== "AbortError") {
-          const logger = getLogger("stress");
-          logger.error("Generator process error", {
-            file: this._currentFile,
-            generatorFile: config.get("generatorFile"),
-            error: data.message,
-            command: generatorRunArguments,
-            cwd,
-          });
-          this._state[0].data.write(data.message, true);
-        }
-      });
+      this._state[0].process.process?.on("error", this._errorHandlers[0]);
       this._state[0].process.process?.stdin.write(`${seed}\n`);
-      this._state[0].process.process?.stdout.on("data", (data: string) => {
-        this._state[0].data.write(data, false);
-        this._state[1].process.process?.stdin.write(data);
-        this._state[2].process.process?.stdin.write(data);
-      });
-      this._state[0].process.process?.stdout.once("end", () => this._state[0].data.write("", true));
+      this._state[0].process.process?.stdout.on("data", this._stdoutDataHandlers[0]);
+      this._state[0].process.process?.stdout.once("end", this._stdoutEndHandlers[0]);
 
       const solutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
         "${file}"
       );
+      this._runCommands[1] = solutionRunArguments;
       this._state[1].process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
@@ -282,27 +305,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...solutionRunArguments.slice(1)
       );
-      this._state[1].process.process?.on("error", (data) => {
-        if (data.name !== "AbortError") {
-          const logger = getLogger("stress");
-          logger.error("Solution process error", {
-            file: this._currentFile,
-            error: data.message,
-            command: solutionRunArguments,
-            cwd,
-          });
-          this._state[1].data.write(data.message, true);
-        }
-      });
-      this._state[1].process.process?.stdout.on("data", (data: string) =>
-        this._state[1].data.write(data, false)
-      );
-      this._state[1].process.process?.stdout.once("end", () => this._state[1].data.write("", true));
+      this._state[1].process.process?.on("error", this._errorHandlers[1]);
+      this._state[1].process.process?.stdout.on("data", this._stdoutDataHandlers[1]);
+      this._state[1].process.process?.stdout.once("end", this._stdoutEndHandlers[1]);
 
       const goodSolutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
         config.get("goodSolutionFile")!
       );
+      this._runCommands[2] = goodSolutionRunArguments;
       this._state[2].process.run(
         goodSolutionRunArguments[0],
         testcaseTimeLimit,
@@ -310,40 +321,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...goodSolutionRunArguments.slice(1)
       );
-      this._state[2].process.process?.on("error", (data) => {
-        if (data.name !== "AbortError") {
-          const logger = getLogger("stress");
-          logger.error("Good solution process error", {
-            file: this._currentFile,
-            goodSolutionFile: config.get("goodSolutionFile"),
-            error: data.message,
-            command: goodSolutionRunArguments,
-            cwd,
-          });
-          this._state[2].data.write(data.message, true);
-        }
-      });
-      this._state[2].process.process?.stdout.on("data", (data: string) =>
-        this._state[2].data.write(data, false)
-      );
-      this._state[2].process.process?.stdout.once("end", () => this._state[2].data.write("", true));
+      this._state[2].process.process?.on("error", this._errorHandlers[2]);
+      this._state[2].process.process?.stdout.on("data", this._stdoutDataHandlers[2]);
+      this._state[2].process.process?.stdout.once("end", this._stdoutEndHandlers[2]);
 
-      for (let i = 0; i < 3; i++) {
-        // if any process fails then the other 2 should be gracefully closed
-        this._state[i].process.process?.once("close", (code) => {
-          // Clean up all listeners to prevent accumulation
-          this._state[i].process.process?.removeAllListeners("error");
-          this._state[i].process.process?.stdout.removeAllListeners("data");
-
-          if (code === null || code) {
-            for (let j = 0; j < 3; j++) {
-              if (j !== i) {
-                this._state[j].process.process?.kill("SIGUSR1");
-              }
-            }
-          }
-        });
-      }
+      this._state[0].process.process?.once("close", this._closeHandlers[0]);
+      this._state[1].process.process?.once("close", this._closeHandlers[1]);
+      this._state[2].process.process?.once("close", this._closeHandlers[2]);
 
       await Promise.allSettled(this._state.map((value) => value.process.promise));
       for (let i = 0; i < 3; i++) {
@@ -353,7 +337,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         } else if (this._state[i].process.timedOut) {
           anyFailed = true;
           this._state[i].status = Status.TL;
-        } else if (this._state[i].process.signal === "SIGUSR1") {
+        } else if (this._stopRequested[i]) {
           this._state[i].status = Status.NA;
         } else if (this._state[i].process.exitCode !== 0) {
           anyFailed = true;
@@ -395,7 +379,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (this._running) {
       this._stopFlag = true;
       for (let i = 0; i < 3; i++) {
-        this._state[i].process.process?.kill("SIGUSR1");
+        this._stopRequested[i] = true;
+        this._state[i].process.process?.kill();
       }
     }
   }
@@ -478,5 +463,55 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const resolvedFile = resolveVariables(fileVariable);
     const resolvedArgs = resolveCommand(runCommand, resolvedFile);
     return resolvedArgs;
+  }
+
+  private _onProcessError(processId: 0 | 1 | 2, data: Error) {
+    if (data.name !== "AbortError") {
+      const logger = getLogger("stress");
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      const fileLabels = [
+        `generatorFile: ${config.get("generatorFile")}`,
+        `solution: ${this._currentFile}`,
+        `goodSolutionFile: ${config.get("goodSolutionFile")}`,
+      ];
+      logger.error(`${fileLabels[processId]} process error`, {
+        file: this._currentFile,
+        error: data.message,
+        command: this._runCommands[processId],
+        cwd: this._runCwd,
+      });
+      this._state[processId].data.write(data.message, true);
+    }
+  }
+
+  private _onStdoutData(processId: 0 | 1 | 2, data: string) {
+    this._state[processId].data.write(data, false);
+    if (processId === 0) {
+      // Generator pipes to solution and good solution
+      this._state[1].process.process?.stdin.write(data);
+      this._state[2].process.process?.stdin.write(data);
+    }
+  }
+
+  private _onStdoutEnd(processId: 0 | 1 | 2) {
+    this._state[processId].data.write("", true);
+  }
+
+  private _onProcessClose(processId: 0 | 1 | 2, code: number | null) {
+    const proc = this._state[processId].process.process;
+    if (!proc) return;
+
+    // Detach listeners using stored references
+    proc.off("error", this._errorHandlers[processId]);
+    proc.stdout.off("data", this._stdoutDataHandlers[processId]);
+
+    if (code === null || code) {
+      // Cascade kill siblings (not user-requested stop)
+      for (let i = 0; i < 3; i++) {
+        if (i !== processId) {
+          this._state[i].process.process?.kill();
+        }
+      }
+    }
   }
 }
