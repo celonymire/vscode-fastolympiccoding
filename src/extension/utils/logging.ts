@@ -10,27 +10,27 @@ const loggerCache = new Map<string, ReturnType<typeof createLogger>>();
  * @param context - Extension context for subscription management
  */
 export function initLogging(context: vscode.ExtensionContext): void {
-	if (logOutputChannel) {
-		return; // Already initialized
-	}
+  if (logOutputChannel) {
+    return; // Already initialized
+  }
 
-	logOutputChannel = vscode.window.createOutputChannel("Fast Olympic Coding", { log: true });
-	context.subscriptions.push(logOutputChannel);
+  logOutputChannel = vscode.window.createOutputChannel("Fast Olympic Coding", { log: true });
+  context.subscriptions.push(logOutputChannel);
 }
 
 function createLogger(component: string) {
-	return {
-		trace: (message: string, ...args: unknown[]) =>
-			logOutputChannel!.trace(`[${component}] ${message}`, ...args),
-		debug: (message: string, ...args: unknown[]) =>
-			logOutputChannel!.debug(`[${component}] ${message}`, ...args),
-		info: (message: string, ...args: unknown[]) =>
-			logOutputChannel!.info(`[${component}] ${message}`, ...args),
-		warn: (message: string, ...args: unknown[]) =>
-			logOutputChannel!.warn(`[${component}] ${message}`, ...args),
-		error: (message: string, ...args: unknown[]) =>
-			logOutputChannel!.error(`[${component}] ${message}`, ...args),
-	};
+  return {
+    trace: (message: string, ...args: unknown[]) =>
+      logOutputChannel!.trace(`[${component}] ${message}`, ...args),
+    debug: (message: string, ...args: unknown[]) =>
+      logOutputChannel!.debug(`[${component}] ${message}`, ...args),
+    info: (message: string, ...args: unknown[]) =>
+      logOutputChannel!.info(`[${component}] ${message}`, ...args),
+    warn: (message: string, ...args: unknown[]) =>
+      logOutputChannel!.warn(`[${component}] ${message}`, ...args),
+    error: (message: string, ...args: unknown[]) =>
+      logOutputChannel!.error(`[${component}] ${message}`, ...args),
+  };
 }
 
 /**
@@ -42,14 +42,14 @@ function createLogger(component: string) {
  * @returns Object with trace/debug/info/warn/error logging methods
  */
 export function getLogger(component: string) {
-	if (!logOutputChannel) {
-		throw new Error("Logging not initialized. Call initLogging() first.");
-	}
+  if (!logOutputChannel) {
+    throw new Error("Logging not initialized. Call initLogging() first.");
+  }
 
-	let logger = loggerCache.get(component);
-	if (!logger) {
-		logger = createLogger(component);
-		loggerCache.set(component, logger);
-	}
-	return logger;
+  let logger = loggerCache.get(component);
+  if (!logger) {
+    logger = createLogger(component);
+    loggerCache.set(component, logger);
+  }
+  return logger;
 }

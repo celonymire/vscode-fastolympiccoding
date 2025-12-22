@@ -1,70 +1,78 @@
 import * as v from "valibot";
-import { Stdio } from "./enums";
+import { StdioSchema } from "./enums";
 
-export enum Action {
-  RUN = 0,
-  STOP = 1,
-  DELETE = 2,
-  EDIT = 3,
-  ACCEPT = 4,
-  DECLINE = 5,
-  TOGGLE_VISIBILITY = 6,
-  TOGGLE_SKIP = 7,
-  COMPARE = 8,
-  DEBUG = 9,
-}
+export const ActionValues = [
+  "RUN",
+  "STOP",
+  "DELETE",
+  "EDIT",
+  "ACCEPT",
+  "DECLINE",
+  "TOGGLE_VISIBILITY",
+  "TOGGLE_SKIP",
+  "COMPARE",
+  "DEBUG",
+] as const;
 
-export enum ProviderMessageType {
-  LOADED = 0,
-  NEXT = 1,
-  ACTION = 2,
-  SAVE = 3,
-  VIEW = 4,
-  STDIN = 5,
-  TL = 6,
-  ML = 7,
-}
+export type ActionValue = (typeof ActionValues)[number];
+
+export const ActionSchema = v.picklist(ActionValues);
+
+export const ProviderMessageTypeValues = [
+  "LOADED",
+  "NEXT",
+  "ACTION",
+  "SAVE",
+  "VIEW",
+  "STDIN",
+  "TL",
+  "ML",
+] as const;
+
+export type ProviderMessageTypeValue = (typeof ProviderMessageTypeValues)[number];
+
+export const ProviderMessageTypeSchema = v.picklist(ProviderMessageTypeValues);
 
 export const LoadedMessageSchema = v.object({
-  type: v.literal(ProviderMessageType.LOADED),
+  type: v.literal("LOADED"),
 });
 
 export const NextMessageSchema = v.object({
-  type: v.literal(ProviderMessageType.NEXT),
+  type: v.literal("NEXT"),
 });
 
 export const ActionMessageSchema = v.object({
-  type: v.literal(ProviderMessageType.ACTION),
+  type: v.literal("ACTION"),
   id: v.number(),
-  action: v.enum(Action),
+  action: ActionSchema,
 });
 
 export const SaveMessageSchema = v.object({
-  type: v.literal(ProviderMessageType.SAVE),
+  type: v.literal("SAVE"),
   id: v.number(),
   stdin: v.string(),
   acceptedStdout: v.string(),
 });
 
 export const ViewMessageSchema = v.object({
-  type: v.literal(ProviderMessageType.VIEW),
+  type: v.literal("VIEW"),
   id: v.number(),
-  stdio: v.enum(Stdio),
+  stdio: StdioSchema,
 });
 
 export const StdinMessageSchema = v.object({
-  type: v.literal(ProviderMessageType.STDIN),
+  type: v.literal("STDIN"),
   id: v.number(),
   data: v.string(),
 });
 
 export const SetTimeLimitSchema = v.object({
-  type: v.literal(ProviderMessageType.TL),
+  type: v.literal("TL"),
   limit: v.number(),
 });
 
 export const SetMemoryLimitSchema = v.object({
-  type: v.literal(ProviderMessageType.ML),
+  type: v.literal("ML"),
   limit: v.number(),
 });
 
@@ -81,24 +89,28 @@ export const ProviderMessageSchema = v.union([
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;
 
-export enum WebviewMessageType {
-  NEW = 0,
-  SET = 1,
-  STDIO = 2,
-  DELETE = 3,
-  SAVE_ALL = 4,
-  SHOW = 5,
-  INITIAL_STATE = 6,
-  SETTINGS_TOGGLE = 7,
-}
+export const WebviewMessageTypeValues = [
+  "NEW",
+  "SET",
+  "STDIO",
+  "DELETE",
+  "SAVE_ALL",
+  "SHOW",
+  "INITIAL_STATE",
+  "SETTINGS_TOGGLE",
+] as const;
+
+export type WebviewMessageTypeValue = (typeof WebviewMessageTypeValues)[number];
+
+export const WebviewMessageTypeSchema = v.picklist(WebviewMessageTypeValues);
 
 export const NewMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.NEW),
+  type: v.literal("NEW"),
   id: v.number(),
 });
 
 export const SetMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.SET),
+  type: v.literal("SET"),
   id: v.number(),
   property: v.picklist([
     "stdin",
@@ -116,34 +128,34 @@ export const SetMessageSchema = v.object({
 });
 
 export const StdioMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.STDIO),
+  type: v.literal("STDIO"),
   id: v.number(),
-  stdio: v.enum(Stdio),
+  stdio: StdioSchema,
   data: v.string(),
 });
 
 export const DeleteMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.DELETE),
+  type: v.literal("DELETE"),
   id: v.number(),
 });
 
 export const SaveAllMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.SAVE_ALL),
+  type: v.literal("SAVE_ALL"),
 });
 
 export const ShowMessageSchema = v.object({
-  type: v.literal(WebviewMessageType.SHOW),
+  type: v.literal("SHOW"),
   visible: v.boolean(),
 });
 
 export const InitialStateSchema = v.object({
-  type: v.literal(WebviewMessageType.INITIAL_STATE),
+  type: v.literal("INITIAL_STATE"),
   timeLimit: v.number(),
   memoryLimit: v.number(),
 });
 
 export const SettingsToggleSchema = v.object({
-  type: v.literal(WebviewMessageType.SETTINGS_TOGGLE),
+  type: v.literal("SETTINGS_TOGGLE"),
 });
 
 export const WebviewMessageSchema = v.union([

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { Status } from "../../shared/enums";
+import { StatusSchema, type Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
 import { compile, mapTestcaseTermination, Runnable } from "../utils/runtime";
 import {
@@ -16,15 +16,13 @@ import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
   ProviderMessageSchema,
-  ProviderMessageType,
   ViewMessageSchema,
   type WebviewMessage,
-  WebviewMessageType,
 } from "../../shared/stress-messages";
 
 const StressDataSchema = v.object({
   data: v.fallback(v.string(), ""),
-  status: v.fallback(v.enum(Status), Status.NA),
+  status: v.fallback(StatusSchema, "NA"),
 });
 
 interface IData {
@@ -40,9 +38,9 @@ interface IState {
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
   private _state: IState[] = [
-    { data: new TextHandler(), status: Status.NA, process: new Runnable() },
-    { data: new TextHandler(), status: Status.NA, process: new Runnable() },
-    { data: new TextHandler(), status: Status.NA, process: new Runnable() },
+    { data: new TextHandler(), status: "NA", process: new Runnable() },
+    { data: new TextHandler(), status: "NA", process: new Runnable() },
+    { data: new TextHandler(), status: "NA", process: new Runnable() },
   ]; // [generator, solution, good solution]
   private _stopFlag = false;
   private _stopRequested = [false, false, false]; // track intentional stops per process
@@ -52,29 +50,41 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _runCommands: string[][] = [[], [], []];
   private _runCwd: string | undefined;
   // Bound handlers (created once, reused across iterations)
-  private readonly _errorHandlers: [(err: Error) => void, (err: Error) => void, (err: Error) => void];
-  private readonly _stdoutDataHandlers: [(data: string) => void, (data: string) => void, (data: string) => void];
+  private readonly _errorHandlers: [
+    (err: Error) => void,
+    (err: Error) => void,
+    (err: Error) => void,
+  ];
+  private readonly _stdoutDataHandlers: [
+    (data: string) => void,
+    (data: string) => void,
+    (data: string) => void,
+  ];
   private readonly _stdoutEndHandlers: [() => void, () => void, () => void];
-  private readonly _closeHandlers: [(code: number | null) => void, (code: number | null) => void, (code: number | null) => void];
+  private readonly _closeHandlers: [
+    (code: number | null) => void,
+    (code: number | null) => void,
+    (code: number | null) => void,
+  ];
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
-      case ProviderMessageType.LOADED:
+      case "LOADED":
         this.loadCurrentFileData();
         break;
-      case ProviderMessageType.RUN:
+      case "RUN":
         void this.run();
         break;
-      case ProviderMessageType.STOP:
+      case "STOP":
         this.stop();
         break;
-      case ProviderMessageType.VIEW:
+      case "VIEW":
         this._view(msg);
         break;
-      case ProviderMessageType.ADD:
+      case "ADD":
         this._add(msg);
         break;
-      case ProviderMessageType.CLEAR:
+      case "CLEAR":
         this.clear();
         break;
     }
@@ -121,7 +131,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     for (let id = 0; id < 3; id++) {
       this._state[id].data.callback = (data: string) => {
         super._postMessage({
-          type: WebviewMessageType.STDIO,
+          type: "STDIO",
           id,
           data,
         });
@@ -132,14 +142,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _sendShowMessage(visible: boolean): void {
-    super._postMessage({ type: WebviewMessageType.SHOW, visible });
+    super._postMessage({ type: "SHOW", visible });
   }
 
   protected override _switchToNoFile() {
     this.stop();
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
-      this._state[id].status = Status.NA;
+      this._state[id].status = "NA";
       this._stopRequested[id] = false;
     }
     this._currentFile = undefined;
@@ -153,7 +163,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Reset in-memory state.
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
-      this._state[id].status = Status.NA;
+      this._state[id].status = "NA";
       this._stopRequested[id] = false;
     }
 
@@ -177,7 +187,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   protected override _rehydrateWebviewFromState() {
     super._postMessage({
-      type: WebviewMessageType.INIT,
+      type: "INIT",
       states: [
         { data: this._state[0].data.data, status: this._state[0].status },
         { data: this._state[1].data.data, status: this._state[1].status },
@@ -203,16 +213,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (languageSettings.compileCommand) {
       for (let id = 0; id < 3; id++) {
         super._postMessage({
-          type: WebviewMessageType.STATUS,
+          type: "STATUS",
           id,
-          status: Status.COMPILING,
+          status: "COMPILING",
         });
       }
 
       const callback = (id: number, code: number) => {
-        const status = code ? Status.CE : Status.NA;
+        const status = code ? "CE" : "NA";
         this._state[id].status = status;
-        super._postMessage({ type: WebviewMessageType.STATUS, id, status });
+        super._postMessage({ type: "STATUS", id, status });
         return code;
       };
       const promises = [
@@ -247,9 +257,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     for (let id = 0; id < 3; id++) {
       super._postMessage({
-        type: WebviewMessageType.STATUS,
+        type: "STATUS",
         id,
-        status: Status.RUNNING,
+        status: "RUNNING",
       });
     }
 
@@ -270,7 +280,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._clearFlag = false;
     this._running = true;
     while (!this._stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
-      super._postMessage({ type: WebviewMessageType.CLEAR });
+      super._postMessage({ type: "CLEAR" });
       for (let i = 0; i < 3; i++) {
         this._state[i].data.reset();
       }
@@ -336,10 +346,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       const terminations = await Promise.all(this._state.map((value) => value.process.done));
       for (let i = 0; i < 3; i++) {
-        this._state[i].status = mapTestcaseTermination(terminations[i], this._state[i].process.exitCode);
+        this._state[i].status = mapTestcaseTermination(
+          terminations[i],
+          this._state[i].process.exitCode
+        );
         if (this._stopRequested[i]) {
-          this._state[i].status = Status.NA;
-        } else if (this._state[i].status !== Status.NA) {
+          this._state[i].status = "NA";
+        } else if (this._state[i].status !== "NA") {
           anyFailed = true;
         }
       }
@@ -353,18 +366,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (this._clearFlag) {
       for (let id = 0; id < 3; id++) {
         this._state[id].data.reset();
-        this._state[id].status = Status.NA;
+        this._state[id].status = "NA";
       }
 
-      super._postMessage({ type: WebviewMessageType.CLEAR });
+      super._postMessage({ type: "CLEAR" });
     } else if (!anyFailed && this._state[1].data.data !== this._state[2].data.data) {
-      this._state[1].status = Status.WA;
+      this._state[1].status = "WA";
     }
     this._clearFlag = false;
 
     for (let id = 0; id < 3; id++) {
       super._postMessage({
-        type: WebviewMessageType.STATUS,
+        type: "STATUS",
         id,
         status: this._state[id].status,
       });
@@ -426,10 +439,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     } else {
       for (let id = 0; id < 3; id++) {
         this._state[id].data.reset();
-        this._state[id].status = Status.NA;
+        this._state[id].status = "NA";
       }
 
-      super._postMessage({ type: WebviewMessageType.CLEAR });
+      super._postMessage({ type: "CLEAR" });
       this._saveState();
     }
   }
@@ -443,7 +456,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     let isDefault = true;
     for (const state of this._state) {
       isDefault &&= state.data.data === "";
-      isDefault &&= state.status === Status.NA;
+      isDefault &&= state.status === "NA";
     }
     void super.writeStorage(
       file,

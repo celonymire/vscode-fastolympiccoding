@@ -10,7 +10,7 @@ import pidusage from "pidusage";
 
 import { ReadonlyTerminal, resolveCommand } from "./vscode";
 import { getLogger } from "./logging";
-import { Status } from "../../shared/enums";
+import type { Status } from "../../shared/enums";
 
 type Win32MemoryAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
@@ -34,19 +34,19 @@ export function mapCompilationTermination(
 ): Status {
   switch (termination) {
     case "timeout":
-      return Status.TL;
+      return "TL";
     case "memory":
-      return Status.ML;
+      return "ML";
     case "stopped":
-      return Status.NA;
+      return "NA";
     case "spawn-failed":
-      return Status.RE;
+      return "RE";
     case "signal":
-      return Status.RE;
+      return "RE";
     case "exit":
-      return exitCode === 0 ? Status.NA : Status.CE;
+      return exitCode === 0 ? "NA" : "CE";
     default:
-      return Status.RE;
+      return "RE";
   }
 }
 
@@ -56,19 +56,19 @@ export function mapTestcaseTermination(
 ): Status {
   switch (termination) {
     case "timeout":
-      return Status.TL;
+      return "TL";
     case "memory":
-      return Status.ML;
+      return "ML";
     case "stopped":
-      return Status.NA;
+      return "NA";
     case "spawn-failed":
-      return Status.RE;
+      return "RE";
     case "signal":
-      return Status.RE;
+      return "RE";
     case "exit":
-      return exitCode === 0 ? Status.NA : Status.RE;
+      return exitCode === 0 ? "NA" : "RE";
     default:
-      return Status.RE;
+      return "RE";
   }
 }
 
@@ -491,7 +491,7 @@ export async function compile(
 
       const status = mapCompilationTermination(termination, runnable.exitCode);
 
-      if (status === Status.CE || status === Status.RE) {
+      if (status === "CE" || status === "RE") {
         logger.error("Compilation failed", {
           file,
           command: currentCommand,

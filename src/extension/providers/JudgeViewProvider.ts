@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { Status, Stdio } from "../../shared/enums";
 import { ProblemSchema, TestSchema, TestcaseSchema } from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
 import { compile, findAvailablePort, mapTestcaseTermination, Runnable } from "../utils/runtime";
@@ -16,17 +15,14 @@ import {
 } from "../utils/vscode";
 import { getLogger } from "../utils/logging";
 import {
-  Action,
   ActionMessageSchema,
   ProviderMessageSchema,
-  ProviderMessageType,
   SaveMessageSchema,
   SetMemoryLimitSchema,
   SetTimeLimitSchema,
   StdinMessageSchema,
   ViewMessageSchema,
   type WebviewMessage,
-  WebviewMessageType,
 } from "../../shared/judge-messages";
 
 type IProblem = v.InferOutput<typeof ProblemSchema>;
@@ -61,20 +57,20 @@ function setTestcaseStats(state: IState, timeLimit: number, termination: RunTerm
   state.memoryBytes = state.process.maxMemoryBytes;
   if (state.process.timedOut) {
     state.elapsed = timeLimit;
-    state.status = Status.TL;
+    state.status = "TL";
   } else if (state.process.memoryLimitExceeded) {
-    state.status = Status.ML;
+    state.status = "ML";
   } else {
     // Use helper to determine base status from termination
     state.status = mapTestcaseTermination(termination, state.process.exitCode);
-    if (state.status === Status.NA) {
+    if (state.status === "NA") {
       // Exit succeeded; refine with output comparison
       if (state.acceptedStdout.data === "\n") {
-        state.status = Status.NA;
+        state.status = "NA";
       } else if (state.stdout.data === state.acceptedStdout.data) {
-        state.status = Status.AC;
+        state.status = "AC";
       } else {
-        state.status = Status.WA;
+        state.status = "WA";
       }
     }
   }
@@ -139,23 +135,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return false;
     }
 
-    testcase.status = Status.COMPILING;
+    testcase.status = "COMPILING";
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
-      value: Status.COMPILING,
+      value: "COMPILING",
     });
 
     const code = await compile(file, languageSettings.compileCommand, this._context);
 
     if (!token.isCancellationRequested && code) {
-      testcase.status = Status.CE;
+      testcase.status = "CE";
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "status",
-        value: Status.CE,
+        value: "CE",
       });
       this._saveFileData();
       return true;
@@ -167,7 +163,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _clearIOTexts(id: number, testcase: IState) {
     testcase.stderr.reset();
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "stderr",
       value: "",
@@ -175,18 +171,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     testcase.stdout.reset();
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "stdout",
       value: "",
     });
 
-    testcase.status = Status.RUNNING;
+    testcase.status = "RUNNING";
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
-      value: Status.RUNNING,
+      value: "RUNNING",
     });
   }
 
@@ -233,68 +229,68 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           command: proc.spawnargs,
         });
         testcase.stderr.write(data.message, true);
-        testcase.status = Status.RE;
+        testcase.status = "RE";
         super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "status",
-        value: Status.RE,
-      });
-      this._saveFileData();
-    })
-    .on("close", async () => {
-      if (token.isCancellationRequested) {
-        return;
-      }
-      const termination = await testcase.process.done;
-      setTestcaseStats(testcase, this._timeLimit, termination);
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "status",
-        value: testcase.status,
-      });
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "elapsed",
-        value: testcase.elapsed,
-      });
-      super._postMessage({
-        type: WebviewMessageType.SET,
-        id,
-        property: "memoryBytes",
-        value: testcase.memoryBytes,
-      });
+          type: "SET",
+          id,
+          property: "status",
+          value: "RE",
+        });
+        this._saveFileData();
+      })
+      .on("close", async () => {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        const termination = await testcase.process.done;
+        setTestcaseStats(testcase, this._timeLimit, termination);
+        super._postMessage({
+          type: "SET",
+          id,
+          property: "status",
+          value: testcase.status,
+        });
+        super._postMessage({
+          type: "SET",
+          id,
+          property: "elapsed",
+          value: testcase.elapsed,
+        });
+        super._postMessage({
+          type: "SET",
+          id,
+          property: "memoryBytes",
+          value: testcase.memoryBytes,
+        });
 
-      this._saveFileData();
-    });
+        this._saveFileData();
+      });
   }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
-      case ProviderMessageType.LOADED:
+      case "LOADED":
         this.loadCurrentFileData();
         break;
-      case ProviderMessageType.NEXT:
+      case "NEXT":
         this._nextTestcase();
         break;
-      case ProviderMessageType.ACTION:
+      case "ACTION":
         this._action(msg);
         break;
-      case ProviderMessageType.SAVE:
+      case "SAVE":
         this._save(msg);
         break;
-      case ProviderMessageType.VIEW:
+      case "VIEW":
         this._viewStdio(msg);
         break;
-      case ProviderMessageType.STDIN:
+      case "STDIN":
         this._stdin(msg);
         break;
-      case ProviderMessageType.TL:
+      case "TL":
         this._setTimeLimit(msg);
         break;
-      case ProviderMessageType.ML:
+      case "ML":
         this._setMemoryLimit(msg);
         break;
     }
@@ -342,7 +338,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _sendShowMessage(visible: boolean): void {
-    super._postMessage({ type: WebviewMessageType.SHOW, visible });
+    super._postMessage({ type: "SHOW", visible });
   }
 
   protected override _switchToNoFile() {
@@ -352,7 +348,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     this.stopAll();
     for (const id of this._state.keys()) {
-      super._postMessage({ type: WebviewMessageType.DELETE, id });
+      super._postMessage({ type: "DELETE", id });
     }
     this._state.clear();
     this._timeLimit = 0;
@@ -372,7 +368,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Stop any processes tied to the previous file, and clear state/webview.
     this.stopAll();
     for (const id of this._state.keys()) {
-      super._postMessage({ type: WebviewMessageType.DELETE, id });
+      super._postMessage({ type: "DELETE", id });
     }
     this._state.clear();
     this._timeLimit = 0;
@@ -393,7 +389,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     super._postMessage({
-      type: WebviewMessageType.INITIAL_STATE,
+      type: "INITIAL_STATE",
       timeLimit: this._timeLimit,
       memoryLimit: this._memoryLimit,
     });
@@ -401,72 +397,72 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   protected override _rehydrateWebviewFromState() {
     super._postMessage({
-      type: WebviewMessageType.INITIAL_STATE,
+      type: "INITIAL_STATE",
       timeLimit: this._timeLimit,
       memoryLimit: this._memoryLimit,
     });
 
     for (const [id, testcase] of this._state.entries()) {
       // Ensure a clean slate for this id in the webview.
-      super._postMessage({ type: WebviewMessageType.DELETE, id });
-      super._postMessage({ type: WebviewMessageType.NEW, id });
+      super._postMessage({ type: "DELETE", id });
+      super._postMessage({ type: "NEW", id });
 
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "stdin",
         value: testcase.stdin.data,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "stderr",
         value: testcase.stderr.data,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "stdout",
         value: testcase.stdout.data,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "acceptedStdout",
         value: testcase.acceptedStdout.data,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "elapsed",
         value: testcase.elapsed,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "memoryBytes",
         value: testcase.memoryBytes,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "status",
         value: testcase.status,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "shown",
         value: testcase.shown,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "toggled",
         value: testcase.toggled,
       });
       super._postMessage({
-        type: WebviewMessageType.SET,
+        type: "SET",
         id,
         property: "skipped",
         value: testcase.skipped,
@@ -483,7 +479,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         acceptedStdout: test.output,
         elapsed: 0,
         memoryBytes: 0,
-        status: Status.WA,
+        status: "WA",
         shown: true,
         toggled: false,
         skipped: false,
@@ -501,7 +497,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._saveFileData();
 
       super._postMessage({
-        type: WebviewMessageType.INITIAL_STATE,
+        type: "INITIAL_STATE",
         timeLimit: data.timeLimit,
         memoryLimit: data.memoryLimit,
       });
@@ -564,11 +560,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   saveAll() {
-    super._postMessage({ type: WebviewMessageType.SAVE_ALL });
+    super._postMessage({ type: "SAVE_ALL" });
   }
 
   toggleWebviewSettings() {
-    super._postMessage({ type: WebviewMessageType.SETTINGS_TOGGLE });
+    super._postMessage({ type: "SETTINGS_TOGGLE" });
   }
 
   private _nextTestcase() {
@@ -577,34 +573,34 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _action({ id, action }: v.InferOutput<typeof ActionMessageSchema>) {
     switch (action) {
-      case Action.RUN:
+      case "RUN":
         void this._run(id, false);
         break;
-      case Action.DEBUG:
+      case "DEBUG":
         void this._debug(id);
         break;
-      case Action.STOP:
+      case "STOP":
         this._stop(id);
         break;
-      case Action.DELETE:
+      case "DELETE":
         this._delete(id);
         break;
-      case Action.EDIT:
+      case "EDIT":
         this._edit(id);
         break;
-      case Action.ACCEPT:
+      case "ACCEPT":
         this._accept(id);
         break;
-      case Action.DECLINE:
+      case "DECLINE":
         this._decline(id);
         break;
-      case Action.TOGGLE_VISIBILITY:
+      case "TOGGLE_VISIBILITY":
         this._toggleVisibility(id);
         break;
-      case Action.TOGGLE_SKIP:
+      case "TOGGLE_SKIP":
         this._toggleSkip(id);
         break;
-      case Action.COMPARE:
+      case "COMPARE":
         this._compare(id);
         break;
     }
@@ -652,7 +648,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _createTestcaseState(id: number, testcase?: Partial<ITestcase>) {
     // using partial type to have backward compatibility with old testcases
     // create a new testcase in webview and fill it in later
-    super._postMessage({ type: WebviewMessageType.NEW, id });
+    super._postMessage({ type: "NEW", id });
 
     const newTestcase: IState = {
       stdin: new TextHandler(),
@@ -661,7 +657,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       acceptedStdout: new TextHandler(),
       elapsed: testcase?.elapsed ?? 0,
       memoryBytes: testcase?.memoryBytes ?? 0,
-      status: testcase?.status ?? Status.NA,
+      status: testcase?.status ?? "NA",
       shown: testcase?.shown ?? true,
       toggled: testcase?.toggled ?? false,
       skipped: testcase?.skipped ?? false,
@@ -671,30 +667,30 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     newTestcase.stdin.callback = (data: string) =>
       super._postMessage({
-        type: WebviewMessageType.STDIO,
+        type: "STDIO",
         id,
-        stdio: Stdio.STDIN,
+        stdio: "STDIN",
         data,
       });
     newTestcase.stderr.callback = (data: string) =>
       super._postMessage({
-        type: WebviewMessageType.STDIO,
+        type: "STDIO",
         id,
-        stdio: Stdio.STDERR,
+        stdio: "STDERR",
         data,
       });
     newTestcase.stdout.callback = (data: string) =>
       super._postMessage({
-        type: WebviewMessageType.STDIO,
+        type: "STDIO",
         id,
-        stdio: Stdio.STDOUT,
+        stdio: "STDOUT",
         data,
       });
     newTestcase.acceptedStdout.callback = (data: string) =>
       super._postMessage({
-        type: WebviewMessageType.STDIO,
+        type: "STDIO",
         id,
-        stdio: Stdio.ACCEPTED_STDOUT,
+        stdio: "ACCEPTED_STDOUT",
         data,
       });
 
@@ -704,37 +700,37 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true); // force endline for empty answer comparison
 
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
       value: newTestcase.status,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "elapsed",
       value: newTestcase.elapsed,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "memoryBytes",
       value: newTestcase.memoryBytes,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "shown",
       value: newTestcase.shown,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "toggled",
       value: newTestcase.toggled,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "skipped",
       value: newTestcase.skipped,
@@ -917,28 +913,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _delete(id: number) {
     this._stop(id);
-    super._postMessage({ type: WebviewMessageType.DELETE, id });
+    super._postMessage({ type: "DELETE", id });
     this._state.delete(id);
     this._saveFileData();
   }
 
   private _edit(id: number) {
     const testcase = this._state.get(id)!;
-    testcase.status = Status.EDITING;
+    testcase.status = "EDITING";
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
-      value: Status.EDITING,
+      value: "EDITING",
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "stdin",
       value: testcase.stdin.data,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "acceptedStdout",
       value: testcase.acceptedStdout.data,
@@ -948,16 +944,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _accept(id: number) {
     const testcase = this._state.get(id)!;
 
-    testcase.status = Status.AC;
+    testcase.status = "AC";
     // shortened version will be sent back while writing
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
       value: testcase.status,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "acceptedStdout",
       value: "",
@@ -971,16 +967,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _decline(id: number) {
     const testcase = this._state.get(id)!;
 
-    testcase.status = Status.NA;
+    testcase.status = "NA";
     testcase.acceptedStdout.reset();
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
       value: testcase.status,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "acceptedStdout",
       value: "",
@@ -991,16 +987,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _toggleVisibility(id: number) {
     const testcase = this._state.get(id)!;
 
-    testcase.shown = testcase.toggled ? !testcase.shown : testcase.status === Status.AC;
+    testcase.shown = testcase.toggled ? !testcase.shown : testcase.status === "AC";
     testcase.toggled = true;
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "shown",
       value: testcase.shown,
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "toggled",
       value: true,
@@ -1013,7 +1009,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     testcase.skipped = !testcase.skipped;
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "skipped",
       value: testcase.skipped,
@@ -1035,16 +1031,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const testcase = this._state.get(id)!;
 
     switch (stdio) {
-      case Stdio.STDIN:
+      case "STDIN":
         void openInNewEditor(testcase.stdin.data);
         break;
-      case Stdio.STDERR:
+      case "STDERR":
         void openInNewEditor(testcase.stderr.data);
         break;
-      case Stdio.STDOUT:
+      case "STDOUT":
         void openInNewEditor(testcase.stdout.data);
         break;
-      case Stdio.ACCEPTED_STDOUT:
+      case "ACCEPTED_STDOUT":
         void openInNewEditor(testcase.acceptedStdout.data);
         break;
     }
@@ -1060,13 +1056,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const testcase = this._state.get(id)!;
 
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "stdin",
       value: "",
     });
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "acceptedStdout",
       value: "",
@@ -1076,18 +1072,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.acceptedStdout.reset();
     testcase.stdin.write(stdin, true);
     testcase.acceptedStdout.write(acceptedStdout, true);
-    
+
     // Manual save: determine status from output comparison only
     if (testcase.acceptedStdout.data === "\n") {
-      testcase.status = Status.NA;
+      testcase.status = "NA";
     } else if (testcase.stdout.data === testcase.acceptedStdout.data) {
-      testcase.status = Status.AC;
+      testcase.status = "AC";
     } else {
-      testcase.status = Status.WA;
+      testcase.status = "WA";
     }
 
     super._postMessage({
-      type: WebviewMessageType.SET,
+      type: "SET",
       id,
       property: "status",
       value: testcase.status,

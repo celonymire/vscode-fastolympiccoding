@@ -2,15 +2,13 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import { Status } from "../../shared/enums";
+  import type { Status } from "../../shared/enums";
   import {
     type InitMessageSchema,
-    ProviderMessageType,
     type ShowMessageSchema,
     type StatusMessageSchema,
     type StdioMessageSchema,
     type WebviewMessage,
-    WebviewMessageType,
   } from "../../shared/stress-messages";
   import { postProviderMessage } from "./message";
   import State from "./State.svelte";
@@ -26,18 +24,18 @@
 
   // Reactive state using Svelte 5 runes
   let items = $state<IStateData[]>([
-    { data: "", status: Status.NA },
-    { data: "", status: Status.NA },
-    { data: "", status: Status.NA },
+    { data: "", status: "NA" },
+    { data: "", status: "NA" },
+    { data: "", status: "NA" },
   ]);
   let showView = $state(true);
 
   function expand(id: number) {
-    postProviderMessage({ type: ProviderMessageType.VIEW, id });
+    postProviderMessage({ type: "VIEW", id });
   }
 
   function add(id: number) {
-    postProviderMessage({ type: ProviderMessageType.ADD, id });
+    postProviderMessage({ type: "ADD", id });
   }
 
   function handleStatus({ id, status }: v.InferOutput<typeof StatusMessageSchema>) {
@@ -51,7 +49,7 @@
   function handleClear() {
     for (let i = 0; i < 3; i++) {
       items[i].data = "";
-      items[i].status = Status.NA;
+      items[i].status = "NA";
     }
   }
 
@@ -69,26 +67,26 @@
   onMount(() => {
     const handleMessage = (event: MessageEvent<WebviewMessage>) => {
       switch (event.data.type) {
-        case WebviewMessageType.STATUS:
+        case "STATUS":
           handleStatus(event.data);
           break;
-        case WebviewMessageType.STDIO:
+        case "STDIO":
           handleStdio(event.data);
           break;
-        case WebviewMessageType.CLEAR:
+        case "CLEAR":
           handleClear();
           break;
-        case WebviewMessageType.SHOW:
+        case "SHOW":
           handleShow(event.data);
           break;
-        case WebviewMessageType.INIT:
+        case "INIT":
           handleInit(event.data);
           break;
       }
     };
 
     window.addEventListener("message", handleMessage);
-    postProviderMessage({ type: ProviderMessageType.LOADED });
+    postProviderMessage({ type: "LOADED" });
 
     return () => {
       window.removeEventListener("message", handleMessage);
