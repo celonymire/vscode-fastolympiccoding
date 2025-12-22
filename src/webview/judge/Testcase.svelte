@@ -452,8 +452,7 @@
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  /* ML=9 */
-  .testcase-elapsed[data-status="9"] {
+  .testcase-elapsed[data-status="ML"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 </style>
