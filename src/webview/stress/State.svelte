@@ -136,9 +136,9 @@
         </div>
       </div>
       <div class="state-toolbar-right">
-        <div class="state-toolbar-icon" role="button" tabindex="0" onclick={handleAdd}>
+        <button class="state-toolbar-icon" aria-label="Add" onclick={handleAdd}>
           <div class="codicon codicon-insert"></div>
-        </div>
+        </button>
       </div>
     </div>
     <AutoresizeTextarea
@@ -201,6 +201,9 @@
     align-self: stretch;
     border-radius: 2px;
     padding: 3px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
   }
 
   .state-toolbar-icon:not(.state-toolbar-icon-exclude-highlight):hover {

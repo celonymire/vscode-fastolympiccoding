@@ -124,35 +124,34 @@
           </div>
           <p class="testcase-elapsed-text">CE</p>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleRun}>
+        <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDebug}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Debug" onclick={handleDebug}>
           <div class="codicon codicon-debug-alt"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleEdit}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Edit" onclick={handleEdit}>
           <div class="codicon codicon-edit"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDelete}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Delete" onclick={handleDelete}>
           <div class="codicon codicon-trash"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleToggleVisibility}>
+        </button>
+        <button
+          class="testcase-toolbar-icon"
+          aria-label={showDetails ? "Hide details" : "Show details"}
+          onclick={handleToggleVisibility}
+        >
           <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div
+        </button>
+        <button
           class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+          aria-label={skipped ? "Unskip" : "Skip"}
           onclick={handleToggleSkip}
         >
           <div
             class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
           ></div>
-        </div>
+        </button>
       </div>
     </div>
   </div>
@@ -196,54 +195,50 @@
                   : testcase.memoryBytes + "B"}
           </p>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleRun}>
+        <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDebug}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Debug" onclick={handleDebug}>
           <div class="codicon codicon-debug-alt"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleEdit}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Edit" onclick={handleEdit}>
           <div class="codicon codicon-edit"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDelete}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Delete" onclick={handleDelete}>
           <div class="codicon codicon-trash"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleToggleVisibility}>
+        </button>
+        <button
+          class="testcase-toolbar-icon"
+          aria-label={showDetails ? "Hide details" : "Show details"}
+          onclick={handleToggleVisibility}
+        >
           <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div
+        </button>
+        <button
           class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+          aria-label={skipped ? "Unskip" : "Skip"}
           onclick={handleToggleSkip}
         >
           <div
             class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
           ></div>
-        </div>
+        </button>
       </div>
       <div class="testcase-toolbar-right">
         {#if status === "NA" || status === "WA"}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="testcase-toolbar-icon" onclick={handleAccept}>
+          <button class="testcase-toolbar-icon" aria-label="Accept" onclick={handleAccept}>
             <div class="codicon codicon-pass"></div>
-          </div>
+          </button>
         {/if}
         {#if status === "AC"}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="testcase-toolbar-icon" onclick={handleDecline}>
+          <button class="testcase-toolbar-icon" aria-label="Decline" onclick={handleDecline}>
             <div class="codicon codicon-close"></div>
-          </div>
+          </button>
         {/if}
         {#if status === "WA"}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="testcase-toolbar-icon" onclick={handleCompare}>
+          <button class="testcase-toolbar-icon" aria-label="Compare" onclick={handleCompare}>
             <div class="codicon codicon-diff-single"></div>
-          </div>
+          </button>
         {/if}
       </div>
     </div>
@@ -302,10 +297,9 @@
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleStop}>
+        <button class="testcase-toolbar-icon" aria-label="Stop" onclick={handleStop}>
           <div class="codicon codicon-stop-circle"></div>
-        </div>
+        </button>
       </div>
     </div>
     {#if visible}
@@ -341,10 +335,9 @@
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-sync codicon-modifier-spin"></div>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleSave}>
+        <button class="testcase-toolbar-icon" aria-label="Save" onclick={handleSave}>
           <div class="codicon codicon-save"></div>
-        </div>
+        </button>
       </div>
     </div>
     <AutoresizeTextarea
@@ -396,6 +389,10 @@
     align-self: stretch;
     border-radius: 2px;
     padding: 3px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
   }
 
   .testcase-toolbar-icon:not(.testcase-toolbar-icon-exclude-highlight):hover {
