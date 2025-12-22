@@ -1,5 +1,5 @@
 ---
-applyTo: "src/extension/**/*.ts,src/extension/**/*.tsx"
+applyTo: "src/extension/**/*.ts"
 ---
 
 This repository is a VS Code extension called "Fast Olympic Coding." The `src/extension/**` tree contains the extension backend code (Node.js, VS Code API) that powers the Judge and Stress views.
@@ -9,8 +9,9 @@ When changing files under `src/extension/**`:
 - Treat `JudgeViewProvider` and `StressViewProvider` as the main controllers for their respective webviews. They extend `BaseViewProvider`, which encapsulates webview setup, CSP nonce generation, message posting via Valibot-validated schemas, and workspaceState access keyed by active file path.
 - Judge and Stress are file-scoped and are expected to be **persistent**: hiding the webview should not tear down in-memory state or stop running processes. Teardown belongs in `onDispose()`. Switching the active editor to a different file should switch state (and stop any per-file running processes) using the same active-editor-change handling patterns used by `JudgeViewProvider`.
 - Webviews rely on Codicons for icons; `BaseViewProvider` already whitelists `@vscode/codicons/dist/codicon.css` in local resource roots and injects the stylesheet. Preserve that setup (CSP, resource roots, and link tag) whenever adjusting webview HTML or resource handling so icons keep rendering.
-- All extension ⇄ webview communication must go through the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Do not introduce ad-hoc string message types; instead, extend the shared enums and message unions.
-- The `Status` enum in `src/shared/enums.ts` represents the lifecycle: COMPILING → RUNNING → (AC | WA | RE | TL | CE | NA | EDITING). Preserve existing numeric values and append new states only at the end.
+- All extension ⇄ webview communication must go through the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Do not introduce ad-hoc string message types; instead, extend the shared string literal arrays and message unions.
+- Shared enums are defined as `const` string literal tuples (e.g., `StatusValues = ["CE", "RE", ...] as const`) validated via `v.picklist(...)`. Append new values at the end; do not rename or reorder existing values.
+- The `Status` type in `src/shared/enums.ts` represents the lifecycle: COMPILING → RUNNING → (AC | WA | RE | TL | ML | CE | NA | EDITING). Preserve existing string values and append new states only at the end.
 - Persisted testcases and limits are stored in `workspaceState`, with a top-level key per view ("judge" / "stress") and an inner key per absolute file path. Treat the "default" state (no testcases and timeLimit = 0) as "no data" and delete storage entries rather than persisting defaults indefinitely.
 - Use `TextHandler` (from the extension utilities) for all streamed output shown in the webviews. It must keep the full data for comparisons while truncating display output, normalizes CRLF to LF, and ensures a trailing newline on final writes. Always call `.reset()` before a fresh run and `.write(data, last)` to update output so truncation, batching, and whitespace handling remain correct.
 - For compilation and execution, use the helpers in `src/extension/utils/runtime.ts`. Specifically, use `compile()` (which caches builds by md5 of the full command) and `Runnable` (which wraps child processes with timing, timeout via `AbortSignal.timeout`, and exit/timeout information) instead of spawning processes manually.
@@ -22,7 +23,7 @@ When extending functionality from the extension side:
 
 - Follow the shared feature workflow: update contracts in `src/shared/**`, extend the appropriate Provider (`JudgeViewProvider`, `StressViewProvider`, or a new view provider) to send/receive the new messages, then adjust the corresponding webview handlers.
 - For a new view, mirror the existing pattern: create `<NewView>ViewProvider` extending `BaseViewProvider`, register it in `src/extension/index.ts`, add the view configuration and activation events in `package.json`, and define matching message contracts under `src/shared/`.
-- For a new Judge action (for example, a new testcase operation), extend the `Action` enum and interfaces in `src/shared/judge-messages.ts`, handle the new case in the provider’s action switch, and wire a matching UI trigger in the Judge webview.
+- For a new Judge action (for example, a new testcase operation), extend the `ActionValues` array and interfaces in `src/shared/judge-messages.ts`, handle the new case in the provider's action switch, and wire a matching UI trigger in the Judge webview's `App.svelte`.
 - Debugging is supported from Judge as an **attach-mode** workflow: start the debug-wrapped process via `Runnable` (so stdin can be supplied by the extension), then call `vscode.debug.startDebugging(...)` using the configured `debugAttachConfig` name. Per-language settings are stored under `fastolympiccoding.runSettings` (`debugCommand`, `debugAttachConfig`).
 - When unsure about control flow, message patterns, or state persistence, inspect the existing implementations in `JudgeViewProvider` and `StressViewProvider` and stay consistent with those designs.
 
