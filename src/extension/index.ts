@@ -20,11 +20,9 @@ type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
 
-interface IDependencies {
-  [file: string]: string[];
-}
+type Dependencies = Record<string, string[]>;
 
-async function getFileContent(file: string, baseDirectory: string, dependencies: IDependencies) {
+async function getFileContent(file: string, baseDirectory: string, dependencies: Dependencies) {
   const visiting: Set<string> = new Set();
   const visited: Set<string> = new Set();
   const order: string[] = [];
@@ -195,7 +193,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerTextEditorCommand("fastolympiccoding.insertFileTemplate", () => {
       void (async () => {
         const config = vscode.workspace.getConfiguration("fastolympiccoding");
-        const dependencies = config.get<IDependencies>("fileTemplatesDependencies");
+        const dependencies = config.get<Dependencies>("fileTemplatesDependencies");
         const baseDirectory = resolveVariables(config.get("fileTemplatesBaseDirectory")!);
         const files = (
           await fs.readdir(baseDirectory, {

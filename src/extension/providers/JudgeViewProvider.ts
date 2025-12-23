@@ -41,25 +41,26 @@ const FileDataSchema = v.fallback(
 
 const defaultFileData = v.parse(FileDataSchema, {});
 
-interface ILaunchProcessParams {
-  id: number;
-  token: vscode.CancellationToken;
-  testcase: IState;
-  resolvedArgs: string[];
-  cwd?: string;
-  timeout?: number;
-  memoryLimit?: number;
-}
-interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> {
+type State = Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> & {
   stdin: TextHandler;
   stderr: TextHandler;
   stdout: TextHandler;
   acceptedStdout: TextHandler;
   id: number;
   process: Runnable;
-}
+};
 
-function setTestcaseStats(state: IState, timeLimit: number, termination: RunTermination) {
+type LaunchProcessParams = {
+  id: number;
+  token: vscode.CancellationToken;
+  testcase: State;
+  resolvedArgs: string[];
+  cwd?: string;
+  timeout?: number;
+  memoryLimit?: number;
+};
+
+function setTestcaseStats(state: State, timeLimit: number, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
   if (state.process.timedOut) {
@@ -84,7 +85,7 @@ function setTestcaseStats(state: IState, timeLimit: number, termination: RunTerm
 }
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: Map<number, IState> = new Map(); // Map also remembers insertion order :D
+  private _state: Map<number, State> = new Map(); // Map also remembers insertion order :D
   private _timeLimit = 0;
   private _memoryLimit = 0;
   private _newId = 0;
@@ -95,7 +96,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     | {
         token: vscode.CancellationToken;
         file: string;
-        testcase: IState;
+        testcase: State;
         languageSettings: NonNullable<ReturnType<typeof getLanguageSettings>>;
       }
     | undefined
@@ -135,7 +136,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     id: number,
     token: vscode.CancellationToken,
     file: string,
-    testcase: IState,
+    testcase: State,
     languageSettings: NonNullable<ReturnType<typeof getLanguageSettings>>
   ): Promise<boolean> {
     if (!languageSettings.compileCommand) {
@@ -167,7 +168,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     return token.isCancellationRequested;
   }
 
-  private _clearIOTexts(id: number, testcase: IState) {
+  private _clearIOTexts(id: number, testcase: State) {
     testcase.stderr.reset();
     super._postMessage({
       type: "SET",
@@ -175,7 +176,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "stderr",
       value: "",
     });
-
     testcase.stdout.reset();
     super._postMessage({
       type: "SET",
@@ -183,17 +183,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "stdout",
       value: "",
     });
-
-    testcase.status = "RUNNING";
+    testcase.acceptedStdout.reset();
     super._postMessage({
       type: "SET",
       id,
-      property: "status",
-      value: "RUNNING",
+      property: "acceptedStdout",
+      value: "",
     });
   }
 
-  private _launchProcess(params: ILaunchProcessParams) {
+  private _launchProcess(params: LaunchProcessParams) {
     const { id, token, testcase, resolvedArgs, cwd, timeout, memoryLimit } = params;
 
     testcase.process.run(resolvedArgs[0], timeout, memoryLimit, cwd, ...resolvedArgs.slice(1));
@@ -647,7 +646,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // create a new testcase in webview and fill it in later
     super._postMessage({ type: "NEW", id });
 
-    const newTestcase: IState = {
+    const newTestcase: State = {
       stdin: new TextHandler(),
       stderr: new TextHandler(),
       stdout: new TextHandler(),

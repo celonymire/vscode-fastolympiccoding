@@ -30,14 +30,14 @@ type StressData = v.InferOutput<typeof StressDataSchema>;
 const defaultStressDataItem = v.parse(StressDataSchema, {});
 const defaultStressData: StressData[] = [defaultStressDataItem, defaultStressDataItem, defaultStressDataItem];
 
-interface IState {
+type State = {
   data: TextHandler;
   status: Status;
   process: Runnable;
-}
+};
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: IState[] = [
+  private _state: State[] = [
     { data: new TextHandler(), status: "NA", process: new Runnable() },
     { data: new TextHandler(), status: "NA", process: new Runnable() },
     { data: new TextHandler(), status: "NA", process: new Runnable() },
