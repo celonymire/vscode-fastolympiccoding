@@ -25,10 +25,10 @@ const StressDataSchema = v.object({
   status: v.fallback(StatusSchema, "NA"),
 });
 
-interface IData {
-  data: string;
-  status: Status;
-}
+type StressData = v.InferOutput<typeof StressDataSchema>;
+
+const defaultStressDataItem = v.parse(StressDataSchema, {});
+const defaultStressData: StressData[] = [defaultStressDataItem, defaultStressDataItem, defaultStressDataItem];
 
 interface IState {
   data: TextHandler;
@@ -453,19 +453,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    let isDefault = true;
-    for (const state of this._state) {
-      isDefault &&= state.data.data === "";
-      isDefault &&= state.status === "NA";
-    }
+    const data = this._state.map<StressData>((value) => ({
+      data: value.data.data,
+      status: value.status,
+    }));
     void super.writeStorage(
       file,
-      isDefault
+      JSON.stringify(data) === JSON.stringify(defaultStressData)
         ? undefined
-        : this._state.map<IData>((value) => ({
-            data: value.data.data,
-            status: value.status,
-          }))
+        : data
     );
   }
 

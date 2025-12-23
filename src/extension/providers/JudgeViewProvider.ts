@@ -28,20 +28,27 @@ import {
 type IProblem = v.InferOutput<typeof ProblemSchema>;
 type ITest = v.InferOutput<typeof TestSchema>;
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
+type FileData = v.InferOutput<typeof FileDataSchema>;
 
 const FileDataSchema = v.fallback(
   v.object({
     timeLimit: v.fallback(v.number(), 0),
     memoryLimit: v.fallback(v.number(), 0),
-    testcases: v.fallback(v.array(v.unknown()), []),
+    testcases: v.fallback(v.array(TestcaseSchema), []),
   }),
   { timeLimit: 0, memoryLimit: 0, testcases: [] }
 );
 
-interface IFileData {
-  timeLimit: number;
-  memoryLimit: number;
-  testcases: ITestcase[] | unknown;
+const defaultFileData = v.parse(FileDataSchema, {});
+
+interface ILaunchProcessParams {
+  id: number;
+  token: vscode.CancellationToken;
+  testcase: IState;
+  resolvedArgs: string[];
+  cwd?: string;
+  timeout?: number;
+  memoryLimit?: number;
 }
 interface IState extends Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> {
   stdin: TextHandler;
@@ -186,15 +193,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _launchProcess(params: {
-    id: number;
-    token: vscode.CancellationToken;
-    testcase: IState;
-    resolvedArgs: string[];
-    cwd?: string;
-    timeout?: number;
-    memoryLimit?: number;
-  }) {
+  private _launchProcess(params: ILaunchProcessParams) {
     const { id, token, testcase, resolvedArgs, cwd, timeout, memoryLimit } = params;
 
     testcase.process.run(resolvedArgs[0], timeout, memoryLimit, cwd, ...resolvedArgs.slice(1));
@@ -502,7 +501,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         memoryLimit: data.memoryLimit,
       });
     } else {
-      const fileData: IFileData = {
+      const fileData: FileData = {
         timeLimit: data.timeLimit,
         memoryLimit: data.memoryLimit,
         testcases,
@@ -526,7 +525,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         : { timeLimit: 0, memoryLimit: 0, testcases: [] };
       const testcases = fileData.testcases || [];
       testcases.push(testcase);
-      const data: IFileData = {
+      const data: FileData = {
         timeLimit: fileData.timeLimit ?? 0,
         memoryLimit: fileData.memoryLimit ?? 0,
         testcases,
@@ -611,11 +610,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!file) {
       return;
     }
-    if (this._state.size === 0 && this._timeLimit === 0 && this._memoryLimit === 0) {
-      // everything is defaulted, might as well not save it
-      void super.writeStorage(file, undefined);
-      return;
-    }
 
     const testcases: ITestcase[] = [];
     for (const testcase of this._state.values()) {
@@ -632,12 +626,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         skipped: testcase.skipped,
       });
     }
-    const fileData: IFileData = {
+    const fileData: FileData = {
       timeLimit: this._timeLimit,
       memoryLimit: this._memoryLimit,
       testcases,
     };
-    void super.writeStorage(file, fileData);
+    void super.writeStorage(
+      file,
+      JSON.stringify(fileData) === JSON.stringify(defaultFileData) ? undefined : fileData
+    );
   }
 
   private _addTestcase(testcase?: Partial<ITestcase>) {
