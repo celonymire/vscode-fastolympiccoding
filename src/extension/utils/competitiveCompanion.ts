@@ -64,8 +64,7 @@ async function promptForTargetFile(
 
   // Auto-fill with current file if available
   if (currentFileRelativePath) {
-    const currentDir = path.parse(currentFileRelativePath).dir;
-    const currentBase = path.parse(currentFileRelativePath).base;
+    const { dir: currentDir, base: currentBase } = path.parse(currentFileRelativePath);
 
     // Try to find and pre-select the matching item
     const matchingItem = options.find(
@@ -84,7 +83,7 @@ async function promptForTargetFile(
   return new Promise((resolve) => {
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
-      resolve(selected ? path.join(selected.description ?? "", selected.label) : pick.value);
+      resolve(selected ? path.join(selected.description || "", selected.label) : pick.value);
       pick.hide();
     });
     pick.onDidHide(() => resolve(""));
