@@ -176,9 +176,11 @@
             {/if}
           </div>
           <p class="testcase-elapsed-text">
-            {testcase.elapsed >= 1000
-              ? (testcase.elapsed / 1000).toFixed(1) + "s"
-              : testcase.elapsed + "ms"}
+            {status !== "NA" && status !== "AC" && status !== "ML"
+              ? status
+              : testcase.elapsed >= 1000
+                ? (testcase.elapsed / 1000).toFixed(1) + "s"
+                : testcase.elapsed + "ms"}
           </p>
         </div>
         <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
@@ -186,13 +188,15 @@
             <div class="codicon codicon-bolded codicon-chip"></div>
           </div>
           <p class="testcase-elapsed-text">
-            {testcase.memoryBytes >= 1024 * 1024 * 1024
-              ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
-              : testcase.memoryBytes >= 1024 * 1024
-                ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
-                : testcase.memoryBytes >= 1024
-                  ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
-                  : testcase.memoryBytes + "B"}
+            {status === "ML"
+              ? "ML"
+              : testcase.memoryBytes >= 1024 * 1024 * 1024
+                ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
+                : testcase.memoryBytes >= 1024 * 1024
+                  ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
+                  : testcase.memoryBytes >= 1024
+                    ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
+                    : testcase.memoryBytes + "B"}
           </p>
         </div>
         <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
