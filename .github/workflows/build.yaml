@@ -42,9 +42,6 @@ jobs:
           - name: Windows
             os: windows-latest
             vsceTarget: "win32-x64"
-          - name: Linux
-            os: ubuntu-latest
-            vsceTarget: "linux-x64"
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
