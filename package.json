@@ -392,15 +392,15 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:addon && npm run prod",
-    "build:addon": "node-gyp rebuild",
-    "build:addon:clean": "node-gyp clean",
+    "build:addon": "node scripts/build-addon.mjs",
+    "build:addon:clean": "node scripts/build-addon.mjs clean",
     "lint": "eslint .",
     "format": "prettier --write src",
     "check": "prettier --check src",
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json",
-    "build": "npm run build:addon && rspack build",
-    "prod": "NODE_ENV=production rspack build",
-    "watch": "rspack build --watch"
+    "build": "rspack build --mode development",
+    "prod": "rspack build --mode production",
+    "watch": "rspack build --watch --mode development"
   },
   "author": "Sam Huang",
   "license": "MIT",
