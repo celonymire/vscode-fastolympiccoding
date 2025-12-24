@@ -54,13 +54,14 @@ async function promptForTargetFile(
 ): Promise<string> {
   const options: vscode.QuickPickItem[] = files.map((file) => ({
     label: path.parse(file.fsPath).base,
-    description: path.parse(path.relative(workspaceRoot, file.fsPath)).dir,
+    description: path.relative(workspaceRoot, file.fsPath),
   }));
 
   const pick = vscode.window.createQuickPick();
   pick.title = `Testcases for "${problem.name}"`;
   pick.placeholder = "Full file path to put testcases onto";
   pick.items = options;
+  pick.matchOnDescription = true;
   pick.ignoreFocusOut = true;
 
   // Auto-fill with current file if available
@@ -84,7 +85,7 @@ async function promptForTargetFile(
   return new Promise((resolve) => {
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
-      resolve(selected ? path.join(selected.description ?? "", selected.label) : pick.value);
+      resolve(selected.description ?? "");
       pick.hide();
     });
     pick.onDidHide(() => resolve(""));
@@ -112,7 +113,12 @@ async function processProblem(
   let relativePath = isSingleProblem && currentFileRelativePath ? currentFileRelativePath : "";
 
   if (needsPrompt) {
-    relativePath = await promptForTargetFile(problem, workspaceRoot, files, currentFileRelativePath);
+    relativePath = await promptForTargetFile(
+      problem,
+      workspaceRoot,
+      files,
+      currentFileRelativePath
+    );
   }
 
   if (relativePath === "") {
