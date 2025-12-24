@@ -263,7 +263,14 @@ export class Runnable {
         });
         resolveSpawn(false);
       });
-      this._process?.once("close", async (code, signal) => {
+      this._process?.once("exit", (code, signal) => {
+        this._endTime = performance.now();
+        this._signal = signal;
+        this._exitCode = code;
+        this._timedOut = timeoutSignal?.aborted ?? false;
+      });
+
+      this._process?.once("close", async () => {
         this._memoryCancellationTokenSource?.cancel();
         this._memoryCancellationTokenSource?.dispose();
         if (this._memorySampleTimeout) {
@@ -271,10 +278,6 @@ export class Runnable {
           this._memorySampleTimeout = null;
         }
 
-        this._endTime = performance.now();
-        this._signal = signal;
-        this._exitCode = code;
-        this._timedOut = timeoutSignal?.aborted ?? false;
         this._memoryLimitExceeded =
           this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
         resolve();
