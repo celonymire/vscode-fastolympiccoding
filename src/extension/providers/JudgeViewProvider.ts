@@ -60,7 +60,7 @@ type LaunchProcessParams = {
   memoryLimit?: number;
 };
 
-function setTestcaseStats(state: State, timeLimit: number, termination: RunTermination) {
+function setTestcaseStats(state: State, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
   state.status = mapTestcaseTermination(termination, state.process.exitCode);
@@ -240,7 +240,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           return;
         }
         const termination = await testcase.process.done;
-        setTestcaseStats(testcase, this._timeLimit, termination);
+        setTestcaseStats(testcase, termination);
         super._postMessage({
           type: "SET",
           id,
