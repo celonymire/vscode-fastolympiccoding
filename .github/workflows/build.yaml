@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  build:
-    name: Build
+  check:
+    name: Sanity Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -16,6 +16,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: latest
+          cache: npm
 
       - name: Install dependencies
         run: npm install
@@ -28,11 +29,66 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+  package:
+    name: Package VSIX (${{ matrix.name }})
+    needs: [check]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: universal
+            os: ubuntu-latest
+            vsceTarget: ""
+          - name: windows
+            os: windows-latest
+            vsceTarget: "win32-x64"
+          - name: linux
+            os: ubuntu-latest
+            vsceTarget: "linux-x64"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Build project
         run: npm run build
 
-      - name: Upload build artifact
+      - name: Package VSIX (universal)
+        if: matrix.vsceTarget == ''
+        run: npx --yes @vscode/vsce package
+
+      - name: Package VSIX (targeted)
+        if: matrix.vsceTarget != ''
+        run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
+
+      - name: Rename packaged VSIX to include version and target
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PUBLISHER=$(node -p "require('./package.json').publisher")
+          NAME=$(node -p "require('./package.json').name")
+
+          ORIGINAL="$(ls -1 *.vsix | head -n 1)"
+
+          if [ "${{ matrix.vsceTarget }}" = "" ]; then
+            TARGET="universal"
+          else
+            TARGET="${{ matrix.vsceTarget }}"
+          fi
+
+          mv "$ORIGINAL" "${PUBLISHER}.${NAME}-${VERSION}-${TARGET}.vsix"
+
+      - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: dist/
+          name: vsix-${{ matrix.name }}
+          path: "*.vsix"
