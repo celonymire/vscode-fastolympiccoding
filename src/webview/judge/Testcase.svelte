@@ -176,7 +176,7 @@
             {/if}
           </div>
           <p class="testcase-elapsed-text">
-            {status !== "NA" && status !== "AC" && status !== "ML"
+            {status !== "NA" && status !== "AC" && status !== "ML" && status !== "WA"
               ? status
               : testcase.elapsed >= 1000
                 ? (testcase.elapsed / 1000).toFixed(1) + "s"
