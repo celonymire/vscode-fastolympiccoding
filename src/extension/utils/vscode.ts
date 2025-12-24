@@ -152,7 +152,7 @@ export class TextHandler {
 
   reset() {
     // While Competitive Companion requires inputs and outputs to end with a newline,
-    // we do not enforce that here to to allow appending future data conveniently
+    // we do not enforce that here to allow appending future data conveniently
 
     this._data = "";
     this._shortDataLength = 0;
