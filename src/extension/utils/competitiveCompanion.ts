@@ -49,7 +49,8 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 async function promptForTargetFile(
   problem: Problem,
   workspaceRoot: string,
-  files: vscode.Uri[]
+  files: vscode.Uri[],
+  currentFileRelativePath?: string
 ): Promise<string> {
   const options: vscode.QuickPickItem[] = files.map((file) => ({
     label: path.parse(file.fsPath).base,
@@ -61,6 +62,23 @@ async function promptForTargetFile(
   pick.placeholder = "Full file path to put testcases onto";
   pick.items = options;
   pick.ignoreFocusOut = true;
+
+  // Auto-fill with current file if available
+  if (currentFileRelativePath) {
+    const { dir: currentDir, base: currentBase } = path.parse(currentFileRelativePath);
+
+    // Try to find and pre-select the matching item
+    const matchingItem = options.find(
+      (item) => item.label === currentBase && item.description === currentDir
+    );
+    if (matchingItem) {
+      pick.activeItems = [matchingItem];
+    }
+
+    // Set the value to the current file path so users can edit it
+    pick.value = currentFileRelativePath;
+  }
+
   pick.show();
 
   return new Promise((resolve) => {
@@ -90,10 +108,11 @@ async function processProblem(
   const isSingleProblem = problem.batch.size === 1;
   const needsPrompt = askForWhichFile || !isSingleProblem || !activeFile;
 
-  let relativePath = isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
+  const currentFileRelativePath = activeFile ? path.relative(workspaceRoot, activeFile) : undefined;
+  let relativePath = isSingleProblem && currentFileRelativePath ? currentFileRelativePath : "";
 
   if (needsPrompt) {
-    relativePath = await promptForTargetFile(problem, workspaceRoot, files);
+    relativePath = await promptForTargetFile(problem, workspaceRoot, files, currentFileRelativePath);
   }
 
   if (relativePath === "") {
