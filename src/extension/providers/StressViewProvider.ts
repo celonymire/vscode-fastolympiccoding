@@ -28,7 +28,11 @@ const StressDataSchema = v.object({
 type StressData = v.InferOutput<typeof StressDataSchema>;
 
 const defaultStressDataItem = v.parse(StressDataSchema, {});
-const defaultStressData: StressData[] = [defaultStressDataItem, defaultStressDataItem, defaultStressDataItem];
+const defaultStressData: StressData[] = [
+  defaultStressDataItem,
+  defaultStressDataItem,
+  defaultStressDataItem,
+];
 
 type State = {
   data: TextHandler;
@@ -459,9 +463,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }));
     void super.writeStorage(
       file,
-      JSON.stringify(data) === JSON.stringify(defaultStressData)
-        ? undefined
-        : data
+      JSON.stringify(data) === JSON.stringify(defaultStressData) ? undefined : data
     );
   }
 
