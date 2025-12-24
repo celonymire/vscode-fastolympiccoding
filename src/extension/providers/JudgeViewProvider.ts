@@ -168,7 +168,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     return token.isCancellationRequested;
   }
 
-  private _clearIOTexts(id: number, testcase: State) {
+  private _prepareRunningState(id: number, testcase: State) {
+    testcase.status = "RUNNING";
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "status",
+      value: "RUNNING",
+    });
     testcase.stderr.reset();
     super._postMessage({
       type: "SET",
@@ -750,7 +757,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    this._clearIOTexts(id, testcase);
+    this._prepareRunningState(id, testcase);
 
     const resolvedArgs = resolveCommand(languageSettings.runCommand);
     const cwd = languageSettings.currentWorkingDirectory
@@ -832,7 +839,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       ? resolveVariables(languageSettings.currentWorkingDirectory, file, extraVariables)
       : undefined;
 
-    this._clearIOTexts(id, testcase);
+    this._prepareRunningState(id, testcase);
 
     // No time limit for debugging; user stops it manually.
     this._launchProcess({
