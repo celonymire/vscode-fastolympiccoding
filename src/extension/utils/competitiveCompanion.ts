@@ -66,11 +66,11 @@ async function promptForTargetFile(
 
   // Auto-fill with current file if available
   if (currentFileRelativePath) {
-    const { dir: currentDir, base: currentBase } = path.parse(currentFileRelativePath);
+    const { base: currentBase } = path.parse(currentFileRelativePath);
 
     // Try to find and pre-select the matching item
     const matchingItem = options.find(
-      (item) => item.label === currentBase && item.description === currentDir
+      (item) => item.label === currentBase && item.description === currentFileRelativePath
     );
     if (matchingItem) {
       pick.activeItems = [matchingItem];
