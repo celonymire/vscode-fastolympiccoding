@@ -182,13 +182,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "stdout",
       value: "",
     });
-    testcase.acceptedStdout.reset();
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "acceptedStdout",
-      value: "",
-    });
   }
 
   private _launchProcess(params: LaunchProcessParams) {
