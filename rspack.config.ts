@@ -70,7 +70,18 @@ const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configur
             ],
           }),
         ]
-      : []),
+      : process.platform === "linux"
+        ? [
+            new CopyRspackPlugin({
+              patterns: [
+                {
+                  from: "build/Release/linux-memory-stats.node",
+                  to: "linux-memory-stats.node",
+                },
+              ],
+            }),
+          ]
+        : []),
   ],
 });
 

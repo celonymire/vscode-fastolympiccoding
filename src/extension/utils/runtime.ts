@@ -16,6 +16,11 @@ type Win32MemoryAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
 };
 
+type LinuxMemoryAddon = {
+  // Reads /proc/<pid>/status and returns current RSS and peak RSS (high-water mark), in bytes.
+  getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
+};
+
 // ============================================================================
 // RunSession API Types
 // ============================================================================
@@ -106,6 +111,40 @@ function getWin32MemoryAddon(): Win32MemoryAddon | null {
   }
 }
 
+let linuxMemoryAddon: LinuxMemoryAddon | null = null;
+
+function getLinuxMemoryAddon(): LinuxMemoryAddon | null {
+  if (linuxMemoryAddon !== null) {
+    return linuxMemoryAddon;
+  }
+
+  try {
+    // Load from the bundled native addon in dist/
+    const addonPath = path.join(__dirname, "linux-memory-stats.node");
+    if (!fs.existsSync(addonPath)) {
+      return null;
+    }
+
+    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "getLinuxMemoryStats" in loaded) {
+      linuxMemoryAddon = loaded as LinuxMemoryAddon;
+      return linuxMemoryAddon;
+    }
+
+    return null;
+  } catch (err) {
+    const logger = getLogger("runtime");
+    logger.warn(
+      "Linux memory addon unavailable, using pidusage fallback (performance degraded)",
+      err
+    );
+    return null;
+  }
+}
+
 // ============================================================================
 // Runnable - Process runner with session-based listener API
 // ============================================================================
@@ -149,6 +188,19 @@ export class Runnable {
         const addon = getWin32MemoryAddon();
         if (addon) {
           const memStats = addon.getWin32MemoryStats(pid);
+          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+          return;
+        } else {
+          // fallback to pidusage if addon not available or the addon failed
+          // to get the memory stats
+        }
+      }
+
+      if (process.platform === "linux") {
+        const addon = getLinuxMemoryAddon();
+        if (addon) {
+          const memStats = addon.getLinuxMemoryStats(pid);
+          // Prefer kernel high-water mark when available (monotonic).
           this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
           return;
         } else {

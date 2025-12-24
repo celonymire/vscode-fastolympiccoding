@@ -2,7 +2,8 @@
 /**
  * Cross-platform wrapper for building the optional native addon.
  *
- * - On Windows: runs `node-gyp rebuild` (passes through args).
+ * - On Windows: runs `node-gyp rebuild` (passes through args) for `win32-memory-stats`.
+ * - On Linux: runs `node-gyp rebuild` (passes through args) for `linux-memory-stats`.
  * - On other platforms: no-op (exit 0).
  *
  * Usage examples:
@@ -20,7 +21,7 @@ const args = process.argv.slice(2);
 // Default to "rebuild" if no args are provided.
 const nodeGypArgs = args.length > 0 ? args : ["rebuild"];
 
-if (platform !== "win32") {
+if (platform !== "win32" && platform !== "linux") {
   console.log(`[build-addon] Skipping native addon build (platform=${platform}).`);
   process.exit(0);
 }
@@ -29,7 +30,7 @@ if (platform !== "win32") {
 const cmd = "npx";
 const cmdArgs = ["--no", "node-gyp", ...nodeGypArgs];
 
-console.log(`[build-addon] Building native addon via: ${cmd} ${cmdArgs.join(" ")}`);
+console.log(`[build-addon] Building native addon via: ${cmd} ${cmdArgs.join(" ")} (platform=${platform})`);
 
 const child = spawn(cmd, cmdArgs, {
   stdio: "inherit",
