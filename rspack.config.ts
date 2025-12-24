@@ -4,22 +4,23 @@ import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import * as path from "node:path";
 import { sveltePreprocess } from "svelte-preprocess";
 
-const isProd = process.env.NODE_ENV === "production";
-
 const sharedResolve: Configuration["resolve"] = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".svelte"],
 };
 
-const sharedConfig: Configuration = {
-  resolve: sharedResolve,
-  optimization: {
-    minimize: isProd,
-  },
-  devtool: isProd ? false : "source-map",
-};
+function getSharedConfig(isProd: boolean, mode: Configuration["mode"]): Configuration {
+  return {
+    mode,
+    resolve: sharedResolve,
+    optimization: {
+      minimize: isProd,
+    },
+    devtool: isProd ? false : "source-map",
+  };
+}
 
-const extensionConfig: Configuration = {
-  ...sharedConfig,
+const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configuration => ({
+  ...getSharedConfig(isProd, mode),
   entry: {
     extension: "./src/extension/index.ts",
   },
@@ -71,10 +72,10 @@ const extensionConfig: Configuration = {
         ]
       : []),
   ],
-};
+});
 
-const webviewsConfig: Configuration = {
-  ...sharedConfig,
+const webviewsConfig = (isProd: boolean, mode: Configuration["mode"]): Configuration => ({
+  ...getSharedConfig(isProd, mode),
   experiments: {
     css: true,
   },
@@ -147,6 +148,10 @@ const webviewsConfig: Configuration = {
       ],
     }),
   ],
-};
+});
 
-export default defineConfig([extensionConfig, webviewsConfig]);
+export default defineConfig((_env, argv) => {
+  const mode: Configuration["mode"] = argv.mode ?? "development";
+  const isProd = mode === "production";
+  return [extensionConfig(isProd, mode), webviewsConfig(isProd, mode)];
+});
