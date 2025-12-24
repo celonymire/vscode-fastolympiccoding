@@ -39,6 +39,9 @@ jobs:
           - name: Universal
             os: ubuntu-latest
             vsceTarget: ""
+          - name: Linux
+            os: ubuntu-latest
+            vsceTarget: "linux-x64"
           - name: Windows
             os: windows-latest
             vsceTarget: "win32-x64"

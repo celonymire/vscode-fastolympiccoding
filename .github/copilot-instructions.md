@@ -16,17 +16,19 @@ Build and tooling:
   Rspack bundles the extension and webviews into `dist/`. Styles are co-located within Svelte components.
 - Run `npm run lint` and `npm run format` to apply ESLint (TypeScript + Svelte) and Prettier rules.
 
-Native addon (Windows-only):
+Native addons (Windows + Linux):
 
-- The repo includes an optional Windows-only native addon (`win32-memory-stats`) that provides efficient process memory stats for memory-limit features.
+- The repo includes optional native addons that provide efficient process memory stats for memory-limit features:
+  - Windows: `win32-memory-stats`
+  - Linux: `linux-memory-stats`
 - Native builds are **detached** from normal JS/TS builds:
   - `npm run build` / `npm run watch` do **not** invoke `node-gyp`.
   - `npm run build:addon` builds the addon explicitly via `scripts/build-addon.mjs`:
-    - on Windows: runs `node-gyp` via `npx`
-    - on non-Windows: no-op (exits 0)
+    - on Windows and Linux: runs `node-gyp` via `npx`
+    - on other platforms: no-op (exits 0)
   - `npm run build:addon:clean` cleans the addon build output.
 - Packaging uses `vscode:prepublish` (`npm run build:addon && npm run prod`).
-- The addon binary is copied into `dist/` by Rspack (Windows only) and loaded lazily from `src/extension/utils/runtime.ts` with a graceful fallback when unavailable.
+- The addon binaries are copied into `dist/` by Rspack (Windows + Linux) and loaded lazily from `src/extension/utils/runtime.ts` with a graceful fallback when unavailable.
 
 Design and implementation guidelines:
 
