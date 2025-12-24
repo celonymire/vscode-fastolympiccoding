@@ -36,13 +36,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: universal
+          - name: Universal
             os: ubuntu-latest
             vsceTarget: ""
-          - name: windows
+          - name: Windows
             os: windows-latest
             vsceTarget: "win32-x64"
-          - name: linux
+          - name: Linux
             os: ubuntu-latest
             vsceTarget: "linux-x64"
     runs-on: ${{ matrix.os }}
