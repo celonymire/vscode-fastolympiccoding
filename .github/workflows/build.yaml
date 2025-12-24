@@ -70,25 +70,6 @@ jobs:
         if: matrix.vsceTarget != ''
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
-      - name: Rename packaged VSIX to include version, target, and arch
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          PUBLISHER=$(node -p "require('./package.json').publisher")
-          NAME=$(node -p "require('./package.json').name")
-
-          ORIGINAL="$(ls -1 *.vsix | head -n 1)"
-
-          if [ "${{ matrix.vsceTarget }}" = "" ]; then
-            TARGET="universal"
-            ARCH="$(uname -m)"
-          else
-            TARGET="${{ matrix.vsceTarget }}"
-            ARCH="$(echo "${{ matrix.vsceTarget }}" | awk -F'-' '{print $NF}')"
-          fi
-
-          mv "$ORIGINAL" "${PUBLISHER}.${NAME}-${VERSION}-${TARGET}-${ARCH}.vsix"
-
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
