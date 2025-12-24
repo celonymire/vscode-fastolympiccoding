@@ -108,8 +108,8 @@ async function processProblem(
   const isSingleProblem = problem.batch.size === 1;
   const needsPrompt = askForWhichFile || !isSingleProblem || !activeFile;
 
-  let relativePath = isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
   const currentFileRelativePath = activeFile ? path.relative(workspaceRoot, activeFile) : undefined;
+  let relativePath = isSingleProblem && currentFileRelativePath ? currentFileRelativePath : "";
 
   if (needsPrompt) {
     relativePath = await promptForTargetFile(problem, workspaceRoot, files, currentFileRelativePath);
