@@ -391,9 +391,9 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run build:addon && npm run prod",
-    "build:addon": "node scripts/build-addon.mjs",
-    "build:addon:clean": "node scripts/build-addon.mjs clean",
+    "vscode:prepublish": "npm run prod",
+    "build:addon": "node-gyp rebuild",
+    "build:addon:clean": "node-gyp clean",
     "lint": "eslint .",
     "format": "prettier --write src",
     "check": "prettier --check src",

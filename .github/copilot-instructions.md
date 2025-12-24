@@ -23,11 +23,10 @@ Native addons (Windows + Linux):
   - Linux: `linux-memory-stats`
 - Native builds are **detached** from normal JS/TS builds:
   - `npm run build` / `npm run watch` do **not** invoke `node-gyp`.
-  - `npm run build:addon` builds the addon explicitly via `scripts/build-addon.mjs`:
-    - on Windows and Linux: runs `node-gyp` via `npx`
-    - on other platforms: no-op (exits 0)
+  - `npm run build:addon` builds the addon explicitly via `node-gyp` (intended for CI targeted packaging).
   - `npm run build:addon:clean` cleans the addon build output.
-- Packaging uses `vscode:prepublish` (`npm run build:addon && npm run prod`).
+- Packaging uses `vscode:prepublish` (`npm run prod`); addon compilation is not performed implicitly by `vsce`.
+- CI performs addon builds explicitly only for **targeted** VSIX packaging runs (e.g. `linux-x64`, `win32-x64`); the universal VSIX does not build the addon.
 - The addon binaries are copied into `dist/` by Rspack (Windows + Linux) and loaded lazily from `src/extension/utils/runtime.ts` with a graceful fallback when unavailable.
 
 Design and implementation guidelines:

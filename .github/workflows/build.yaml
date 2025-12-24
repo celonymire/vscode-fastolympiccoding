@@ -19,7 +19,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Check and lint formatting
         run: |
@@ -58,6 +58,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build native addon (optional)
+        if: matrix.vsceTarget != ''
+        run: npm run build:addon
 
       - name: Build project
         run: npm run build
