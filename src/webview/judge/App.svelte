@@ -2,18 +2,15 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import { Status, Stdio } from "../../shared/enums";
   import type { TestcaseSchema } from "../../shared/schemas";
   import {
     type DeleteMessageSchema,
     type InitialStateSchema,
     type NewMessageSchema,
-    ProviderMessageType,
     type SetMessageSchema,
     type ShowMessageSchema,
     type StdioMessageSchema,
     type WebviewMessage,
-    WebviewMessageType,
   } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
@@ -47,7 +44,7 @@
           acceptedStdout: "",
           elapsed: 0,
           memoryBytes: 0,
-          status: Status.NA,
+          status: "NA",
           shown: true,
           toggled: false,
           skipped: false,
@@ -68,16 +65,16 @@
     if (idx === -1) return;
     const tc = testcases[idx].data;
     switch (stdio) {
-      case Stdio.STDIN:
+      case "STDIN":
         tc.stdin += data;
         break;
-      case Stdio.STDERR:
+      case "STDERR":
         tc.stderr += data;
         break;
-      case Stdio.STDOUT:
+      case "STDOUT":
         tc.stdout += data;
         break;
-      case Stdio.ACCEPTED_STDOUT:
+      case "ACCEPTED_STDOUT":
         tc.acceptedStdout += data;
         break;
     }
@@ -92,9 +89,9 @@
 
   function handleSaveAll() {
     for (const { id, data: tc } of testcases) {
-      if (tc.status === Status.EDITING) {
+      if (tc.status === "EDITING") {
         postProviderMessage({
-          type: ProviderMessageType.SAVE,
+          type: "SAVE",
           id,
           stdin: tc.stdin,
           acceptedStdout: tc.acceptedStdout,
@@ -120,14 +117,14 @@
   }
 
   function handleNewTestcase(e: Event) {
-    postProviderMessage({ type: ProviderMessageType.NEXT });
+    postProviderMessage({ type: "NEXT" });
     (e.currentTarget as HTMLElement | null)?.blur();
   }
 
   function handleSaveSettings() {
     handleSettingsToggle();
-    postProviderMessage({ type: ProviderMessageType.TL, limit: newTimeLimit });
-    postProviderMessage({ type: ProviderMessageType.ML, limit: newMemoryLimit });
+    postProviderMessage({ type: "TL", limit: newTimeLimit });
+    postProviderMessage({ type: "ML", limit: newMemoryLimit });
   }
 
   function handleTimeLimitInput(e: Event) {
@@ -152,35 +149,35 @@
   onMount(() => {
     const handleMessage = (msg: MessageEvent<WebviewMessage>) => {
       switch (msg.data.type) {
-        case WebviewMessageType.NEW:
+        case "NEW":
           handleNew(msg.data);
           break;
-        case WebviewMessageType.SET:
+        case "SET":
           handleSet(msg.data);
           break;
-        case WebviewMessageType.STDIO:
+        case "STDIO":
           handleStdio(msg.data);
           break;
-        case WebviewMessageType.DELETE:
+        case "DELETE":
           handleDelete(msg.data);
           break;
-        case WebviewMessageType.SAVE_ALL:
+        case "SAVE_ALL":
           handleSaveAll();
           break;
-        case WebviewMessageType.SHOW:
+        case "SHOW":
           handleShow(msg.data);
           break;
-        case WebviewMessageType.INITIAL_STATE:
+        case "INITIAL_STATE":
           handleInitialState(msg.data);
           break;
-        case WebviewMessageType.SETTINGS_TOGGLE:
+        case "SETTINGS_TOGGLE":
           handleSettingsToggle();
           break;
       }
     };
 
     window.addEventListener("message", handleMessage);
-    postProviderMessage({ type: ProviderMessageType.LOADED });
+    postProviderMessage({ type: "LOADED" });
 
     return () => {
       window.removeEventListener("message", handleMessage);

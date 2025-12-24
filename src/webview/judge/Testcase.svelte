@@ -2,9 +2,9 @@
   import type * as v from "valibot";
 
   import type { TestcaseSchema } from "../../shared/schemas";
-  import { Status, Stdio } from "../../shared/enums";
+  import type { Stdio } from "../../shared/enums";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
-  import { Action, ProviderMessageType } from "../../shared/judge-messages";
+  import { type ActionValue } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
 
   type ITestcase = v.InferOutput<typeof TestcaseSchema>;
@@ -25,7 +25,7 @@
     // Clear the values locally (extension will send back shortened version)
     updateTestcaseData(id, { stdin: "", acceptedStdout: "" });
     postProviderMessage({
-      type: ProviderMessageType.SAVE,
+      type: "SAVE",
       id,
       stdin,
       acceptedStdout,
@@ -33,13 +33,13 @@
   }
 
   function handleExpandStdio(stdio: Stdio) {
-    postProviderMessage({ type: ProviderMessageType.VIEW, id, stdio });
+    postProviderMessage({ type: "VIEW", id, stdio });
   }
 
   function handleNewStdinKeyUp(event: KeyboardEvent) {
     if (event.key === "Enter") {
       postProviderMessage({
-        type: ProviderMessageType.STDIN,
+        type: "STDIN",
         id,
         data: newStdin,
       });
@@ -47,50 +47,50 @@
     }
   }
 
-  function handleAction(action: Action) {
-    postProviderMessage({ type: ProviderMessageType.ACTION, id, action });
+  function handleAction(action: ActionValue) {
+    postProviderMessage({ type: "ACTION", id, action });
   }
 
   function handleRun() {
     newStdin = "";
-    handleAction(Action.RUN);
+    handleAction("RUN");
   }
 
   function handleDebug() {
     newStdin = "";
-    handleAction(Action.DEBUG);
+    handleAction("DEBUG");
   }
 
   function handleEdit() {
-    handleAction(Action.EDIT);
+    handleAction("EDIT");
   }
 
   function handleDelete() {
-    handleAction(Action.DELETE);
+    handleAction("DELETE");
   }
 
   function handleAccept() {
-    handleAction(Action.ACCEPT);
+    handleAction("ACCEPT");
   }
 
   function handleDecline() {
-    handleAction(Action.DECLINE);
+    handleAction("DECLINE");
   }
 
   function handleToggleVisibility() {
-    handleAction(Action.TOGGLE_VISIBILITY);
+    handleAction("TOGGLE_VISIBILITY");
   }
 
   function handleToggleSkip() {
-    handleAction(Action.TOGGLE_SKIP);
+    handleAction("TOGGLE_SKIP");
   }
 
   function handleStop() {
-    handleAction(Action.STOP);
+    handleAction("STOP");
   }
 
   function handleCompare() {
-    handleAction(Action.COMPARE);
+    handleAction("COMPARE");
   }
 
   // Update testcase fields when child component changes them
@@ -111,10 +111,10 @@
   const visible = $derived(testcase.shown);
   const skipped = $derived(testcase.skipped);
   const toggled = $derived(testcase.toggled);
-  const showDetails = $derived(!skipped && visible && !(status === Status.AC && !toggled));
+  const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
 </script>
 
-{#if status === Status.CE}
+{#if status === "CE"}
   <div class="testcase-container">
     <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
       <div class="testcase-toolbar-left">
@@ -124,62 +124,63 @@
           </div>
           <p class="testcase-elapsed-text">CE</p>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleRun}>
+        <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDebug}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Debug" onclick={handleDebug}>
           <div class="codicon codicon-debug-alt"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleEdit}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Edit" onclick={handleEdit}>
           <div class="codicon codicon-edit"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDelete}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Delete" onclick={handleDelete}>
           <div class="codicon codicon-trash"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleToggleVisibility}>
+        </button>
+        <button
+          class="testcase-toolbar-icon"
+          aria-label={showDetails ? "Hide details" : "Show details"}
+          onclick={handleToggleVisibility}
+        >
           <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div
+        </button>
+        <button
           class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+          aria-label={skipped ? "Unskip" : "Skip"}
           onclick={handleToggleSkip}
         >
           <div
             class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
           ></div>
-        </div>
+        </button>
       </div>
     </div>
   </div>
-{:else if status === Status.NA || status === Status.AC || status === Status.WA || status === Status.RE || status === Status.TL || status === Status.ML}
+{:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
   <div class="testcase-container">
     <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
       <div class="testcase-toolbar-left">
         <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
           <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
-            {#if status === Status.NA}
+            {#if status === "NA"}
               <div class="codicon codicon-bolded codicon-play"></div>
-            {:else if status === Status.AC}
+            {:else if status === "AC"}
               <div class="codicon codicon-bolded codicon-pass"></div>
-            {:else if status === Status.WA}
+            {:else if status === "WA"}
               <div class="codicon codicon-bolded codicon-error"></div>
-            {:else if status === Status.RE}
+            {:else if status === "RE"}
               <div class="codicon codicon-bolded codicon-warning"></div>
-            {:else if status === Status.TL}
+            {:else if status === "TL"}
               <div class="codicon codicon-bolded codicon-clock"></div>
-            {:else if status === Status.ML}
+            {:else if status === "ML"}
               <div class="codicon codicon-bolded codicon-chip"></div>
             {/if}
           </div>
           <p class="testcase-elapsed-text">
-            {testcase.elapsed >= 1000
-              ? (testcase.elapsed / 1000).toFixed(1) + "s"
-              : testcase.elapsed + "ms"}
+            {status !== "NA" && status !== "AC" && status !== "ML" && status !== "WA"
+              ? status
+              : testcase.elapsed >= 1000
+                ? (testcase.elapsed / 1000).toFixed(1) + "s"
+                : testcase.elapsed + "ms"}
           </p>
         </div>
         <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
@@ -187,63 +188,61 @@
             <div class="codicon codicon-bolded codicon-chip"></div>
           </div>
           <p class="testcase-elapsed-text">
-            {testcase.memoryBytes >= 1024 * 1024 * 1024
-              ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
-              : testcase.memoryBytes >= 1024 * 1024
-                ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
-                : testcase.memoryBytes >= 1024
-                  ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
-                  : testcase.memoryBytes + "B"}
+            {status === "ML"
+              ? "ML"
+              : testcase.memoryBytes >= 1024 * 1024 * 1024
+                ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
+                : testcase.memoryBytes >= 1024 * 1024
+                  ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
+                  : testcase.memoryBytes >= 1024
+                    ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
+                    : testcase.memoryBytes + "B"}
           </p>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleRun}>
+        <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
           <div class="codicon codicon-run-below"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDebug}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Debug" onclick={handleDebug}>
           <div class="codicon codicon-debug-alt"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleEdit}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Edit" onclick={handleEdit}>
           <div class="codicon codicon-edit"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleDelete}>
+        </button>
+        <button class="testcase-toolbar-icon" aria-label="Delete" onclick={handleDelete}>
           <div class="codicon codicon-trash"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleToggleVisibility}>
+        </button>
+        <button
+          class="testcase-toolbar-icon"
+          aria-label={showDetails ? "Hide details" : "Show details"}
+          onclick={handleToggleVisibility}
+        >
           <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-        </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div
+        </button>
+        <button
           class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+          aria-label={skipped ? "Unskip" : "Skip"}
           onclick={handleToggleSkip}
         >
           <div
             class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
           ></div>
-        </div>
+        </button>
       </div>
       <div class="testcase-toolbar-right">
-        {#if status === Status.NA || status === Status.WA}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="testcase-toolbar-icon" onclick={handleAccept}>
+        {#if status === "NA" || status === "WA"}
+          <button class="testcase-toolbar-icon" aria-label="Accept" onclick={handleAccept}>
             <div class="codicon codicon-pass"></div>
-          </div>
+          </button>
         {/if}
-        {#if status === Status.AC}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="testcase-toolbar-icon" onclick={handleDecline}>
+        {#if status === "AC"}
+          <button class="testcase-toolbar-icon" aria-label="Decline" onclick={handleDecline}>
             <div class="codicon codicon-close"></div>
-          </div>
+          </button>
         {/if}
-        {#if status === Status.WA}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="testcase-toolbar-icon" onclick={handleCompare}>
+        {#if status === "WA"}
+          <button class="testcase-toolbar-icon" aria-label="Compare" onclick={handleCompare}>
             <div class="codicon codicon-diff-single"></div>
-          </div>
+          </button>
         {/if}
       </div>
     </div>
@@ -253,7 +252,7 @@
         readonly
         hiddenOnEmpty
         placeholder="Stdin..."
-        onexpand={() => handleExpandStdio(Stdio.STDIN)}
+        onexpand={() => handleExpandStdio("STDIN")}
       />
       <AutoresizeTextarea
         value={testcase.stderr}
@@ -261,28 +260,28 @@
         hiddenOnEmpty
         placeholder="Stderr..."
         variant="stderr"
-        onexpand={() => handleExpandStdio(Stdio.STDERR)}
+        onexpand={() => handleExpandStdio("STDERR")}
       />
       <AutoresizeTextarea
         value={testcase.stdout}
         readonly
         hiddenOnEmpty
         placeholder="Stdout..."
-        onexpand={() => handleExpandStdio(Stdio.STDOUT)}
+        onexpand={() => handleExpandStdio("STDOUT")}
       />
-      {#if status === Status.WA}
+      {#if status === "WA"}
         <AutoresizeTextarea
           value={testcase.acceptedStdout}
           readonly
           hiddenOnEmpty
           placeholder="Accepted stdout..."
           variant="accepted"
-          onexpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
+          onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
         />
       {/if}
     {/if}
   </div>
-{:else if status === Status.COMPILING}
+{:else if status === "COMPILING"}
   <div class="testcase-container">
     <div class="testcase-toolbar">
       <div class="testcase-toolbar-left">
@@ -295,17 +294,16 @@
       </div>
     </div>
   </div>
-{:else if status === Status.RUNNING}
+{:else if status === "RUNNING"}
   <div class="testcase-container">
     <div class="testcase-toolbar">
       <div class="testcase-toolbar-left">
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleStop}>
+        <button class="testcase-toolbar-icon" aria-label="Stop" onclick={handleStop}>
           <div class="codicon codicon-stop-circle"></div>
-        </div>
+        </button>
       </div>
     </div>
     {#if visible}
@@ -314,7 +312,7 @@
         readonly
         hiddenOnEmpty
         placeholder="Stdin..."
-        onexpand={() => handleExpandStdio(Stdio.STDIN)}
+        onexpand={() => handleExpandStdio("STDIN")}
       />
       <AutoresizeTextarea
         value={newStdin}
@@ -329,36 +327,35 @@
         hiddenOnEmpty
         placeholder="Stderr..."
         variant="stderr"
-        onexpand={() => handleExpandStdio(Stdio.STDERR)}
+        onexpand={() => handleExpandStdio("STDERR")}
       />
       <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Stdout..." />
     {/if}
   </div>
-{:else if status === Status.EDITING}
+{:else if status === "EDITING"}
   <div class="testcase-container">
     <div class="testcase-toolbar">
       <div class="testcase-toolbar-left">
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-sync codicon-modifier-spin"></div>
         </div>
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="testcase-toolbar-icon" onclick={handleSave}>
+        <button class="testcase-toolbar-icon" aria-label="Save" onclick={handleSave}>
           <div class="codicon codicon-save"></div>
-        </div>
+        </button>
       </div>
     </div>
     <AutoresizeTextarea
       value={testcase.stdin}
       placeholder="Stdin..."
       onchange={handleStdinChange}
-      onexpand={() => handleExpandStdio(Stdio.STDIN)}
+      onexpand={() => handleExpandStdio("STDIN")}
     />
     <AutoresizeTextarea
       value={testcase.acceptedStdout}
       placeholder="Accepted stdout..."
       variant="accepted"
       onchange={handleAcceptedStdoutChange}
-      onexpand={() => handleExpandStdio(Stdio.ACCEPTED_STDOUT)}
+      onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
     />
   </div>
 {/if}
@@ -396,6 +393,10 @@
     align-self: stretch;
     border-radius: 2px;
     padding: 3px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
   }
 
   .testcase-toolbar-icon:not(.testcase-toolbar-icon-exclude-highlight):hover {
@@ -428,38 +429,31 @@
   }
 
   /* Status-specific colors using data-status attribute */
-  /* CE=0 */
-  .testcase-elapsed[data-status="0"] {
+  .testcase-elapsed[data-status="CE"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  /* RE=1 */
-  .testcase-elapsed[data-status="1"] {
+  .testcase-elapsed[data-status="RE"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  /* WA=2 */
-  .testcase-elapsed[data-status="2"] {
+  .testcase-elapsed[data-status="WA"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  /* AC=3 */
-  .testcase-elapsed[data-status="3"] {
+  .testcase-elapsed[data-status="AC"] {
     background-color: var(--vscode-terminal-ansiGreen);
   }
 
-  /* TL=5 */
-  .testcase-elapsed[data-status="5"] {
+  .testcase-elapsed[data-status="TL"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  /* CE=6 */
-  .testcase-elapsed[data-status="6"] {
+  .testcase-elapsed[data-status="COMPILING"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  /* ML=9 */
-  .testcase-elapsed[data-status="9"] {
+  .testcase-elapsed[data-status="ML"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 </style>

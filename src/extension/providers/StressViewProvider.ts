@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { Status } from "../../shared/enums";
+import { StatusSchema, type Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
-import { compile, Runnable } from "../utils/runtime";
+import { compile, mapTestcaseTermination, Runnable } from "../utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
@@ -11,60 +11,84 @@ import {
   resolveVariables,
   TextHandler,
 } from "../utils/vscode";
+import { getLogger } from "../utils/logging";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
   ProviderMessageSchema,
-  ProviderMessageType,
   ViewMessageSchema,
   type WebviewMessage,
-  WebviewMessageType,
 } from "../../shared/stress-messages";
 
 const StressDataSchema = v.object({
   data: v.fallback(v.string(), ""),
-  status: v.fallback(v.enum(Status), Status.NA),
+  status: v.fallback(StatusSchema, "NA"),
 });
 
-interface IData {
-  data: string;
-  status: Status;
-}
+type StressData = v.InferOutput<typeof StressDataSchema>;
 
-interface IState {
+const defaultStressDataItem = v.parse(StressDataSchema, {});
+const defaultStressData: StressData[] = [
+  defaultStressDataItem,
+  defaultStressDataItem,
+  defaultStressDataItem,
+];
+
+type State = {
   data: TextHandler;
   status: Status;
   process: Runnable;
-}
+};
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: IState[] = [
-    { data: new TextHandler(), status: Status.NA, process: new Runnable() },
-    { data: new TextHandler(), status: Status.NA, process: new Runnable() },
-    { data: new TextHandler(), status: Status.NA, process: new Runnable() },
+  private _state: State[] = [
+    { data: new TextHandler(), status: "NA", process: new Runnable() },
+    { data: new TextHandler(), status: "NA", process: new Runnable() },
+    { data: new TextHandler(), status: "NA", process: new Runnable() },
   ]; // [generator, solution, good solution]
   private _stopFlag = false;
+  private _stopRequested = [false, false, false]; // track intentional stops per process
   private _clearFlag = false;
   private _running = false;
+  // Context for current run (used by handlers)
+  private _runCommands: string[][] = [[], [], []];
+  private _runCwd: string | undefined;
+  // Bound handlers (created once, reused across iterations)
+  private readonly _errorHandlers: [
+    (err: Error) => void,
+    (err: Error) => void,
+    (err: Error) => void,
+  ];
+  private readonly _stdoutDataHandlers: [
+    (data: string) => void,
+    (data: string) => void,
+    (data: string) => void,
+  ];
+  private readonly _stdoutEndHandlers: [() => void, () => void, () => void];
+  private readonly _closeHandlers: [
+    (code: number | null) => void,
+    (code: number | null) => void,
+    (code: number | null) => void,
+  ];
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
-      case ProviderMessageType.LOADED:
+      case "LOADED":
         this.loadCurrentFileData();
         break;
-      case ProviderMessageType.RUN:
+      case "RUN":
         void this.run();
         break;
-      case ProviderMessageType.STOP:
+      case "STOP":
         this.stop();
         break;
-      case ProviderMessageType.VIEW:
+      case "VIEW":
         this._view(msg);
         break;
-      case ProviderMessageType.ADD:
+      case "ADD":
         this._add(msg);
         break;
-      case ProviderMessageType.CLEAR:
+      case "CLEAR":
         this.clear();
         break;
     }
@@ -86,10 +110,32 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   ) {
     super("stress", context, ProviderMessageSchema);
 
+    // Initialize bound handlers once
+    this._errorHandlers = [
+      this._onProcessError.bind(this, 0),
+      this._onProcessError.bind(this, 1),
+      this._onProcessError.bind(this, 2),
+    ];
+    this._stdoutDataHandlers = [
+      this._onStdoutData.bind(this, 0),
+      this._onStdoutData.bind(this, 1),
+      this._onStdoutData.bind(this, 2),
+    ];
+    this._stdoutEndHandlers = [
+      this._onStdoutEnd.bind(this, 0),
+      this._onStdoutEnd.bind(this, 1),
+      this._onStdoutEnd.bind(this, 2),
+    ];
+    this._closeHandlers = [
+      this._onProcessClose.bind(this, 0),
+      this._onProcessClose.bind(this, 1),
+      this._onProcessClose.bind(this, 2),
+    ];
+
     for (let id = 0; id < 3; id++) {
       this._state[id].data.callback = (data: string) => {
         super._postMessage({
-          type: WebviewMessageType.STDIO,
+          type: "STDIO",
           id,
           data,
         });
@@ -100,14 +146,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _sendShowMessage(visible: boolean): void {
-    super._postMessage({ type: WebviewMessageType.SHOW, visible });
+    super._postMessage({ type: "SHOW", visible });
   }
 
   protected override _switchToNoFile() {
     this.stop();
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
-      this._state[id].status = Status.NA;
+      this._state[id].status = "NA";
+      this._stopRequested[id] = false;
     }
     this._currentFile = undefined;
     this._sendShowMessage(false);
@@ -120,7 +167,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Reset in-memory state.
     for (let id = 0; id < 3; id++) {
       this._state[id].data.reset();
-      this._state[id].status = Status.NA;
+      this._state[id].status = "NA";
+      this._stopRequested[id] = false;
     }
 
     this._currentFile = file;
@@ -130,7 +178,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const fileData = super.readStorage()[file];
     const arrayDataSchema = v.fallback(v.array(StressDataSchema), []);
     const state = v.parse(arrayDataSchema, fileData);
-    for (let id = 0; id < state.length; id++) {
+    for (let id = 0; id < Math.min(state.length, this._state.length); id++) {
       const testcase = state[id];
       this._state[id].status = testcase.status;
       this._state[id].data.reset();
@@ -143,7 +191,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   protected override _rehydrateWebviewFromState() {
     super._postMessage({
-      type: WebviewMessageType.INIT,
+      type: "INIT",
       states: [
         { data: this._state[0].data.data, status: this._state[0].status },
         { data: this._state[1].data.data, status: this._state[1].status },
@@ -169,16 +217,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (languageSettings.compileCommand) {
       for (let id = 0; id < 3; id++) {
         super._postMessage({
-          type: WebviewMessageType.STATUS,
+          type: "STATUS",
           id,
-          status: Status.COMPILING,
+          status: "COMPILING",
         });
       }
 
       const callback = (id: number, code: number) => {
-        const status = code ? Status.CE : Status.NA;
+        const status = code ? "CE" : "NA";
         this._state[id].status = status;
-        super._postMessage({ type: WebviewMessageType.STATUS, id, status });
+        super._postMessage({ type: "STATUS", id, status });
         return code;
       };
       const promises = [
@@ -213,15 +261,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     for (let id = 0; id < 3; id++) {
       super._postMessage({
-        type: WebviewMessageType.STATUS,
+        type: "STATUS",
         id,
-        status: Status.RUNNING,
+        status: "RUNNING",
       });
     }
 
     const cwd = languageSettings.currentWorkingDirectory
       ? resolveVariables(languageSettings.currentWorkingDirectory)
       : undefined;
+    this._runCwd = cwd;
     const testcaseTimeLimit = config.get<number>("stressTestcaseTimeLimit")!;
     const testcaseMemoryLimit = config.get<number>("stressTestcaseMemoryLimit")!;
     const timeLimit = config.get<number>("stressTimeLimit")!;
@@ -229,10 +278,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     let anyFailed = false;
     this._stopFlag = false;
+    for (let i = 0; i < 3; i++) {
+      this._stopRequested[i] = false;
+    }
     this._clearFlag = false;
     this._running = true;
     while (!this._stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
-      super._postMessage({ type: WebviewMessageType.CLEAR });
+      super._postMessage({ type: "CLEAR" });
       for (let i = 0; i < 3; i++) {
         this._state[i].data.reset();
       }
@@ -242,6 +294,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         languageSettings.runCommand,
         config.get("generatorFile")!
       );
+      this._runCommands[0] = generatorRunArguments;
       this._state[0].process.run(
         generatorRunArguments[0],
         testcaseTimeLimit,
@@ -249,23 +302,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...generatorRunArguments.slice(1)
       );
-      this._state[0].process.process?.on("error", (data) => {
-        if (data.name !== "AbortError") {
-          this._state[0].data.write(data.message, true);
-        }
-      });
-      this._state[0].process.process?.stdin.write(`${seed}\n`);
-      this._state[0].process.process?.stdout.on("data", (data: string) => {
-        this._state[0].data.write(data, false);
-        this._state[1].process.process?.stdin.write(data);
-        this._state[2].process.process?.stdin.write(data);
-      });
-      this._state[0].process.process?.stdout.once("end", () => this._state[0].data.write("", true));
+      this._state[0].process
+        .on("spawn", () => {
+          this._state[0].process.process?.stdin.write(`${seed}\n`);
+        })
+        .on("error", this._errorHandlers[0])
+        .on("stdout:data", this._stdoutDataHandlers[0])
+        .on("stdout:end", this._stdoutEndHandlers[0]);
 
       const solutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
         "${file}"
       );
+      this._runCommands[1] = solutionRunArguments;
       this._state[1].process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
@@ -273,20 +322,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...solutionRunArguments.slice(1)
       );
-      this._state[1].process.process?.on("error", (data) => {
-        if (data.name !== "AbortError") {
-          this._state[1].data.write(data.message, true);
-        }
-      });
-      this._state[1].process.process?.stdout.on("data", (data: string) =>
-        this._state[1].data.write(data, false)
-      );
-      this._state[1].process.process?.stdout.once("end", () => this._state[1].data.write("", true));
+      this._state[1].process
+        .on("error", this._errorHandlers[1])
+        .on("stdout:data", this._stdoutDataHandlers[1])
+        .on("stdout:end", this._stdoutEndHandlers[1]);
 
       const goodSolutionRunArguments = this._resolveRunArguments(
         languageSettings.runCommand,
         config.get("goodSolutionFile")!
       );
+      this._runCommands[2] = goodSolutionRunArguments;
       this._state[2].process.run(
         goodSolutionRunArguments[0],
         testcaseTimeLimit,
@@ -294,48 +339,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         ...goodSolutionRunArguments.slice(1)
       );
-      this._state[2].process.process?.on("error", (data) => {
-        if (data.name !== "AbortError") {
-          this._state[2].data.write(data.message, true);
-        }
-      });
-      this._state[2].process.process?.stdout.on("data", (data: string) =>
-        this._state[2].data.write(data, false)
-      );
-      this._state[2].process.process?.stdout.once("end", () => this._state[2].data.write("", true));
+      this._state[2].process
+        .on("error", this._errorHandlers[2])
+        .on("stdout:data", this._stdoutDataHandlers[2])
+        .on("stdout:end", this._stdoutEndHandlers[2])
+        .on("close", this._closeHandlers[2]);
 
+      this._state[0].process.on("close", this._closeHandlers[0]);
+      this._state[1].process.on("close", this._closeHandlers[1]);
+
+      const terminations = await Promise.all(this._state.map((value) => value.process.done));
       for (let i = 0; i < 3; i++) {
-        // if any process fails then the other 2 should be gracefully closed
-        this._state[i].process.process?.once("close", (code) => {
-          // Clean up all listeners to prevent accumulation
-          this._state[i].process.process?.removeAllListeners("error");
-          this._state[i].process.process?.stdout.removeAllListeners("data");
-
-          if (code === null || code) {
-            for (let j = 0; j < 3; j++) {
-              if (j !== i) {
-                this._state[j].process.process?.kill("SIGUSR1");
-              }
-            }
-          }
-        });
-      }
-
-      await Promise.allSettled(this._state.map((value) => value.process.promise));
-      for (let i = 0; i < 3; i++) {
-        if (this._state[i].process.memoryLimitExceeded) {
+        this._state[i].status = mapTestcaseTermination(
+          terminations[i],
+          this._state[i].process.exitCode
+        );
+        if (this._stopRequested[i]) {
+          this._state[i].status = "NA";
+        } else if (this._state[i].status !== "NA") {
           anyFailed = true;
-          this._state[i].status = Status.ML;
-        } else if (this._state[i].process.timedOut) {
-          anyFailed = true;
-          this._state[i].status = Status.TL;
-        } else if (this._state[i].process.signal === "SIGUSR1") {
-          this._state[i].status = Status.NA;
-        } else if (this._state[i].process.exitCode !== 0) {
-          anyFailed = true;
-          this._state[i].status = Status.RE;
-        } else {
-          this._state[i].status = Status.NA;
         }
       }
       if (anyFailed || this._state[1].data.data !== this._state[2].data.data) {
@@ -348,18 +370,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (this._clearFlag) {
       for (let id = 0; id < 3; id++) {
         this._state[id].data.reset();
-        this._state[id].status = Status.NA;
+        this._state[id].status = "NA";
       }
 
-      super._postMessage({ type: WebviewMessageType.CLEAR });
+      super._postMessage({ type: "CLEAR" });
     } else if (!anyFailed && this._state[1].data.data !== this._state[2].data.data) {
-      this._state[1].status = Status.WA;
+      this._state[1].status = "WA";
     }
     this._clearFlag = false;
 
     for (let id = 0; id < 3; id++) {
       super._postMessage({
-        type: WebviewMessageType.STATUS,
+        type: "STATUS",
         id,
         status: this._state[id].status,
       });
@@ -371,7 +393,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (this._running) {
       this._stopFlag = true;
       for (let i = 0; i < 3; i++) {
-        this._state[i].process.process?.kill("SIGUSR1");
+        this._stopRequested[i] = true;
+        this._state[i].process.process?.kill();
       }
     }
   }
@@ -420,10 +443,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     } else {
       for (let id = 0; id < 3; id++) {
         this._state[id].data.reset();
-        this._state[id].status = Status.NA;
+        this._state[id].status = "NA";
       }
 
-      super._postMessage({ type: WebviewMessageType.CLEAR });
+      super._postMessage({ type: "CLEAR" });
       this._saveState();
     }
   }
@@ -434,19 +457,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    let isDefault = true;
-    for (const state of this._state) {
-      isDefault &&= state.data.data === "";
-      isDefault &&= state.status === Status.NA;
-    }
-    super.writeStorage(
+    const data = this._state.map<StressData>((value) => ({
+      data: value.data.data,
+      status: value.status,
+    }));
+    void super.writeStorage(
       file,
-      isDefault
-        ? undefined
-        : this._state.map<IData>((value) => ({
-            data: value.data.data,
-            status: value.status,
-          }))
+      JSON.stringify(data) === JSON.stringify(defaultStressData) ? undefined : data
     );
   }
 
@@ -454,5 +471,55 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const resolvedFile = resolveVariables(fileVariable);
     const resolvedArgs = resolveCommand(runCommand, resolvedFile);
     return resolvedArgs;
+  }
+
+  private _onProcessError(processId: 0 | 1 | 2, data: Error) {
+    if (data.name !== "AbortError") {
+      const logger = getLogger("stress");
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      const fileLabels = [
+        `generatorFile: ${config.get("generatorFile")}`,
+        `solution: ${this._currentFile}`,
+        `goodSolutionFile: ${config.get("goodSolutionFile")}`,
+      ];
+      logger.error(`${fileLabels[processId]} process error`, {
+        file: this._currentFile,
+        error: data.message,
+        command: this._runCommands[processId],
+        cwd: this._runCwd,
+      });
+      this._state[processId].data.write(data.message, true);
+    }
+  }
+
+  private _onStdoutData(processId: 0 | 1 | 2, data: string) {
+    this._state[processId].data.write(data, false);
+    if (processId === 0) {
+      // Generator pipes to solution and good solution
+      this._state[1].process.process?.stdin.write(data);
+      this._state[2].process.process?.stdin.write(data);
+    }
+  }
+
+  private _onStdoutEnd(processId: 0 | 1 | 2) {
+    this._state[processId].data.write("", true);
+  }
+
+  private _onProcessClose(processId: 0 | 1 | 2, code: number | null) {
+    const proc = this._state[processId].process.process;
+    if (!proc) return;
+
+    // Detach listeners using stored references
+    proc.off("error", this._errorHandlers[processId]);
+    proc.stdout.off("data", this._stdoutDataHandlers[processId]);
+
+    if (code === null || code) {
+      // Cascade kill siblings (not user-requested stop)
+      for (let i = 0; i < 3; i++) {
+        if (i !== processId) {
+          this._state[i].process.process?.kill();
+        }
+      }
+    }
   }
 }

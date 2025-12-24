@@ -151,12 +151,20 @@ export class TextHandler {
   }
 
   reset() {
+    // While Competitive Companion requires inputs and outputs to end with a newline,
+    // we do not enforce that here to allow appending future data conveniently
+
     this._data = "";
     this._shortDataLength = 0;
     this._pending = "";
     this._spacesCount = 0;
     this._newlineCount = 0;
     this._lastWrite = Number.NEGATIVE_INFINITY;
+  }
+
+  isEmpty() {
+    // Consider only newline as empty for Competitive Companion compliance
+    return this._data.length === 0 || this._data === "\n";
   }
 }
 

@@ -1,10 +1,9 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 import { ReadonlyStringProvider } from "../utils/vscode";
+import { getLogger } from "../utils/logging";
 
-interface IWorkspaceState {
-  [key: string]: unknown;
-}
+type WorkspaceState = Record<string, unknown>;
 
 function getNonce(): string {
   const CHOICES = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -128,7 +127,8 @@ export default abstract class BaseViewProvider<
       if (result.success) {
         this.onMessage(result.output);
       } else {
-        console.error("Invalid message received:", result.issues);
+        const logger = getLogger(this.view);
+        logger.trace("Invalid webview message", result.issues[0]);
       }
     });
     webviewView.onDidDispose(() => this.onDispose());
@@ -143,24 +143,31 @@ export default abstract class BaseViewProvider<
     return `fastolympiccoding.${this.view}`;
   }
 
-  readStorage(): IWorkspaceState {
-    const data = this._context.workspaceState.get(this.view, {} as IWorkspaceState);
+  readStorage(): WorkspaceState {
+    const data = this._context.workspaceState.get(this.view, {} as WorkspaceState);
     if (!data || typeof data !== "object") {
       return {};
     }
     return data;
   }
 
-  writeStorage(file: string, data?: object) {
-    const fileData = this._context.workspaceState.get(this.view, {});
-    this._context.workspaceState.update(this.view, {
-      ...fileData,
-      [`${file}`]: data,
-    });
+  async writeStorage(file: string, data?: object): Promise<void> {
+    const fileData = this._context.workspaceState.get(this.view, {}) as Record<string, unknown>;
+    if (data === undefined) {
+      // Delete the key when data is undefined (PERS-006)
+      const updated = { ...fileData };
+      delete updated[file];
+      await this._context.workspaceState.update(this.view, updated);
+    } else {
+      await this._context.workspaceState.update(this.view, {
+        ...fileData,
+        [`${file}`]: data,
+      });
+    }
   }
 
-  clearData() {
-    this._context.workspaceState.update(this.view, undefined);
+  async clearData(): Promise<void> {
+    await this._context.workspaceState.update(this.view, undefined);
   }
 
   protected _postMessage(msg: WebviewMessageType): void {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Status } from "../../shared/enums";
+  import type { Status } from "../../shared/enums";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
 
   interface IState {
@@ -30,23 +30,23 @@
   const status = $derived(state.status);
 
   const statusText = $derived(
-    status === Status.WA
+    status === "WA"
       ? "Wrong Answer"
-      : status === Status.RE
+      : status === "RE"
         ? "Runtime Error"
-        : status === Status.TL
+        : status === "TL"
           ? "Time Limit Exceeded"
-          : status === Status.ML
+          : status === "ML"
             ? "Memory Limit Exceeded"
             : ""
   );
 </script>
 
-{#if status === Status.COMPILING}
+{#if status === "COMPILING"}
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <div class="state-badge state-status" data-status={Status.NA}>
+        <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
@@ -63,11 +63,11 @@
       </div>
     </div>
   </div>
-{:else if status === Status.RUNNING}
+{:else if status === "RUNNING"}
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <div class="state-badge state-status" data-status={Status.NA}>
+        <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
@@ -87,11 +87,11 @@
       onexpand={handleExpand}
     />
   </div>
-{:else if status === Status.CE}
+{:else if status === "CE"}
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <div class="state-badge state-status" data-status={Status.NA}>
+        <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
@@ -108,11 +108,11 @@
       </div>
     </div>
   </div>
-{:else if status === Status.WA || status === Status.RE || status === Status.TL || status === Status.ML}
+{:else if status === "WA" || status === "RE" || status === "TL" || status === "ML"}
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <div class="state-badge state-status" data-status={Status.NA}>
+        <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
@@ -122,13 +122,13 @@
         </div>
         <div class="state-badge state-status" data-status={status}>
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            {#if status === Status.WA}
+            {#if status === "WA"}
               <div class="codicon codicon-bolded codicon-error"></div>
-            {:else if status === Status.RE}
+            {:else if status === "RE"}
               <div class="codicon codicon-bolded codicon-warning"></div>
-            {:else if status === Status.TL}
+            {:else if status === "TL"}
               <div class="codicon codicon-bolded codicon-clock"></div>
-            {:else if status === Status.ML}
+            {:else if status === "ML"}
               <div class="codicon codicon-bolded codicon-chip"></div>
             {/if}
           </div>
@@ -136,10 +136,9 @@
         </div>
       </div>
       <div class="state-toolbar-right">
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="state-toolbar-icon" onclick={handleAdd}>
+        <button class="state-toolbar-icon" aria-label="Add" onclick={handleAdd}>
           <div class="codicon codicon-insert"></div>
-        </div>
+        </button>
       </div>
     </div>
     <AutoresizeTextarea
@@ -154,7 +153,7 @@
   <div class="state-container">
     <div class="state-toolbar">
       <div class="state-toolbar-left">
-        <div class="state-badge state-status" data-status={Status.NA}>
+        <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
@@ -202,6 +201,9 @@
     align-self: stretch;
     border-radius: 2px;
     padding: 3px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
   }
 
   .state-toolbar-icon:not(.state-toolbar-icon-exclude-highlight):hover {
@@ -234,38 +236,31 @@
   }
 
   /* Status-specific colors using data-status attribute */
-  /* CE=0 */
-  .state-status[data-status="0"] {
+  .state-status[data-status="CE"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  /* RE=1 */
-  .state-status[data-status="1"] {
+  .state-status[data-status="RE"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  /* WA=2 */
-  .state-status[data-status="2"] {
+  .state-status[data-status="WA"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  /* AC=3 */
-  .state-status[data-status="3"] {
+  .state-status[data-status="AC"] {
     background-color: var(--vscode-terminal-ansiGreen);
   }
 
-  /* TL=5 */
-  .state-status[data-status="5"] {
+  .state-status[data-status="TL"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  /* CE=6 */
-  .state-status[data-status="6"] {
+  .state-status[data-status="COMPILING"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  /* ML=9 */
-  .state-status[data-status="9"] {
+  .state-status[data-status="ML"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 </style>

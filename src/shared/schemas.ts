@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { Status } from "./enums";
+import { StatusSchema } from "./enums";
 
 export const LanguageSettingsSchema = v.object({
   compileCommand: v.optional(v.string()),
@@ -21,11 +21,20 @@ export const TestcaseSchema = v.object({
   acceptedStdout: v.fallback(v.string(), ""),
   elapsed: v.fallback(v.number(), 0),
   memoryBytes: v.fallback(v.number(), 0),
-  status: v.fallback(v.enum(Status), Status.NA),
+  status: v.fallback(StatusSchema, "NA"),
   shown: v.fallback(v.boolean(), true),
   toggled: v.fallback(v.boolean(), false),
   skipped: v.fallback(v.boolean(), false),
 });
+
+export const InputTypeValues = ["stdin", "file", "regex"] as const;
+export type InputType = (typeof InputTypeValues)[number];
+
+export const OutputTypeValues = ["stdout", "file"] as const;
+export type OutputType = (typeof OutputTypeValues)[number];
+
+export const TestTypeValues = ["single", "multiNumber"] as const;
+export type TestType = (typeof TestTypeValues)[number];
 
 const InputStdinSchema = v.object({
   type: v.literal("stdin"),
@@ -73,7 +82,7 @@ export const ProblemSchema = v.object({
   memoryLimit: v.number(),
   timeLimit: v.number(),
   tests: v.array(TestSchema),
-  testType: v.picklist(["single", "multiNumber"]),
+  testType: v.picklist(TestTypeValues),
   input: InputSchema,
   output: OutputSchema,
   languages: LanguagesSchema,

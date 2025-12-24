@@ -6,6 +6,7 @@ import * as v from "valibot";
 
 import { ProblemSchema } from "../../shared/schemas";
 import type JudgeViewProvider from "../providers/JudgeViewProvider";
+import { getLogger } from "./logging";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 
@@ -48,24 +49,44 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 async function promptForTargetFile(
   problem: Problem,
   workspaceRoot: string,
-  files: vscode.Uri[]
+  files: vscode.Uri[],
+  currentFileRelativePath?: string
 ): Promise<string> {
   const options: vscode.QuickPickItem[] = files.map((file) => ({
     label: path.parse(file.fsPath).base,
-    description: path.parse(path.relative(workspaceRoot, file.fsPath)).dir,
+    description: path.relative(workspaceRoot, file.fsPath),
   }));
 
   const pick = vscode.window.createQuickPick();
   pick.title = `Testcases for "${problem.name}"`;
   pick.placeholder = "Full file path to put testcases onto";
   pick.items = options;
+  pick.matchOnDescription = true;
   pick.ignoreFocusOut = true;
+
+  // Auto-fill with current file if available
+  if (currentFileRelativePath) {
+    const { base: currentBase } = path.parse(currentFileRelativePath);
+
+    // Try to find and pre-select the matching item
+    const matchingItem = options.find(
+      (item) => item.label === currentBase && item.description === currentFileRelativePath
+    );
+    if (matchingItem) {
+      pick.activeItems = [matchingItem];
+    }
+
+    // Set the value to the current file path so users can edit it
+    pick.value = currentFileRelativePath;
+  }
+
   pick.show();
 
   return new Promise((resolve) => {
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
-      resolve(selected ? path.join(selected.description ?? "", selected.label) : pick.value);
+      // Use the selected item's description if available, otherwise use the custom input value
+      resolve(selected?.description ?? pick.value);
       pick.hide();
     });
     pick.onDidHide(() => resolve(""));
@@ -89,10 +110,16 @@ async function processProblem(
   const isSingleProblem = problem.batch.size === 1;
   const needsPrompt = askForWhichFile || !isSingleProblem || !activeFile;
 
-  let relativePath = isSingleProblem && activeFile ? path.relative(workspaceRoot, activeFile) : "";
+  const currentFileRelativePath = activeFile ? path.relative(workspaceRoot, activeFile) : undefined;
+  let relativePath = isSingleProblem && currentFileRelativePath ? currentFileRelativePath : "";
 
   if (needsPrompt) {
-    relativePath = await promptForTargetFile(problem, workspaceRoot, files);
+    relativePath = await promptForTargetFile(
+      problem,
+      workspaceRoot,
+      files,
+      currentFileRelativePath
+    );
   }
 
   if (relativePath === "") {
@@ -101,7 +128,14 @@ async function processProblem(
   }
 
   const absolutePath = path.join(workspaceRoot, relativePath);
-  await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
+  try {
+    await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
+  } catch (error) {
+    const logger = getLogger("competitive-companion");
+    logger.error(`Failed to create/write target file: ${absolutePath}`, error);
+    vscode.window.showErrorMessage(`Failed to write file: ${absolutePath}`);
+    return;
+  }
 
   judge.addFromCompetitiveCompanion(absolutePath, problem);
 
@@ -129,7 +163,9 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
 
   return (req, res) => {
     if (req.method !== "POST") {
-      res.end();
+      res.statusCode = 405;
+      res.setHeader("Allow", "POST");
+      res.end("Method Not Allowed");
       return;
     }
 
@@ -137,16 +173,21 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
     req.setEncoding("utf-8");
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
-      res.end(() => req.socket.unref());
-
       // Parse and validate the problem data
       let problem: Problem;
       try {
         problem = v.parse(ProblemSchema, JSON.parse(body));
       } catch (error) {
-        console.error("Invalid data from Competitive Companion received:", error);
+        const logger = getLogger("competitive-companion");
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logger.warn(`Invalid data received (${body.length} bytes): ${errorMsg}`);
+        res.statusCode = 400;
+        res.end("Bad Request");
         return;
       }
+
+      res.statusCode = 200;
+      res.end(() => req.socket.unref());
 
       vscode.window.showInformationMessage(`Received data for "${problem.name}"`);
       problemQueue.enqueue(problem);
@@ -182,8 +223,16 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
   server = http.createServer(createRequestHandler(judgeViewProvider));
 
   server.once("connection", (socket) => socket.unref());
-  server.once("listening", () => statusBarItem?.show());
+  server.once("listening", () => {
+    const config = vscode.workspace.getConfiguration("fastolympiccoding");
+    const port = config.get<number>("port")!;
+    const logger = getLogger("competitive-companion");
+    logger.info(`Listener started on port ${port}`);
+    statusBarItem?.show();
+  });
   server.once("error", (error) => {
+    const logger = getLogger("competitive-companion");
+    logger.error(`Listener error: ${error}`);
     vscode.window.showErrorMessage(`Competitive Companion listener error: ${error}`);
     server?.close();
     server = undefined;
