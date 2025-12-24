@@ -63,23 +63,15 @@ type LaunchProcessParams = {
 function setTestcaseStats(state: State, timeLimit: number, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
-  if (state.process.timedOut) {
-    state.elapsed = timeLimit;
-    state.status = "TL";
-  } else if (state.process.memoryLimitExceeded) {
-    state.status = "ML";
-  } else {
-    // Use helper to determine base status from termination
-    state.status = mapTestcaseTermination(termination, state.process.exitCode);
-    if (state.status === "NA") {
-      // Exit succeeded; refine with output comparison
-      if (state.acceptedStdout.data === "\n") {
-        state.status = "NA";
-      } else if (state.stdout.data === state.acceptedStdout.data) {
-        state.status = "AC";
-      } else {
-        state.status = "WA";
-      }
+  state.status = mapTestcaseTermination(termination, state.process.exitCode);
+  if (state.status === "NA") {
+    // Exit succeeded; refine with output comparison
+    if (state.acceptedStdout.isEmpty()) {
+      state.status = "NA";
+    } else if (state.stdout.data === state.acceptedStdout.data) {
+      state.status = "AC";
+    } else {
+      state.status = "WA";
     }
   }
 }
