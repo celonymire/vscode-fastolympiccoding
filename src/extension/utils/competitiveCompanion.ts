@@ -85,7 +85,8 @@ async function promptForTargetFile(
   return new Promise((resolve) => {
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
-      resolve(selected.description ?? "");
+      // Use the selected item's description if available, otherwise use the custom input value
+      resolve(selected?.description ?? pick.value);
       pick.hide();
     });
     pick.onDidHide(() => resolve(""));
