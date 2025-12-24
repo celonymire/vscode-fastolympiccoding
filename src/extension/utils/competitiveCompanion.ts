@@ -83,7 +83,7 @@ async function promptForTargetFile(
   return new Promise((resolve) => {
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
-      resolve(selected ? path.join(selected.description || "", selected.label) : pick.value);
+      resolve(selected ? path.join(selected.description ?? "", selected.label) : pick.value);
       pick.hide();
     });
     pick.onDidHide(() => resolve(""));
