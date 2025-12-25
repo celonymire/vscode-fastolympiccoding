@@ -248,6 +248,14 @@ export class Runnable {
       this._memorySampleTimeout = null;
     }
 
+    // If this Runnable instance is reused across runs, ensure we don't retain listeners
+    // on the previous process (prevents handler accumulation across stress/judge loops).
+    if (this._process) {
+      this._process.removeAllListeners();
+      this._process.stdout.removeAllListeners();
+      this._process.stderr.removeAllListeners();
+    }
+
     this._process = undefined;
     this._promise = undefined;
     this._spawnPromise = undefined;
@@ -399,13 +407,8 @@ export class Runnable {
     this._disposed = true;
     this._stopRequested = true;
 
-    // Stop the process gracefully
     this._process?.kill();
-
-    // Remove all attached listeners via EventEmitter's built-in registry
-    this._process?.removeAllListeners();
-    this._process?.stdout.removeAllListeners();
-    this._process?.stderr.removeAllListeners();
+    this._reset();
 
     return Promise.resolve();
   }
