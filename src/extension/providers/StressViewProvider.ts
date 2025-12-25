@@ -482,12 +482,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         `solution: ${this._currentFile}`,
         `goodSolutionFile: ${config.get("goodSolutionFile")}`,
       ];
-      logger.error(`${fileLabels[processId]} process error`, {
-        file: this._currentFile,
-        error: data.message,
-        command: this._runCommands[processId],
-        cwd: this._runCwd,
-      });
+      logger.error(
+        `${fileLabels[processId]} process error (file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${this._runCommands[processId].join(" ")}, cwd=${this._runCwd ?? "undefined"})`
+      );
       this._state[processId].data.write(data.message, true);
     }
   }

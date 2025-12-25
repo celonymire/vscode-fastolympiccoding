@@ -212,12 +212,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           return;
         }
         const logger = getLogger("judge");
-        logger.error("Process error during testcase execution", {
-          testcaseId: id,
-          file: this._currentFile,
-          error: data.message,
-          command: proc.spawnargs,
-        });
+        logger.error(
+          `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
+        );
         testcase.stderr.write(data.message, true);
         testcase.status = "RE";
         super._postMessage({
@@ -770,11 +767,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
       const logger = getLogger("judge");
-      logger.warn("Debug settings missing for language", {
-        file,
-        hasDebugCommand: !!languageSettings.debugCommand,
-        hasDebugAttachConfig: !!languageSettings.debugAttachConfig,
-      });
+      logger.warn(
+        `Debug settings missing for language (file=${file}, hasDebugCommand=${!!languageSettings.debugCommand}, hasDebugAttachConfig=${!!languageSettings.debugAttachConfig})`
+      );
       vscode.window.showWarningMessage("Missing debug settings for this language.");
       return;
     }
@@ -792,11 +787,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       debugPort = await findAvailablePort();
     } catch (error) {
       const logger = getLogger("judge");
-      logger.error("Failed to allocate debug port", {
-        file,
-        testcaseId: id,
-        error,
-      });
+      logger.error(
+        `Failed to allocate debug port (file=${file}, testcaseId=${id}, error=${error instanceof Error ? error.message : String(error)})`
+      );
       vscode.window.showErrorMessage(
         `Failed to find available port for debugging: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -843,14 +836,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const exitCode = testcase.process.exitCode;
       const signal = testcase.process.signal;
       const logger = getLogger("judge");
-      logger.error("Debug process failed to spawn", {
-        file,
-        testcaseId: id,
-        command: resolvedArgs,
-        cwd,
-        exitCode,
-        signal,
-      });
+      logger.error(
+        `Debug process failed to spawn (file=${file}, testcaseId=${id}, command=${resolvedArgs.join(" ")}, cwd=${cwd ?? "undefined"}, exitCode=${exitCode}, signal=${signal ?? "null"})`
+      );
       vscode.window.showErrorMessage(
         `Debug process failed to start (exit code ${exitCode}, signal ${signal})`
       );

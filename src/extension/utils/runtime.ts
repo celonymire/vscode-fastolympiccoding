@@ -104,8 +104,7 @@ function getWin32MemoryAddon(): Win32MemoryAddon | null {
   } catch (err) {
     const logger = getLogger("runtime");
     logger.warn(
-      "Windows memory addon unavailable, using pidusage fallback (performance degraded)",
-      err
+      `Windows memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
@@ -138,8 +137,7 @@ function getLinuxMemoryAddon(): LinuxMemoryAddon | null {
   } catch (err) {
     const logger = getLogger("runtime");
     logger.warn(
-      "Linux memory addon unavailable, using pidusage fallback (performance degraded)",
-      err
+      `Linux memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
@@ -228,11 +226,9 @@ export class Runnable {
       this._memoryLimitExceeded = true;
       this._memoryCancellationTokenSource?.cancel();
       const logger = getLogger("runtime");
-      logger.debug("Memory limit exceeded, killing process", {
-        pid,
-        maxMemoryMB: Math.round(this._maxMemoryBytes / Runnable.BYTES_PER_MEGABYTE),
-        limitMB: Math.round(this._memoryLimitBytes / Runnable.BYTES_PER_MEGABYTE),
-      });
+      logger.debug(
+        `Memory limit exceeded, killing process (pid=${pid}, maxMemoryMB=${Math.round(this._maxMemoryBytes / Runnable.BYTES_PER_MEGABYTE)}, limitMB=${Math.round(this._memoryLimitBytes / Runnable.BYTES_PER_MEGABYTE)})`
+      );
       this._process?.kill();
       return;
     }
@@ -307,12 +303,9 @@ export class Runnable {
       this._process?.once("error", (err) => {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
         const logger = getLogger("runtime");
-        logger.error("Process spawn failed", {
-          command,
-          args,
-          cwd,
-          error: err,
-        });
+        logger.error(
+          `Process spawn failed (command=${command}, args=${args.join(" ")}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
+        );
         resolveSpawn(false);
       });
       this._process?.once("exit", (code, signal) => {
@@ -547,13 +540,9 @@ export async function compile(
       const status = mapCompilationTermination(termination, runnable.exitCode);
 
       if (status === "CE" || status === "RE") {
-        logger.error("Compilation failed", {
-          file,
-          command: currentCommand,
-          exitCode: runnable.exitCode,
-          termination,
-          stderr: err.substring(0, 500), // Truncate for readability
-        });
+        logger.error(
+          `Compilation failed (file=${file}, command=${currentCommand}, exitCode=${runnable.exitCode}, termination=${termination}, stderr=${err.substring(0, 500)})`
+        );
 
         const dummy = new ReadonlyTerminal();
         const terminal = vscode.window.createTerminal({
@@ -573,7 +562,7 @@ export async function compile(
       }
 
       lastCompiled.set(file, [currentChecksum, currentCommand]);
-      logger.info("Compilation succeeded", { file });
+      logger.info(`Compilation succeeded (file=${file})`);
       return 0;
     })();
     compilePromise.set(file, promise);
