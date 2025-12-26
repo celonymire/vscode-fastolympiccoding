@@ -25,6 +25,7 @@
 
   let textarea: HTMLTextAreaElement | undefined = $state();
   let isHovered = $state();
+  let containerElement: HTMLDivElement | undefined = $state();
 
   function handleInput(event: Event) {
     const target = event.target as HTMLTextAreaElement;
@@ -43,6 +44,19 @@
     if (hiddenOnEmpty && (value === "" || value === "\n")) {
       return;
     }
+
+    if (containerElement) {
+      const handleMouseEnter = () => (isHovered = true);
+      const handleMouseLeave = () => (isHovered = false);
+
+      containerElement.addEventListener("mouseenter", handleMouseEnter);
+      containerElement.addEventListener("mouseleave", handleMouseLeave);
+
+      return () => {
+        containerElement?.removeEventListener("mouseenter", handleMouseEnter);
+        containerElement?.removeEventListener("mouseleave", handleMouseLeave);
+      };
+    }
   });
 
   const hidden = $derived(hiddenOnEmpty && (value === "" || value === "\n"));
@@ -50,12 +64,7 @@
 </script>
 
 {#if !hidden}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="container"
-    onmouseenter={() => (isHovered = true)}
-    onmouseleave={() => (isHovered = false)}
-  >
+  <div bind:this={containerElement} class="container">
     {#if readonly}
       <div class="content readonly" class:content--has-value={hasValue} data-variant={variant}>
         {value || placeholder}

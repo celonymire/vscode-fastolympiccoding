@@ -188,8 +188,9 @@
 {#if show}
   {#if showSettings}
     <div class="settings-section">
-      <p class="settings-label">Time Limit</p>
+      <label for="time-limit-input" class="settings-label">Time Limit</label>
       <input
+        id="time-limit-input"
         type="number"
         value={newTimeLimit}
         oninput={handleTimeLimitInput}
@@ -198,8 +199,9 @@
       <p class="settings-additional-info">
         Specify time limit in milliseconds. "0" means no limit.
       </p>
-      <p class="settings-label">Memory Limit</p>
+      <label for="memory-limit-input" class="settings-label">Memory Limit</label>
       <input
+        id="memory-limit-input"
         type="number"
         value={newMemoryLimit}
         oninput={handleMemoryLimitInput}
