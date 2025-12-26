@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { tick } from "svelte";
-
   type Variant = "default" | "stderr" | "accepted" | "active";
 
   interface Props {
@@ -27,18 +25,6 @@
 
   let textarea: HTMLTextAreaElement | undefined = $state();
   let isHovered = $state();
-
-  // Auto-resize textarea when value changes
-  $effect(() => {
-    // Access value to track it
-    void value;
-    tick().then(() => {
-      if (textarea) {
-        textarea.style.height = "inherit";
-        textarea.style.height = `${textarea.scrollHeight}px`;
-      }
-    });
-  });
 
   function handleInput(event: Event) {
     const target = event.target as HTMLTextAreaElement;
@@ -140,6 +126,9 @@
   }
 
   textarea.content {
+    field-sizing: content;
+    min-height: 1lh;
+    height: auto;
     resize: none;
     overflow-y: hidden;
     outline: none;
