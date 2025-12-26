@@ -207,6 +207,7 @@
     border: none;
     background: transparent;
     cursor: pointer;
+    color: inherit;
   }
 
   .state-toolbar-icon:not(.state-toolbar-icon-exclude-highlight):hover {
