@@ -177,6 +177,8 @@
     display: flex;
     align-items: center;
     margin-bottom: 6px;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .state-toolbar-left {
@@ -184,12 +186,13 @@
     align-items: center;
     justify-content: flex-start;
     gap: 6px;
+    flex-wrap: wrap;
+    margin-right: auto;
   }
 
   .state-toolbar-right {
     display: flex;
     align-items: center;
-    margin-left: auto;
     justify-content: flex-end;
     gap: 6px;
   }
@@ -217,7 +220,6 @@
   .state-badge {
     display: flex;
     align-items: center;
-    height: 22px;
     padding: 1px 6px;
     border-radius: 11px;
     font-size: 15px;
@@ -228,7 +230,7 @@
   }
 
   .state-badge-text {
-    margin-right: 3px;
+    margin: 0 3px 0 0;
   }
 
   .codicon-bolded {
