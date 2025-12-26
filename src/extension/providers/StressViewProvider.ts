@@ -280,10 +280,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       languageSettings.runCommand,
       config.get("generatorFile")!
     );
-    const solutionRunArguments = this._resolveRunArguments(
-      languageSettings.runCommand,
-      "${file}"
-    );
+    const solutionRunArguments = this._resolveRunArguments(languageSettings.runCommand, "${file}");
     const goodSolutionRunArguments = this._resolveRunArguments(
       languageSettings.runCommand,
       config.get("goodSolutionFile")!
