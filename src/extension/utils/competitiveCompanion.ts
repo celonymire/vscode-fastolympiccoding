@@ -12,13 +12,12 @@ type Problem = v.InferOutput<typeof ProblemSchema>;
 
 /**
  * Queue that processes problems sequentially as they arrive from Competitive Companion.
- * Gathers workspace files once before processing a batch of problems.
  */
 class ProblemQueue {
   private queue: Problem[] = [];
   private processing = false;
 
-  constructor(private processor: (problem: Problem, files: vscode.Uri[]) => Promise<void>) {}
+  constructor(private processor: (problem: Problem) => Promise<void>) {}
 
   enqueue(problem: Problem): void {
     this.queue.push(problem);
@@ -29,10 +28,9 @@ class ProblemQueue {
     if (this.processing || this.queue.length === 0) return;
 
     this.processing = true;
-    const files = await gatherWorkspaceFiles();
     while (this.queue.length > 0) {
       const problem = this.queue.shift()!;
-      await this.processor(problem, files);
+      await this.processor(problem);
     }
     this.processing = false;
   }
@@ -41,6 +39,9 @@ class ProblemQueue {
 // Module state
 let server: http.Server | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+
+let prevSelection: string | undefined;
+let prevBatchId: string | undefined;
 
 /**
  * Shows a QuickPick to let the user select a target file for testcases,
@@ -109,7 +110,11 @@ async function promptForTargetFile(
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
       // Use the selected item's description if available, otherwise use the custom input value
-      resolve(selected?.description ?? pick.value);
+      // If the selected item is the "Create New File" option, use the previous selection as the file name
+      const fileName = selected?.description ?? pick.value;
+      resolve(fileName);
+      prevSelection = fileName;
+      prevBatchId = problem.batch.id;
       pick.hide();
     });
     pick.onDidHide(() => resolve(""));
@@ -121,8 +126,7 @@ async function promptForTargetFile(
  */
 async function processProblem(
   problem: Problem,
-  judge: JudgeViewProvider,
-  files: vscode.Uri[]
+  judge: JudgeViewProvider
 ): Promise<void> {
   const activeFile = vscode.window.activeTextEditor?.document.fileName;
   const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
@@ -133,14 +137,21 @@ async function processProblem(
   const isSingleProblem = problem.batch.size === 1;
   const needsPrompt = askForWhichFile || !isSingleProblem || !activeFile;
 
-  const currentFileRelativePath = activeFile ? path.relative(workspaceRoot, activeFile) : undefined;
+  let currentFileRelativePath;
+  if (prevBatchId === problem.batch.id) {
+    currentFileRelativePath = prevSelection;
+  } else {
+    currentFileRelativePath = activeFile ? path.relative(workspaceRoot, activeFile) : undefined;
+  }
   let relativePath = isSingleProblem && currentFileRelativePath ? currentFileRelativePath : "";
 
   if (needsPrompt) {
+    // Gather files before prompting to include newly created files from previous problems
+    const updatedFiles = await gatherWorkspaceFiles();
     relativePath = await promptForTargetFile(
       problem,
       workspaceRoot,
-      files,
+      updatedFiles,
       currentFileRelativePath
     );
   }
@@ -182,7 +193,7 @@ async function gatherWorkspaceFiles(): Promise<vscode.Uri[]> {
  * Creates the request handler for the Competitive Companion HTTP server.
  */
 function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
-  const problemQueue = new ProblemQueue((problem, files) => processProblem(problem, judge, files));
+  const problemQueue = new ProblemQueue((problem) => processProblem(problem, judge));
 
   return (req, res) => {
     if (req.method !== "POST") {
