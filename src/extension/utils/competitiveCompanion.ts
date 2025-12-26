@@ -59,7 +59,7 @@ async function promptForTargetFile(
 
   const pick = vscode.window.createQuickPick();
   pick.title = `Testcases for "${problem.name}"`;
-  pick.placeholder = "Full file path to put testcases onto";
+  pick.placeholder = "Relative file path to put testcases onto";
   pick.items = options;
   pick.matchOnDescription = true;
   pick.ignoreFocusOut = true;
@@ -83,6 +83,29 @@ async function promptForTargetFile(
   pick.show();
 
   return new Promise((resolve) => {
+    pick.onDidChangeValue((value) => {
+      if (!value.trim()) {
+        pick.items = options;
+        return;
+      }
+
+      const newItems = [...options];
+
+      // Check if the path doesn't exist in the workspace files
+      const pathExists = options.some((item) => item.description === value);
+      if (!pathExists) {
+        // Don't insert it at the beginning because it is subject to VSCode's
+        // matching score for the display order anyways
+        newItems.push({
+          label: "Create New File",
+          description: value,
+          alwaysShow: true,
+        });
+      }
+
+      pick.items = newItems;
+    });
+
     pick.onDidAccept(() => {
       const selected = pick.selectedItems[0];
       // Use the selected item's description if available, otherwise use the custom input value
