@@ -377,16 +377,7 @@
     gap: 6px;
   }
 
-  /* Fade away hidden toolbar elements except a specific class */
-  .testcase-toolbar--hidden .testcase-badges {
-    opacity: 0.5;
-  }
-  .testcase-toolbar--hidden
-    .testcase-left-buttons
-    > button:not(.testcase-toolbar-icon--visibility) {
-    opacity: 0.5;
-  }
-  .testcase-toolbar--hidden .testcase-right-buttons > button {
+  .testcase-toolbar--hidden > :global(*) > :global(*:not(.testcase-toolbar-icon--visibility)) {
     opacity: 0.5;
   }
 
