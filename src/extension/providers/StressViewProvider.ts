@@ -276,6 +276,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const timeLimit = config.get<number>("stressTimeLimit")!;
     const start = Date.now();
 
+    const generatorRunArguments = this._resolveRunArguments(
+      languageSettings.runCommand,
+      config.get("generatorFile")!
+    );
+    const solutionRunArguments = this._resolveRunArguments(
+      languageSettings.runCommand,
+      "${file}"
+    );
+    const goodSolutionRunArguments = this._resolveRunArguments(
+      languageSettings.runCommand,
+      config.get("goodSolutionFile")!
+    );
+
     let anyFailed = false;
     this._stopFlag = false;
     for (let i = 0; i < 3; i++) {
@@ -290,10 +303,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
 
       const seed = Math.round(Math.random() * 9007199254740991);
-      const generatorRunArguments = this._resolveRunArguments(
-        languageSettings.runCommand,
-        config.get("generatorFile")!
-      );
       this._runCommands[0] = generatorRunArguments;
       this._state[0].process.run(
         generatorRunArguments[0],
@@ -310,10 +319,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stdout:data", this._stdoutDataHandlers[0])
         .on("stdout:end", this._stdoutEndHandlers[0]);
 
-      const solutionRunArguments = this._resolveRunArguments(
-        languageSettings.runCommand,
-        "${file}"
-      );
       this._runCommands[1] = solutionRunArguments;
       this._state[1].process.run(
         solutionRunArguments[0],
@@ -327,10 +332,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stdout:data", this._stdoutDataHandlers[1])
         .on("stdout:end", this._stdoutEndHandlers[1]);
 
-      const goodSolutionRunArguments = this._resolveRunArguments(
-        languageSettings.runCommand,
-        config.get("goodSolutionFile")!
-      );
       this._runCommands[2] = goodSolutionRunArguments;
       this._state[2].process.run(
         goodSolutionRunArguments[0],
