@@ -138,7 +138,7 @@ Napi::Value GetLinuxMemoryStats(const Napi::CallbackInfo &info) {
   uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
 
   // Linux PIDs are positive. (PID 0 does not have /proc/<pid>/status.)
-  if (pid < 1 || pid > 32768) {
+  if (pid < 1 || pid > 4194304) {
     Napi::RangeError::New(env, "PID is out of range")
         .ThrowAsJavaScriptException();
     return env.Null();
