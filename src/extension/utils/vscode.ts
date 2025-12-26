@@ -202,6 +202,28 @@ export class ReadonlyStringProvider implements vscode.TextDocumentContentProvide
   }
 }
 
+function getRelativeFileDirname(relativeFilePath: string | undefined): string {
+  if (!relativeFilePath) return "";
+  const dir = path.dirname(relativeFilePath);
+  return dir === "." ? "" : dir;
+}
+
+function getFileDirnameBasename(parsedPath: path.ParsedPath | undefined): string {
+  if (!parsedPath) return "";
+  return parsedPath.dir.substring(parsedPath.dir.lastIndexOf(path.sep) + 1);
+}
+
+function getLineNumber(activeEditor: vscode.TextEditor | undefined): string {
+  return activeEditor ? String(activeEditor.selection.start.line + 1) : "";
+}
+
+function getSelectedText(activeEditor: vscode.TextEditor | undefined): string {
+  if (!activeEditor) return "";
+  return activeEditor.document.getText(
+    new vscode.Range(activeEditor.selection.start, activeEditor.selection.end)
+  );
+}
+
 function resolveStringVariables(
   string: string,
   inContextOfFile?: string,
@@ -234,22 +256,15 @@ function resolveStringVariables(
     "${file}": absoluteFilePath ?? "",
     "${fileWorkspaceFolder}": activeWorkspace?.uri.fsPath ?? "",
     "${relativeFile}": relativeFilePath ?? "",
-    "${relativeFileDirname}": relativeFilePath
-      ? relativeFilePath.substring(0, relativeFilePath.lastIndexOf(path.sep))
-      : "",
+    "${relativeFileDirname}": getRelativeFileDirname(relativeFilePath),
     "${fileBasename}": parsedPath?.base ?? "",
     "${fileBasenameNoExtension}": parsedPath?.name ?? "",
     "${fileExtname}": parsedPath?.ext ?? "",
     "${fileDirname}": parsedPath?.dir ?? "",
-    "${fileDirnameBasename}": parsedPath
-      ? parsedPath.dir.substring(parsedPath.dir.lastIndexOf(path.sep) + 1)
-      : "",
+    "${fileDirnameBasename}": getFileDirnameBasename(parsedPath),
     "${cwd}": parsedPath?.dir ?? "",
-    "${lineNumber}": `${activeEditor?.selection.start.line ? +1 : ""}`,
-    "${selectedText}":
-      activeEditor?.document.getText(
-        new vscode.Range(activeEditor.selection.start, activeEditor.selection.end)
-      ) ?? "",
+    "${lineNumber}": getLineNumber(activeEditor),
+    "${selectedText}": getSelectedText(activeEditor),
     "${execPath}": process.execPath,
     "${pathSeparator}": path.sep,
     "${/}": path.sep,
@@ -266,7 +281,7 @@ function resolveStringVariables(
   // Replace all variables with their values in a single pass
   const variableRegex = new RegExp(
     Object.keys(substitutions)
-      .map((variable) => `\\${variable}`)
+      .map((variable) => variable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .join("|"),
     "g"
   );
