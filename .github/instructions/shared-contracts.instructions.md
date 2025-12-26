@@ -7,7 +7,7 @@ The `src/shared/**` directory contains string literal tuples, Valibot schemas, m
 When changing files under `src/shared/**`:
 
 - Treat the message and enum definitions here as the single source of truth for extension ↔ webview communication. All messages use Valibot schemas (e.g., `v.object()`, `v.literal()`, `v.picklist()`) with discriminated unions via `v.union([...])` and `type` fields, and both sides should switch on these discriminants.
-- Shared "enums" are defined as `const` string literal tuples (e.g., `StatusValues = ["CE", "RE", ...] as const`) validated via `v.picklist(StatusValues)`. This produces a tight union type via `(typeof StatusValues)[number]` and keeps stable string values for persisted workspace state.
+- Shared "enums" are defined as `const` string literal tuples (e.g., `StatusValues = ["CE", "RE", "WA", "AC", "NA", "TL", "COMPILING", "RUNNING", "EDITING", "ML"] as const`) validated via `v.picklist(StatusValues)`. This produces a tight union type via `(typeof StatusValues)[number]` and keeps stable string values for persisted workspace state.
 - When you add new message types or enum members, append them to the existing arrays instead of reordering or renaming values. This preserves string identifiers and avoids breaking persisted data (for example, stored `Status` values).
 - Keep message payloads minimal but explicit. Prefer well-typed Valibot schemas over loosely structured objects to make it clear what each side should expect.
 - If you change a shared type, update both the extension providers (under `src/extension/providers/**`) and the corresponding webview handlers (under `src/webview/**`) in the same change to avoid protocol drift.
