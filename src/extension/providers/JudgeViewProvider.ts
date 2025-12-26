@@ -77,7 +77,7 @@ function setTestcaseStats(state: State, termination: RunTermination) {
 }
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: Map<number, State> = new Map(); // Map also remembers insertion order :D
+  private _state: State[] = [];
   private _timeLimit = 0;
   private _memoryLimit = 0;
   private _newId = 0;
@@ -103,7 +103,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const testcase = this._state.get(id);
+    const testcase = this._getTestcase(id);
     if (!testcase) {
       return;
     }
@@ -321,7 +321,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   // Judge has state if there are testcases loaded
   protected override _hasState(): boolean {
-    return this._state.size > 0 || this._timeLimit !== 0 || this._memoryLimit !== 0;
+    return this._state.length > 0 || this._timeLimit !== 0 || this._memoryLimit !== 0;
   }
 
   protected override _sendShowMessage(visible: boolean): void {
@@ -334,10 +334,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._fileCancellation = undefined;
 
     this.stopAll();
-    for (const id of this._state.keys()) {
-      super._postMessage({ type: "DELETE", id });
+    for (const testcase of this._state) {
+      super._postMessage({ type: "DELETE", id: testcase.id });
     }
-    this._state.clear();
+    this._state = [];
     this._timeLimit = 0;
     this._memoryLimit = 0;
     this._newId = 0;
@@ -354,10 +354,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     // Stop any processes tied to the previous file, and clear state/webview.
     this.stopAll();
-    for (const id of this._state.keys()) {
-      super._postMessage({ type: "DELETE", id });
+    for (const testcase of this._state) {
+      super._postMessage({ type: "DELETE", id: testcase.id });
     }
-    this._state.clear();
+    this._state = [];
     this._timeLimit = 0;
     this._memoryLimit = 0;
     this._newId = 0;
@@ -389,7 +389,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       memoryLimit: this._memoryLimit,
     });
 
-    for (const [id, testcase] of this._state.entries()) {
+    for (const testcase of this._state) {
+      const id = testcase.id;
+
       // Ensure a clean slate for this id in the webview.
       super._postMessage({ type: "DELETE", id });
       super._postMessage({ type: "NEW", id });
@@ -523,26 +525,26 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   runAll() {
-    for (const id of this._state.keys()) {
-      void this._run(id, false);
+    for (const testcase of this._state) {
+      void this._run(testcase.id, false);
     }
   }
 
   debugAll() {
-    for (const id of this._state.keys()) {
-      void this._debug(id);
+    for (const testcase of this._state) {
+      void this._debug(testcase.id);
     }
   }
 
   stopAll() {
-    for (const id of this._state.keys()) {
-      this._stop(id);
+    for (const testcase of this._state) {
+      this._stop(testcase.id);
     }
   }
 
   deleteAll() {
-    for (const id of this._state.keys()) {
-      this._delete(id);
+    for (const testcase of this._state) {
+      this._delete(testcase.id);
     }
   }
 
@@ -600,7 +602,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     const testcases: ITestcase[] = [];
-    for (const testcase of this._state.values()) {
+    for (const testcase of this._state) {
       testcases.push({
         stdin: testcase.stdin.data,
         stderr: testcase.stderr.data,
@@ -626,8 +628,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _addTestcase(testcase?: Partial<ITestcase>) {
-    this._state.set(this._newId, this._createTestcaseState(this._newId, testcase));
-    return this._newId++;
+    const id = this._newId++;
+    this._state.push(this._createTestcaseState(id, testcase));
+    return id;
   }
 
   private _createTestcaseState(id: number, testcase?: Partial<ITestcase>) {
@@ -873,7 +876,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _stop(id: number) {
-    const testcase = this._state.get(id);
+    const testcase = this._getTestcase(id);
     if (!testcase) {
       return;
     }
@@ -890,12 +893,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _delete(id: number) {
     this._stop(id);
     super._postMessage({ type: "DELETE", id });
-    this._state.delete(id);
+    const idx = this._state.findIndex((t) => t.id === id);
+    if (idx !== -1) {
+      this._state.splice(idx, 1);
+    }
     this._saveFileData();
   }
 
   private _edit(id: number) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
     testcase.status = "EDITING";
     super._postMessage({
       type: "SET",
@@ -918,7 +927,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _accept(id: number) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
 
     testcase.status = "AC";
     // shortened version will be sent back while writing
@@ -941,7 +953,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _decline(id: number) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
 
     testcase.status = "NA";
     testcase.acceptedStdout.reset();
@@ -961,7 +976,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _toggleVisibility(id: number) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
 
     testcase.shown = testcase.toggled ? !testcase.shown : testcase.status === "AC";
     testcase.toggled = true;
@@ -981,7 +999,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _toggleSkip(id: number) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
 
     testcase.skipped = !testcase.skipped;
     super._postMessage({
@@ -994,7 +1015,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _compare(id: number) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
     const stdout = ReadonlyStringProvider.createUri(`OUTPUT:\n\n${testcase.stdout.data}`);
     const acStdout = ReadonlyStringProvider.createUri(
       `ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
@@ -1004,7 +1028,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _viewStdio({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
 
     switch (stdio) {
       case "STDIN":
@@ -1023,13 +1050,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _stdin({ id, data }: v.InferOutput<typeof StdinMessageSchema>) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
     testcase.process.process?.stdin.write(data);
     testcase.stdin.write(data, false);
   }
 
   private _save({ id, stdin, acceptedStdout }: v.InferOutput<typeof SaveMessageSchema>) {
-    const testcase = this._state.get(id)!;
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
 
     super._postMessage({
       type: "SET",
@@ -1076,5 +1109,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _setMemoryLimit({ limit }: v.InferOutput<typeof SetMemoryLimitSchema>) {
     this._memoryLimit = limit;
     this._saveFileData();
+  }
+
+  private _getTestcase(id: number): State | undefined {
+    return this._state.find((t) => t.id === id);
   }
 }
