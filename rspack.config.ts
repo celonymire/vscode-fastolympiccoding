@@ -97,7 +97,7 @@ const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configur
       },
     }),
     // Only include the addon copy plugin(s) if the built file(s) exist on disk.
-    ...addonCopyPlugins(),
+    ...(addonCopyPlugins() ?? []),
   ],
 });
 
