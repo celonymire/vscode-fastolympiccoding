@@ -26,17 +26,14 @@ type LinuxMemoryAddon = {
 // ============================================================================
 
 export type RunTermination =
-  | "spawn-failed" // process failed to start
+  | "error" // process exited with non-zero code (or early abort with null code)
   | "timeout" // killed by timeout
   | "memory" // killed by memory limit
   | "stopped" // stopped by caller
-  | "exit" // normal exit
+  | "exit" // normal exit (zero exit code)
   | "signal"; // killed by OS signal
 
-export function mapCompilationTermination(
-  termination: RunTermination,
-  exitCode?: number | null
-): Status {
+export function mapCompilationTermination(termination: RunTermination): Status {
   switch (termination) {
     case "timeout":
       return "TL";
@@ -44,21 +41,18 @@ export function mapCompilationTermination(
       return "ML";
     case "stopped":
       return "NA";
-    case "spawn-failed":
-      return "RE";
+    case "error":
+      return "CE";
     case "signal":
       return "RE";
     case "exit":
-      return exitCode === 0 ? "NA" : "CE";
+      return "NA";
     default:
       return "RE";
   }
 }
 
-export function mapTestcaseTermination(
-  termination: RunTermination,
-  exitCode?: number | null
-): Status {
+export function mapTestcaseTermination(termination: RunTermination): Status {
   switch (termination) {
     case "timeout":
       return "TL";
@@ -66,12 +60,12 @@ export function mapTestcaseTermination(
       return "ML";
     case "stopped":
       return "NA";
-    case "spawn-failed":
+    case "error":
       return "RE";
     case "signal":
       return "RE";
     case "exit":
-      return exitCode === 0 ? "NA" : "RE";
+      return "NA";
     default:
       return "RE";
   }
@@ -175,9 +169,6 @@ export class Runnable {
   private _maxMemoryBytes = 0;
   private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
-
-  // Listener management for session API
-  private _disposed = false;
   private _stopRequested = false;
 
   private async _sampleMemory(pid: number) {
@@ -240,46 +231,40 @@ export class Runnable {
     }
   }
 
-  private _reset() {
+  /**
+   * Clean up listeners and ongoing operations without resetting statistics.
+   * Called after process completion to prevent listener accumulation on reuse.
+   * Preserves elapsed time, memory stats, and exit information.
+   */
+  cleanup(): void {
     this._memoryCancellationTokenSource?.cancel();
     this._memoryCancellationTokenSource?.dispose();
+    this._memoryCancellationTokenSource = null;
     if (this._memorySampleTimeout) {
       clearTimeout(this._memorySampleTimeout);
       this._memorySampleTimeout = null;
     }
 
-    // If this Runnable instance is reused across runs, ensure we don't retain listeners
-    // on the previous process (prevents handler accumulation across stress/judge loops).
+    // Remove listeners to prevent accumulation when Runnable is reused
     if (this._process) {
       this._process.removeAllListeners();
       this._process.stdout.removeAllListeners();
       this._process.stderr.removeAllListeners();
     }
-
-    this._process = undefined;
-    this._promise = undefined;
-    this._spawnPromise = undefined;
-    this._startTime = 0;
-    this._endTime = 0;
-    this._signal = null;
-    this._timedOut = false;
-    this._exitCode = 0;
-    this._memoryCancellationTokenSource = null;
-    this._maxMemoryBytes = 0;
-    this._memoryLimitBytes = 0;
-    this._memoryLimitExceeded = false;
   }
 
-  run(command: string, timeout?: number, memoryLimit?: number, cwd?: string, ...args: string[]) {
+  run(command: string, timeout: number, memoryLimit: number, cwd?: string, ...args: string[]) {
     // FIXME: Simplify TL to check a flag once https://github.com/nodejs/node/pull/51608 lands
 
-    this._reset();
+    // Reset metrics for a fresh run. All other state is set by event handlers or reassigned below.
+    this.cleanup();
+    this._timedOut = false;
+    this._maxMemoryBytes = 0;
+    this._memoryLimitExceeded = false;
+    this._memoryLimitBytes = memoryLimit * Runnable.BYTES_PER_MEGABYTE;
+    this._stopRequested = false;
 
-    // Memory limit is specified in megabytes (0 = no limit).
-    this._memoryLimitBytes =
-      memoryLimit && memoryLimit > 0 ? memoryLimit * Runnable.BYTES_PER_MEGABYTE : 0;
-
-    const timeoutSignal = timeout ? AbortSignal.timeout(timeout) : undefined;
+    const timeoutSignal = timeout > 0 ? AbortSignal.timeout(timeout) : undefined;
     this._process = childProcess.spawn(command, args, {
       cwd,
       signal: timeoutSignal,
@@ -385,7 +370,7 @@ export class Runnable {
 
   /**
    * Attach a listener to a process event. Returns this for method chaining.
-   * Listeners are automatically removed on dispose().
+   * Listeners are automatically removed on cleanup() or at the start of the next run().
    */
   on(event: "spawn", listener: () => void): Runnable;
   on(event: "error", listener: (err: Error) => void): Runnable;
@@ -396,29 +381,8 @@ export class Runnable {
     listener: (code: number | null, signal: NodeJS.Signals | null) => void
   ): Runnable;
   on(event: string, listener: ListenerCallback): Runnable {
-    if (this._disposed) {
-      return this;
-    }
-
     this._attachListener(event, listener);
     return this;
-  }
-
-  /**
-   * Dispose of the process and remove all attached listeners.
-   * Returns a thenable that resolves when cleanup is complete.
-   */
-  dispose(): Thenable<void> {
-    if (this._disposed) {
-      return Promise.resolve();
-    }
-    this._disposed = true;
-    this._stopRequested = true;
-
-    this._process?.kill();
-    this._reset();
-
-    return Promise.resolve();
   }
 
   private _attachListener(event: string, listener: ListenerCallback): void {
@@ -454,12 +418,9 @@ export class Runnable {
   }
 
   private _computeTermination(): RunTermination {
-    // If user called dispose(), mark as stopped
     if (this._stopRequested) {
       return "stopped";
     }
-
-    // Check termination reasons in priority order
     if (this._timedOut) {
       return "timeout";
     }
@@ -469,12 +430,10 @@ export class Runnable {
     if (this._signal) {
       return "signal";
     }
-    if (this._exitCode !== null) {
+    if (this._exitCode === 0) {
       return "exit";
     }
-
-    // Fallback: if spawn never succeeded, classify as spawn-failed
-    return "exit";
+    return "error";
   }
 }
 
@@ -533,7 +492,7 @@ export async function compile(
       context.subscriptions.push(compilationStatusItem);
 
       const runnable = new Runnable();
-      runnable.run(resolvedArgs[0], undefined, undefined, undefined, ...resolvedArgs.slice(1));
+      runnable.run(resolvedArgs[0], 0, 0, undefined, ...resolvedArgs.slice(1));
 
       let err = "";
       runnable
@@ -545,11 +504,10 @@ export async function compile(
         });
 
       const termination = await runnable.done;
-      void runnable.dispose();
+      runnable.cleanup();
       compilationStatusItem.dispose();
 
-      const status = mapCompilationTermination(termination, runnable.exitCode);
-
+      const status = mapCompilationTermination(termination);
       if (status === "CE" || status === "RE") {
         logger.error(
           `Compilation failed (file=${file}, command=${currentCommand}, exitCode=${runnable.exitCode}, termination=${termination}, stderr=${err.substring(0, 500)})`

@@ -56,14 +56,14 @@ type LaunchProcessParams = {
   testcase: State;
   resolvedArgs: string[];
   cwd?: string;
-  timeout?: number;
-  memoryLimit?: number;
+  timeout: number;
+  memoryLimit: number;
 };
 
 function setTestcaseStats(state: State, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
-  state.status = mapTestcaseTermination(termination, state.process.exitCode);
+  state.status = mapTestcaseTermination(termination);
   if (state.status === "NA") {
     // Exit succeeded; refine with output comparison
     if (state.acceptedStdout.isEmpty()) {
@@ -755,8 +755,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       testcase,
       resolvedArgs,
       cwd,
-      timeout: newTestcase ? undefined : this._timeLimit,
-      memoryLimit: newTestcase ? undefined : this._memoryLimit,
+      timeout: newTestcase ? 0 : this._timeLimit,
+      memoryLimit: newTestcase ? 0 : this._memoryLimit,
     });
   }
 
@@ -822,14 +822,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     this._prepareRunningState(id, testcase);
 
-    // No time limit for debugging; user stops it manually.
+    // No limits for debugging; user stops it manually.
     this._launchProcess({
       id,
       token,
       testcase,
       resolvedArgs,
       cwd,
-      timeout: undefined,
+      timeout: 0,
+      memoryLimit: 0,
     });
 
     // Wait for the debug process to spawn before attaching

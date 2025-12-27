@@ -348,10 +348,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       const terminations = await Promise.all(this._state.map((value) => value.process.done));
       for (let i = 0; i < 3; i++) {
-        this._state[i].status = mapTestcaseTermination(
-          terminations[i],
-          this._state[i].process.exitCode
-        );
+        this._state[i].status = mapTestcaseTermination(terminations[i]);
         if (this._stopRequested[i]) {
           this._state[i].status = "NA";
         } else if (this._state[i].status !== "NA") {
