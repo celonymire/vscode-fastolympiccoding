@@ -314,6 +314,14 @@ export class Runnable {
         logger.error(
           `Process spawn failed (command=${command}, args=${args.join(" ")}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
         );
+
+        // We have to set error state here because of platform-dependent behavior
+        // For Linux exit isn't fired when process errors
+        this._endTime = performance.now();
+        this._signal = null;
+        this._exitCode = 1;
+        this._timedOut = false;
+
         resolveSpawn(false);
       });
       this._process?.once("exit", (code, signal) => {
