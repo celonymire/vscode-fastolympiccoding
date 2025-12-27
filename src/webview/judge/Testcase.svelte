@@ -226,7 +226,7 @@
             <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
           </button>
           <button
-            class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+            class="testcase-toolbar-icon testcase-toolbar-icon-exclude-fade"
             aria-label={skipped ? "Unskip" : "Skip"}
             onclick={handleToggleSkip}
           >
@@ -377,7 +377,18 @@
     gap: 6px;
   }
 
-  .testcase-toolbar--hidden > :global(*) > :global(*:not(.testcase-toolbar-icon--visibility)) {
+  .testcase-toolbar--hidden > .testcase-badges {
+    opacity: 0.5;
+  }
+
+  .testcase-toolbar--hidden
+    > .testcase-actions
+    > .testcase-left-buttons
+    > *:not(.testcase-toolbar-icon-exclude-fade) {
+    opacity: 0.5;
+  }
+
+  .testcase-toolbar--hidden > .testcase-actions > .testcase-right-buttons {
     opacity: 0.5;
   }
 
