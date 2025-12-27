@@ -84,6 +84,7 @@
     {#if onexpand}
       <button
         type="button"
+        data-tooltip="Expand"
         aria-label="Expand"
         class="expand-button codicon codicon-screen-full"
         class:expand-button--visible={isHovered}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Status } from "../../shared/enums";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
+  import Tooltip from "../Tooltip.svelte";
 
   interface IState {
     data: string;
@@ -136,7 +137,12 @@
         </div>
       </div>
       <div class="state-toolbar-right">
-        <button class="state-toolbar-icon" aria-label="Add" onclick={handleAdd}>
+        <button
+          class="state-toolbar-icon"
+          data-tooltip="Add to Judge"
+          aria-label="Add"
+          onclick={handleAdd}
+        >
           <div class="codicon codicon-insert"></div>
         </button>
       </div>
@@ -171,6 +177,8 @@
     />
   </div>
 {/if}
+
+<Tooltip />
 
 <style>
   .state-toolbar {

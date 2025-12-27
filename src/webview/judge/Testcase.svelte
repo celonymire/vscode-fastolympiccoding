@@ -6,6 +6,7 @@
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
   import { type ActionValue } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
+  import Tooltip from "../Tooltip.svelte";
 
   type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
@@ -127,27 +128,49 @@
       </div>
       <div class="testcase-actions">
         <div class="testcase-left-buttons">
-          <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Run Testcase"
+            aria-label="Run"
+            onclick={handleRun}
+          >
             <div class="codicon codicon-run-below"></div>
           </button>
-          <button class="testcase-toolbar-icon" aria-label="Debug" onclick={handleDebug}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Debug Testcase"
+            aria-label="Debug"
+            onclick={handleDebug}
+          >
             <div class="codicon codicon-debug-alt"></div>
           </button>
-          <button class="testcase-toolbar-icon" aria-label="Edit" onclick={handleEdit}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Edit Testcase"
+            aria-label="Edit"
+            onclick={handleEdit}
+          >
             <div class="codicon codicon-edit"></div>
           </button>
-          <button class="testcase-toolbar-icon" aria-label="Delete" onclick={handleDelete}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Delete Testcase"
+            aria-label="Delete"
+            onclick={handleDelete}
+          >
             <div class="codicon codicon-trash"></div>
           </button>
           <button
             class="testcase-toolbar-icon"
-            aria-label={showDetails ? "Hide details" : "Show details"}
+            data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+            aria-label={showDetails ? "Hide" : "Show"}
             onclick={handleToggleVisibility}
           >
             <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
           </button>
           <button
             class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+            data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
             aria-label={skipped ? "Unskip" : "Skip"}
             onclick={handleToggleSkip}
           >
@@ -206,27 +229,49 @@
       </div>
       <div class="testcase-actions">
         <div class="testcase-left-buttons">
-          <button class="testcase-toolbar-icon" aria-label="Run" onclick={handleRun}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Run Testcase"
+            aria-label="Run"
+            onclick={handleRun}
+          >
             <div class="codicon codicon-run-below"></div>
           </button>
-          <button class="testcase-toolbar-icon" aria-label="Debug" onclick={handleDebug}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Debug Testcase"
+            aria-label="Debug"
+            onclick={handleDebug}
+          >
             <div class="codicon codicon-debug-alt"></div>
           </button>
-          <button class="testcase-toolbar-icon" aria-label="Edit" onclick={handleEdit}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Edit Testcase"
+            aria-label="Edit"
+            onclick={handleEdit}
+          >
             <div class="codicon codicon-edit"></div>
           </button>
-          <button class="testcase-toolbar-icon" aria-label="Delete" onclick={handleDelete}>
+          <button
+            class="testcase-toolbar-icon"
+            data-tooltip="Delete"
+            aria-label="Delete"
+            onclick={handleDelete}
+          >
             <div class="codicon codicon-trash"></div>
           </button>
           <button
             class="testcase-toolbar-icon"
-            aria-label={showDetails ? "Hide details" : "Show details"}
+            data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+            aria-label={showDetails ? "Hide" : "Show"}
             onclick={handleToggleVisibility}
           >
             <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
           </button>
           <button
-            class="testcase-toolbar-icon testcase-toolbar-icon-exclude-fade"
+            class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+            data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
             aria-label={skipped ? "Unskip" : "Skip"}
             onclick={handleToggleSkip}
           >
@@ -237,17 +282,32 @@
         </div>
         <div class="testcase-right-buttons">
           {#if status === "NA" || status === "WA"}
-            <button class="testcase-toolbar-icon" aria-label="Accept" onclick={handleAccept}>
+            <button
+              class="testcase-toolbar-icon"
+              data-tooltip="Accept Output"
+              aria-label="Accept"
+              onclick={handleAccept}
+            >
               <div class="codicon codicon-pass"></div>
             </button>
           {/if}
           {#if status === "AC"}
-            <button class="testcase-toolbar-icon" aria-label="Decline" onclick={handleDecline}>
+            <button
+              class="testcase-toolbar-icon"
+              data-tooltip="Decline Answer"
+              aria-label="Decline"
+              onclick={handleDecline}
+            >
               <div class="codicon codicon-close"></div>
             </button>
           {/if}
           {#if status === "WA"}
-            <button class="testcase-toolbar-icon" aria-label="Compare" onclick={handleCompare}>
+            <button
+              class="testcase-toolbar-icon"
+              data-tooltip="Compare Answers"
+              aria-label="Compare"
+              onclick={handleCompare}
+            >
               <div class="codicon codicon-diff-single"></div>
             </button>
           {/if}
@@ -309,7 +369,12 @@
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
-        <button class="testcase-toolbar-icon" aria-label="Stop" onclick={handleStop}>
+        <button
+          class="testcase-toolbar-icon"
+          data-tooltip="Stop Testcase"
+          aria-label="Stop"
+          onclick={handleStop}
+        >
           <div class="codicon codicon-stop-circle"></div>
         </button>
       </div>
@@ -347,7 +412,12 @@
         <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-sync codicon-modifier-spin"></div>
         </div>
-        <button class="testcase-toolbar-icon" aria-label="Save" onclick={handleSave}>
+        <button
+          class="testcase-toolbar-icon"
+          data-tooltip="Save Testcase"
+          aria-label="Save"
+          onclick={handleSave}
+        >
           <div class="codicon codicon-save"></div>
         </button>
       </div>
@@ -367,6 +437,8 @@
     />
   </div>
 {/if}
+
+<Tooltip />
 
 <style>
   .testcase-toolbar {
