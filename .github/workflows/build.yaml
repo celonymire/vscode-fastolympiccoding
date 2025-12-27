@@ -81,8 +81,21 @@ jobs:
         if: matrix.vsceTarget != ''
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
+      - name: Detect VSIX filename
+        id: vsix-file
+        shell: bash
+        run: |
+          # Find the first .vsix file produced by vsce
+          vsix=$(ls *.vsix 2>/dev/null | head -n1 || true)
+          if [ -z "$vsix" ]; then
+            echo "No .vsix file found"
+            exit 1
+          fi
+          echo "vsix_name=$vsix" >> $GITHUB_OUTPUT
+
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vsix-${{ matrix.name }}
-          path: "*.vsix"
+          # Preserve the original VSIX filename as the artifact name
+          name: ${{ steps.vsix-file.outputs.vsix_name }}
+          path: ${{ steps.vsix-file.outputs.vsix_name }}
