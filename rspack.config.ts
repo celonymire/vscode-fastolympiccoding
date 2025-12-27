@@ -19,6 +19,43 @@ function getSharedConfig(isProd: boolean, mode: Configuration["mode"]): Configur
   };
 }
 
+function addonCopyPlugins(): Configuration["plugins"] {
+  // Respect explicit CI flag to skip addon copying
+  if (process.env.SKIP_ADDON_COPY === "true") {
+    return [];
+  }
+
+  const plugins: Configuration["plugins"] = [];
+
+  if (process.platform === "win32") {
+    const winPath = path.join("build", "Release", "win32-memory-stats.node");
+    plugins.push(
+      new CopyRspackPlugin({
+        patterns: [
+          {
+            from: winPath,
+            to: "win32-memory-stats.node",
+          },
+        ],
+      }),
+    );
+  } else if (process.platform === "linux") {
+    const linuxPath = path.join("build", "Release", "linux-memory-stats.node");
+    plugins.push(
+      new CopyRspackPlugin({
+        patterns: [
+          {
+            from: linuxPath,
+            to: "linux-memory-stats.node",
+          },
+        ],
+      }),
+    );
+  }
+
+  return plugins;
+}
+
 const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configuration => ({
   ...getSharedConfig(isProd, mode),
   entry: {
@@ -59,29 +96,8 @@ const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configur
         configFile: "tsconfig.node.json",
       },
     }),
-    ...(process.platform === "win32"
-      ? [
-          new CopyRspackPlugin({
-            patterns: [
-              {
-                from: "build/Release/win32-memory-stats.node",
-                to: "win32-memory-stats.node",
-              },
-            ],
-          }),
-        ]
-      : process.platform === "linux"
-        ? [
-            new CopyRspackPlugin({
-              patterns: [
-                {
-                  from: "build/Release/linux-memory-stats.node",
-                  to: "linux-memory-stats.node",
-                },
-              ],
-            }),
-          ]
-        : []),
+    // Only include the addon copy plugin(s) if the built file(s) exist on disk.
+    ...addonCopyPlugins(),
   ],
 });
 
@@ -162,7 +178,7 @@ const webviewsConfig = (isProd: boolean, mode: Configuration["mode"]): Configura
 });
 
 export default defineConfig((_env, argv) => {
-  const mode: Configuration["mode"] = argv.mode ?? "development";
+  const mode: Configuration["mode"] = (argv.mode as Configuration["mode"]) ?? "development";
   const isProd = mode === "production";
   return [extensionConfig(isProd, mode), webviewsConfig(isProd, mode)];
 });
