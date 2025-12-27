@@ -331,14 +331,6 @@ export class Runnable {
     });
   }
 
-  /**
-   * Wait for the process to spawn. Returns a promise that resolves to true if the process
-   * spawned successfully, or false if there was an error or the process wasn't started.
-   */
-  async waitForSpawn(): Promise<boolean> {
-    return this._spawnPromise ?? Promise.resolve(false);
-  }
-
   get process() {
     return this._process;
   }

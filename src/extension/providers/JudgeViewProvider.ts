@@ -834,7 +834,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
 
     // Wait for the debug process to spawn before attaching
-    const spawned = await testcase.process.waitForSpawn();
+    const spawned = await testcase.process.spawned;
     if (!spawned || token.isCancellationRequested) {
       await testcase.process.done;
       const exitCode = testcase.process.exitCode;
