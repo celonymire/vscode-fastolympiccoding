@@ -60,6 +60,12 @@ jobs:
         if: matrix.vsceTarget == ''
         run: echo "SKIP_ADDON_COPY=true" >> $GITHUB_ENV
 
+      - name: Update npm and Clean Install
+        run: |
+          npm install -g npm@latest
+          npm cache clean --force
+          npm ci
+
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
