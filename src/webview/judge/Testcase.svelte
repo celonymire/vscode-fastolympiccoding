@@ -255,7 +255,7 @@
           </button>
           <button
             class="testcase-toolbar-icon"
-            data-tooltip="Delete"
+            data-tooltip="Delete Testcase"
             aria-label="Delete"
             onclick={handleDelete}
           >
