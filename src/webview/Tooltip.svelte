@@ -95,20 +95,23 @@
   }
 
   function handleMouseEnter(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    const tooltipAttr = target.closest("[data-tooltip]");
+    const target = event.target ? (event.target as HTMLElement) : null;
+    const tooltipElem =
+      target?.nodeType === Node.ELEMENT_NODE ? target?.closest("[data-tooltip]") : null;
 
-    if (tooltipAttr instanceof HTMLElement) {
-      const text = tooltipAttr.getAttribute("data-tooltip");
+    if (tooltipElem instanceof HTMLElement) {
+      const text = tooltipElem.getAttribute("data-tooltip");
       if (text) {
-        showTooltip(text, tooltipAttr);
+        showTooltip(text, tooltipElem);
       }
     }
   }
 
   function handleMouseLeave(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    if (target.closest("[data-tooltip]")) {
+    const target = event.target ? (event.target as HTMLElement) : null;
+    const tooltipElem =
+      target?.nodeType === Node.ELEMENT_NODE ? target?.closest("[data-tooltip]") : null;
+    if (tooltipElem instanceof HTMLElement) {
       hideTooltip();
     }
   }
