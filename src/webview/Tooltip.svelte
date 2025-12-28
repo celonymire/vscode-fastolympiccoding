@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
 
   let tooltipText = $state("");
-  let tooltipVisible = $state(false);
   let tooltipOpacity = $state(0);
   let tooltipX = $state(0);
   let tooltipY = $state(0);
@@ -56,31 +55,32 @@
     clearTimeout(hideTimeout);
     clearTimeout(showTimeout);
 
-    if (tooltipVisible) {
-      // If already visible (or fading out), switch instantly
+    // Always mounted; just update/animate opacity and content.
+    // If already visible (or fading out), switch instantly.
+    if (tooltipOpacity > 0) {
       tooltipOpacity = 1;
       tooltipText = text;
       updatePosition(targetElement);
-    } else {
-      // Set rough position for initial render state
+      return;
+    }
+
+    // Set rough position for initial render state
+    updatePosition(targetElement);
+
+    showTimeout = window.setTimeout(() => {
+      if (currentTarget !== targetElement) return;
+
+      tooltipText = text;
+      tooltipOpacity = 0;
       updatePosition(targetElement);
 
-      showTimeout = window.setTimeout(() => {
-        if (currentTarget !== targetElement) return;
-
-        tooltipText = text;
-        tooltipVisible = true;
-        tooltipOpacity = 0;
-        updatePosition(targetElement);
-
-        // Ensure browser renders initial state (opacity 0) before transitioning
+      // Ensure browser renders initial state (opacity 0) before transitioning
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            tooltipOpacity = 1;
-          });
+          tooltipOpacity = 1;
         });
-      }, SHOW_DELAY);
-    }
+      });
+    }, SHOW_DELAY);
   }
 
   function hideTooltip() {
@@ -92,12 +92,6 @@
         tooltipOpacity = 0;
       }
     }, HIDE_DELAY);
-  }
-
-  function handleTransitionEnd() {
-    if (tooltipOpacity === 0) {
-      tooltipVisible = false;
-    }
   }
 
   function handleMouseEnter(event: MouseEvent) {
@@ -132,18 +126,15 @@
   });
 </script>
 
-{#if tooltipVisible && tooltipText}
-  <div
-    bind:this={tooltipElement}
-    class="tooltip"
-    style:left="{tooltipX}px"
-    style:top="{tooltipY}px"
-    style:opacity={tooltipOpacity}
-    ontransitionend={handleTransitionEnd}
-  >
-    {tooltipText}
-  </div>
-{/if}
+<div
+  bind:this={tooltipElement}
+  class="tooltip"
+  style:left="{tooltipX}px"
+  style:top="{tooltipY}px"
+  style:opacity={tooltipOpacity}
+>
+  {tooltipText}
+</div>
 
 <style>
   .tooltip {
