@@ -209,7 +209,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
-    const languageSettings = getLanguageSettings(file);
+    const languageSettings = await getLanguageSettings(file);
     if (!languageSettings) {
       return;
     }

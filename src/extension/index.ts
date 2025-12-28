@@ -1,21 +1,22 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import * as v from "valibot";
 
-import { LanguageSettingsSchema } from "../shared/schemas";
 import { compile } from "./utils/runtime";
 import {
   createStatusBarItem,
   createListener,
   stopCompetitiveCompanion,
 } from "./utils/competitiveCompanion";
-import { ReadonlyStringProvider, resolveVariables } from "./utils/vscode";
+import {
+  getLanguageSettings,
+  initializeRunSettingsWatcher,
+  ReadonlyStringProvider,
+  resolveVariables,
+} from "./utils/vscode";
 import { initLogging } from "./utils/logging";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
-
-type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
@@ -105,23 +106,20 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerTextEditorCommand("fastolympiccoding.compile", () => {
-      const file = vscode.window.activeTextEditor?.document.fileName;
-      if (!file) {
-        return;
-      }
+      void (async () => {
+        const file = vscode.window.activeTextEditor?.document.fileName;
+        if (!file) {
+          return;
+        }
 
-      const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
-      const extension = path.extname(file);
-      const languageSettings = runSettings[extension] as ILanguageSettings | undefined;
-      if (!languageSettings) {
-        vscode.window.showWarningMessage(
-          `No run setting detected for file extension "${extension}"`
-        );
-        return;
-      }
-      if (languageSettings.compileCommand) {
-        void compile(file, languageSettings.compileCommand, context); // we don't care about exit code of compilation
-      }
+        const languageSettings = await getLanguageSettings(file);
+        if (!languageSettings) {
+          return;
+        }
+        if (languageSettings.compileCommand) {
+          void compile(file, languageSettings.compileCommand, context); // we don't care about exit code of compilation
+        }
+      })();
     })
   );
 
@@ -248,6 +246,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
 export function activate(context: vscode.ExtensionContext): void {
   initLogging(context);
+  initializeRunSettingsWatcher(context);
 
   registerViewProviders(context);
   registerCommands(context);

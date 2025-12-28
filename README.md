@@ -59,6 +59,40 @@ We can use the following variables in the syntax of `${...}`
 - `currentWorkingDirectory` (optional): sets the current working directory for `runCommand`
 </details>
 
+<details>
+  <summary>Folder-specific settings</summary>
+
+You can create specialized `runSettings.json` files to override settings for files within specific directories. The extension traverses from the workspace root directory up to the file folder, merging the settings along the way in that order.
+
+**How it works:**
+
+1. Settings are loaded from the workspace root down to your file's directory
+2. Each folder's settings override the previous ones (closer to your file = higher priority)
+3. VS Code's global `fastolympiccoding.runSettings` serve as the base settings
+
+**Example structure:**
+
+```
+workspace/
+├── runSettings.json          # Base settings for entire workspace
+├── contests/
+│   ├── runSettings.json      # Overrides for contests folder
+│   └── codeforces/
+│       ├── runSettings.json  # Overrides for codeforces folder
+│       └── solution.cpp      # Uses merged settings from all 3 files
+```
+
+❗You **DO NOT** have to fill in every key for folder-specific settings. `runCommand` is **OPTIONAL** because they are expected to be at least in the base settings.
+
+**🎯 EXAMPLE**: Create different folders and settings for different online judges! This provides the following benefits:
+
+- Enforce different set of supported languages
+- Different set of requirements within the same language. For example, USACO only supports C++17 while CodeForces generally update to newer standards.
+
+**⚡ Note**: Changes to `runSettings.json` files are automatically detected and cached for performance.
+
+</details>
+
 ---
 
 ### 📜 Judge

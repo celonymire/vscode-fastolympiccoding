@@ -1,5 +1,13 @@
 import * as vscode from "vscode";
 
+export interface ILogger {
+  trace: (message: string, ...args: unknown[]) => void;
+  debug: (message: string, ...args: unknown[]) => void;
+  info: (message: string, ...args: unknown[]) => void;
+  warn: (message: string, ...args: unknown[]) => void;
+  error: (message: string, ...args: unknown[]) => void;
+}
+
 let logOutputChannel: vscode.LogOutputChannel | undefined;
 const loggerCache = new Map<string, ReturnType<typeof createLogger>>();
 
@@ -18,7 +26,7 @@ export function initLogging(context: vscode.ExtensionContext): void {
   context.subscriptions.push(logOutputChannel);
 }
 
-function createLogger(component: string) {
+function createLogger(component: string): ILogger {
   return {
     trace: (message: string, ...args: unknown[]) =>
       logOutputChannel!.trace(`[${component}] ${message}`, ...args),
@@ -41,7 +49,7 @@ function createLogger(component: string) {
  * @param component - Component identifier (e.g., 'runtime', 'judge', 'stress', 'http')
  * @returns Object with trace/debug/info/warn/error logging methods
  */
-export function getLogger(component: string) {
+export function getLogger(component: string): ILogger {
   if (!logOutputChannel) {
     throw new Error("Logging not initialized. Call initLogging() first.");
   }

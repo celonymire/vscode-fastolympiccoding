@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fast Olympic Coding - Run Settings",
+  "description": "Folder-specific run settings for Fast Olympic Coding extension",
+  "type": "object",
+  "patternProperties": {
+    "^\\.[a-zA-Z0-9]+$": {
+      "type": "object",
+      "description": "Language settings for a specific file extension",
+      "properties": {
+        "compileCommand": {
+          "type": "string",
+          "description": "Command to compile the solution (omit to skip compilation)"
+        },
+        "runCommand": {
+          "type": "string",
+          "description": "Command to run the solution"
+        },
+        "currentWorkingDirectory": {
+          "type": "string",
+          "description": "Current working directory for runCommand"
+        },
+        "debugCommand": {
+          "type": "string",
+          "description": "Command to start the solution under a debug server"
+        },
+        "debugAttachConfig": {
+          "type": "string",
+          "description": "Name of launch.json attach configuration"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

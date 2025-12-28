@@ -4,6 +4,7 @@
 !README.md
 !LICENSE
 !media/**
+!schemas/runSettings.schema.json
 !dist/judge/index.js
 !dist/judge/index.css
 !dist/stress/index.js

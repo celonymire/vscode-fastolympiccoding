@@ -12,6 +12,7 @@ import {
   resolveCommand,
   resolveVariables,
   TextHandler,
+  type ILanguageSettings,
 } from "../utils/vscode";
 import { getLogger } from "../utils/logging";
 import {
@@ -60,6 +61,13 @@ type LaunchProcessParams = {
   memoryLimit: number;
 };
 
+type ExecutionContext = {
+  token: vscode.CancellationToken;
+  file: string;
+  testcase: State;
+  languageSettings: ILanguageSettings;
+};
+
 function setTestcaseStats(state: State, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
@@ -84,15 +92,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _fileCancellation?: vscode.CancellationTokenSource;
   private _activeDebugTestcaseId?: number;
 
-  private async _getExecutionContext(id: number): Promise<
-    | {
-        token: vscode.CancellationToken;
-        file: string;
-        testcase: State;
-        languageSettings: NonNullable<ReturnType<typeof getLanguageSettings>>;
-      }
-    | undefined
-  > {
+  private async _getExecutionContext(id: number): Promise<ExecutionContext | undefined> {
     const token = this._fileCancellation?.token;
     if (!token || token.isCancellationRequested) {
       return;
@@ -116,7 +116,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const languageSettings = getLanguageSettings(file);
+    const languageSettings = await getLanguageSettings(file);
     if (!languageSettings) {
       return;
     }
@@ -129,7 +129,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     token: vscode.CancellationToken,
     file: string,
     testcase: State,
-    languageSettings: NonNullable<ReturnType<typeof getLanguageSettings>>
+    languageSettings: ILanguageSettings
   ): Promise<boolean> {
     if (!languageSettings.compileCommand) {
       return false;
