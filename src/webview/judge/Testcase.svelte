@@ -512,11 +512,11 @@
     padding: 3px;
     border: none;
     background: transparent;
-    cursor: pointer;
     color: inherit;
   }
 
   .testcase-toolbar-icon:not(.testcase-toolbar-icon-exclude-highlight):hover {
+    cursor: pointer;
     background: var(--vscode-button-secondaryBackground);
   }
 
