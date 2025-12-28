@@ -14,6 +14,7 @@
 
   const SHOW_DELAY = 500;
   const HIDE_DELAY = 100;
+  const WEBVIEW_PADDING = 20;
 
   function updatePosition(targetElement: HTMLElement) {
     const rect = targetElement.getBoundingClientRect();
@@ -35,14 +36,14 @@
       y = rect.bottom + 8;
 
       // Screen bounds checks
-      if (x < 8) {
-        x = 8;
-      } else if (x + tooltipRect.width > window.innerWidth - 8) {
-        x = window.innerWidth - tooltipRect.width - 8;
+      if (x < WEBVIEW_PADDING) {
+        x = WEBVIEW_PADDING;
+      } else if (x + tooltipRect.width > window.innerWidth - WEBVIEW_PADDING) {
+        x = window.innerWidth - tooltipRect.width - WEBVIEW_PADDING;
       }
 
-      if (y + tooltipRect.height > window.innerHeight - 8) {
-        y = rect.top - tooltipRect.height - 8;
+      if (y + tooltipRect.height > window.innerHeight - WEBVIEW_PADDING) {
+        y = rect.top - tooltipRect.height - WEBVIEW_PADDING;
       }
 
       tooltipX = x;
