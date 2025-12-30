@@ -263,7 +263,7 @@
         </button>
       </div>
       <div class="testcase-right-buttons">
-        {#if status === "NA" || status === "WA"}
+        {#if status === "NA" || (status === "WA" && testcase.mode !== "interactive")}
           <button
             class="testcase-toolbar-icon"
             data-tooltip="Accept Output"
@@ -273,7 +273,7 @@
             <div class="codicon codicon-pass"></div>
           </button>
         {/if}
-        {#if status === "AC"}
+        {#if status === "AC" && testcase.mode !== "interactive"}
           <button
             class="testcase-toolbar-icon"
             data-tooltip="Decline Answer"
@@ -283,7 +283,7 @@
             <div class="codicon codicon-close"></div>
           </button>
         {/if}
-        {#if status === "WA"}
+        {#if status === "WA" && testcase.mode !== "interactive"}
           <button
             class="testcase-toolbar-icon"
             data-tooltip="Compare Answers"
