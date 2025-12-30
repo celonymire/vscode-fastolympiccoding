@@ -34,7 +34,13 @@ export const StatusSchema = v.picklist(StatusValues);
 // Stdio
 // ----------------------------------------------------------------------------
 
-export const StdioValues = ["STDIN", "STDERR", "STDOUT", "ACCEPTED_STDOUT"] as const;
+export const StdioValues = [
+  "STDIN",
+  "STDERR",
+  "STDOUT",
+  "ACCEPTED_STDOUT",
+  "INTERACTOR_SECRET",
+] as const;
 
 export type Stdio = (typeof StdioValues)[number];
 

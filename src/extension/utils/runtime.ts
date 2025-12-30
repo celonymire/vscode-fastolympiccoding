@@ -33,6 +33,41 @@ export type RunTermination =
   | "exit" // normal exit (zero exit code)
   | "signal"; // killed by OS signal
 
+export function terminationSeverityNumber(termination: RunTermination): number {
+  switch (termination) {
+    case "exit":
+      return 0;
+    case "stopped":
+      return 1;
+    case "error":
+      return 2;
+    case "memory":
+      return 3;
+    case "timeout":
+      return 4;
+    case "signal":
+      return 5;
+  }
+}
+
+export function severityNumberToStatus(severity: number): Status {
+  switch (severity) {
+    case 0:
+    case 1:
+      return "AC";
+    case 2:
+      return "WA";
+    case 3:
+      return "ML";
+    case 4:
+      return "TL";
+    case 5:
+      return "RE";
+    default:
+      return "RE";
+  }
+}
+
 export function mapCompilationTermination(termination: RunTermination): Status {
   switch (termination) {
     case "timeout":

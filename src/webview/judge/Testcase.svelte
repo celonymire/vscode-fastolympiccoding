@@ -17,6 +17,7 @@
 
   let { id, testcase, updateTestcaseData }: Props = $props();
   let newStdin = $state("");
+  let newInteractorSecret = $state("");
 
   function resetStdin() {
     newStdin = "";
@@ -45,8 +46,24 @@
     updateTestcaseData(id, { acceptedStdout: value });
   }
 
+  function handleNewInteractorSecretChange(value: string) {
+    newInteractorSecret = value;
+  }
+
   function handleNewStdinChange(value: string) {
     newStdin = value;
+  }
+
+  function handleSaveInteractorSecret() {
+    const interactorSecret = newInteractorSecret;
+    newInteractorSecret = "";
+    // Clear the secret locally (extension will send back shortened version)
+    updateTestcaseData(id, { interactorSecret: "" });
+    postProviderMessage({
+      type: "SAVE_INTERACTOR_SECRET",
+      id,
+      secret: interactorSecret,
+    });
   }
 
   // Derived values
@@ -65,6 +82,16 @@
   <div class="testcase-container">
     <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
     {#if showDetails}
+      {#if testcase.mode === "interactive"}
+        <AutoresizeTextarea
+          value={testcase.interactorSecret}
+          readonly
+          hiddenOnEmpty
+          placeholder="Interactor secret..."
+          onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+          variant="interactor-secret"
+        />
+      {/if}
       <AutoresizeTextarea
         value={testcase.stdin}
         readonly
@@ -107,20 +134,48 @@
   <div class="testcase-container">
     <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
     {#if visible}
-      <AutoresizeTextarea
-        value={testcase.stdin}
-        readonly
-        hiddenOnEmpty
-        placeholder="Stdin..."
-        onexpand={() => handleExpandStdio("STDIN")}
-      />
-      <AutoresizeTextarea
-        value={newStdin}
-        placeholder="New stdin..."
-        onkeyup={handleNewStdinKeyUp}
-        onchange={handleNewStdinChange}
-        variant="active"
-      />
+      {#if testcase.mode === "interactive"}
+        <AutoresizeTextarea
+          value={testcase.interactorSecret}
+          readonly
+          hiddenOnEmpty
+          placeholder="Interactor secret..."
+          onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+          variant="interactor-secret"
+        />
+        {#if testcase.interactorSecret === "" || testcase.interactorSecret === "\n"}
+          <AutoresizeTextarea
+            value={newInteractorSecret}
+            placeholder="New interactor secret..."
+            onchange={handleNewInteractorSecretChange}
+            variant="active"
+          />
+          <button
+            class="interactor-secret-set-button"
+            type="button"
+            onclick={handleSaveInteractorSecret}
+          >
+            <div class="codicon codicon-gist-secret"></div>
+            Save Secret
+          </button>
+        {/if}
+      {/if}
+      {#if testcase.mode !== "interactive" || (testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n")}
+        <AutoresizeTextarea
+          value={testcase.stdin}
+          readonly
+          hiddenOnEmpty
+          placeholder="Stdin..."
+          onexpand={() => handleExpandStdio("STDIN")}
+        />
+        <AutoresizeTextarea
+          value={newStdin}
+          placeholder="New stdin..."
+          onkeyup={handleNewStdinKeyUp}
+          onchange={handleNewStdinChange}
+          variant="active"
+        />
+      {/if}
       <AutoresizeTextarea
         value={testcase.stderr}
         readonly
@@ -154,5 +209,29 @@
 <style>
   .testcase-container {
     margin-bottom: 24px;
+  }
+
+  .interactor-secret-set-button {
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    padding: 4px;
+    border-radius: 2px;
+    text-align: center;
+    cursor: pointer;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid var(--vscode-button-border, transparent);
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    line-height: 18px;
+  }
+
+  .interactor-secret-set-button:hover {
+    background: var(--vscode-button-hoverBackground);
+  }
+
+  .interactor-secret-set-button :global(.codicon) {
+    margin-right: 4px;
   }
 </style>

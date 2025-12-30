@@ -131,6 +131,16 @@
         }
       },
       {
+        "title": "Interactive",
+        "properties": {
+          "fastolympiccoding.interactorFile": {
+            "type": "string",
+            "default": "${path:${fileDirname}/${fileBasenameNoExtension}__Interactor${fileExtname}}",
+            "description": "The full path to the interactor file."
+          }
+        }
+      },
+      {
         "title": "Stress Tester",
         "properties": {
           "fastolympiccoding.goodSolutionFile": {

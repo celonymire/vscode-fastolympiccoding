@@ -125,6 +125,10 @@
     border-color: var(--vscode-inputOption-activeBorder);
   }
 
+  .content[data-variant="interactor-secret"] {
+    border-color: var(--vscode-inputOption-ansiMagenta);
+  }
+
   .content.readonly {
     padding: 4px;
     overflow-x: auto;

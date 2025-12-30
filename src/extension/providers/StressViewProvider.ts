@@ -417,18 +417,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
     }
 
-    this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
-      stdin: this._state[0].data.data,
-      stderr: "",
-      stdout: this._state[1].data.data,
-      acceptedStdout: this._state[2].data.data,
-      elapsed: 0,
-      memoryBytes: this._state[id].process.maxMemoryBytes,
-      status: this._state[id].status,
-      shown: true,
-      toggled: false,
-      skipped: false,
-    });
+    // this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+    //   stdin: this._state[0].data.data,
+    //   stderr: "",
+    //   stdout: this._state[1].data.data,
+    //   acceptedStdout: this._state[2].data.data,
+    //   elapsed: 0,
+    //   memoryBytes: this._state[id].process.maxMemoryBytes,
+    //   status: this._state[id].status,
+    //   shown: true,
+    //   toggled: false,
+    //   skipped: false,
+    //   mode: "standard", // FIXME: update this depending on stress tester option in the future
+    // });
   }
 
   clear() {

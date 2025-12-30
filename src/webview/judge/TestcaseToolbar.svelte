@@ -95,6 +95,13 @@
         </div>
         <p class="testcase-elapsed-text">CE</p>
       </div>
+      {#if testcase.mode === "interactive"}
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          </div>
+        </div>
+      {/if}
     </div>
     <div class="testcase-actions">
       <div class="testcase-left-buttons">
@@ -194,6 +201,13 @@
                   : testcase.memoryBytes + "B"}
         </p>
       </div>
+      {#if testcase.mode === "interactive"}
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          </div>
+        </div>
+      {/if}
     </div>
     <div class="testcase-actions">
       <div class="testcase-left-buttons">
@@ -291,6 +305,13 @@
         </div>
         <p class="testcase-elapsed-text">COMPILING</p>
       </div>
+      {#if testcase.mode === "interactive"}
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 {:else if status === "RUNNING"}
@@ -299,6 +320,13 @@
       <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>
+      {#if testcase.mode === "interactive"}
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          </div>
+        </div>
+      {/if}
       <button
         class="testcase-toolbar-icon"
         data-tooltip="Stop Testcase"
@@ -315,6 +343,13 @@
       <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
         <div class="codicon codicon-sync codicon-modifier-spin"></div>
       </div>
+      {#if testcase.mode === "interactive"}
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          </div>
+        </div>
+      {/if}
       <button
         class="testcase-toolbar-icon"
         data-tooltip="Save Testcase"

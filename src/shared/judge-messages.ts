@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { StdioSchema } from "./enums";
+import { MODES } from "./schemas";
 
 export const ActionValues = [
   "RUN",
@@ -23,6 +24,7 @@ export const ProviderMessageTypeValues = [
   "NEXT",
   "ACTION",
   "SAVE",
+  "SAVE_INTERACTOR_SECRET",
   "VIEW",
   "STDIN",
   "TL",
@@ -39,6 +41,7 @@ export const LoadedMessageSchema = v.object({
 
 export const NextMessageSchema = v.object({
   type: v.literal("NEXT"),
+  mode: v.picklist(MODES),
 });
 
 export const ActionMessageSchema = v.object({
@@ -52,6 +55,12 @@ export const SaveMessageSchema = v.object({
   id: v.number(),
   stdin: v.string(),
   acceptedStdout: v.string(),
+});
+
+export const SaveInteractorSecretMessageSchema = v.object({
+  type: v.literal("SAVE_INTERACTOR_SECRET"),
+  id: v.number(),
+  secret: v.string(),
 });
 
 export const ViewMessageSchema = v.object({
@@ -81,6 +90,7 @@ export const ProviderMessageSchema = v.union([
   NextMessageSchema,
   ActionMessageSchema,
   SaveMessageSchema,
+  SaveInteractorSecretMessageSchema,
   ViewMessageSchema,
   StdinMessageSchema,
   SetTimeLimitSchema,
@@ -123,6 +133,8 @@ export const SetMessageSchema = v.object({
     "shown",
     "toggled",
     "skipped",
+    "mode",
+    "interactorSecret",
   ]),
   value: v.unknown(),
 });
