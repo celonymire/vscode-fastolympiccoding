@@ -546,7 +546,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._sendShowMessage(true);
 
     const storageData = super.readStorage()[file];
-    const fileData = v.parse(FileDataSchema, storageData);
+    const fileData = v.parse(FileDataSchema, storageData ?? {});
     const testcases = fileData.testcases;
     this._timeLimit = fileData.timeLimit;
     this._memoryLimit = fileData.memoryLimit;
