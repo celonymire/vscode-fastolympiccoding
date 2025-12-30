@@ -11,6 +11,8 @@ let logger: ILogger;
 
 export type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
+export type WriteMode = "batch" | "force" | "final";
+
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
   private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
   private _closeEmitter: vscode.EventEmitter<number> = new vscode.EventEmitter();
@@ -124,7 +126,7 @@ export class TextHandler {
     this._callback = callback;
   }
 
-  write(_data: string, last: boolean) {
+  write(_data: string, mode: WriteMode) {
     const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
 
     // Update the "full" version
@@ -147,11 +149,11 @@ export class TextHandler {
       }
     }
 
-    if (last && this._data.at(-1) !== "\n") {
+    if (mode === "final" && this._data.at(-1) !== "\n") {
       this._appendPendingCharacter("\n");
       this._data += "\n";
     }
-    this._sendPendingIfNeeded(last);
+    this._sendPendingIfNeeded(mode === "force" || mode === "final");
   }
 
   reset() {

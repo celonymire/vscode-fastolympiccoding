@@ -257,10 +257,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
 
     testcase.process
-      .on("stderr:data", (data: string) => testcase.stderr.write(data, false))
-      .on("stdout:data", (data: string) => testcase.stdout.write(data, false))
-      .on("stderr:end", () => testcase.stderr.write("", true))
-      .on("stdout:end", () => testcase.stdout.write("", true))
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
+      .on("stdout:data", (data: string) => testcase.stdout.write(data, "batch"))
+      .on("stderr:end", () => testcase.stderr.write("", "final"))
+      .on("stdout:end", () => testcase.stdout.write("", "final"))
       .on("error", (data: Error) => {
         if (token.isCancellationRequested) {
           return;
@@ -269,7 +269,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         logger.error(
           `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
         );
-        testcase.stderr.write(data.message, true);
+        testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
         super._postMessage({
           type: "SET",
@@ -360,9 +360,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
         interactorProc.stdin.write(testcase.interactorSecret.data);
       })
-      .on("stderr:data", (data: string) => testcase.stderr.write(data, false))
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
       .on("stdout:data", (data: string) => {
-        testcase.stdin.write(data, false);
+        testcase.stdin.write(data, "force");
         proc.stdin.write(data);
       })
       .on("error", (data: Error) => {
@@ -373,18 +373,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         logger.error(
           `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
         );
-        testcase.stderr.write("=== INTERACTOR ERROR ===\n", false);
-        testcase.stderr.write(data.message, true);
+        testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
+        testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
       });
 
     testcase.process
-      .on("stderr:data", (data: string) => testcase.stderr.write(data, false))
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
       .on("stdout:data", async (data: string) => {
         if (testcase.interactorSecretResolver) {
           await secretPromise;
         }
-        testcase.stdout.write(data, false);
+        testcase.stdout.write(data, "force");
         interactorProc.stdin.write(data);
       })
       .on("error", (data: Error) => {
@@ -395,8 +395,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         logger.error(
           `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
         );
-        testcase.stderr.write("=== SOLUTION ERROR ===\n", false);
-        testcase.stderr.write(data.message, true);
+        testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
+        testcase.stderr.write(data.message, "final");
       });
 
     const [termination, interactorTermination] = await Promise.all([
@@ -404,9 +404,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       testcase.interactorProcess.done,
     ]);
 
-    testcase.stdin.write("", true);
-    testcase.stderr.write("", true);
-    testcase.stdout.write("", true);
+    testcase.stdin.write("", "final");
+    testcase.stderr.write("", "final");
+    testcase.stdout.write("", "final");
 
     updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
     super._postMessage({
@@ -889,14 +889,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         data,
       });
 
-    newTestcase.stdin.write(testcase?.stdin ?? "", !!testcase);
-    newTestcase.stderr.write(testcase?.stderr ?? "", !!testcase);
-    newTestcase.stdout.write(testcase?.stdout ?? "", !!testcase);
-    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true); // force endline for empty answer comparison
+    newTestcase.stdin.write(testcase?.stdin ?? "", !!testcase ? "final" : "batch");
+    newTestcase.stderr.write(testcase?.stderr ?? "", !!testcase ? "final" : "batch");
+    newTestcase.stdout.write(testcase?.stdout ?? "", !!testcase ? "final" : "batch");
+    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", "final"); // force endline for empty answer comparison
     // We treat interactor secrets as final because there are problems where
     // the solution queries the interactor without reading any input first. The
     // best assumption is to send the complete secret at the start.
-    newTestcase.interactorSecret.write(testcase?.interactorSecret ?? "", true);
+    newTestcase.interactorSecret.write(testcase?.interactorSecret ?? "", "final");
 
     super._postMessage({
       type: "SET",
@@ -1268,7 +1268,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       value: "",
     });
     testcase.acceptedStdout.reset();
-    testcase.acceptedStdout.write(testcase.stdout.data, true);
+    testcase.acceptedStdout.write(testcase.stdout.data, "final");
 
     this._saveFileData();
   }
@@ -1381,10 +1381,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (testcase.mode === "interactive") {
       testcase.interactorProcess.process?.stdin.write(data);
+      testcase.stdout.write(data, "force");
     } else {
       testcase.process.process?.stdin.write(data);
     }
-    testcase.stdin.write(data, false);
   }
 
   private _save({ id, stdin, acceptedStdout }: v.InferOutput<typeof SaveMessageSchema>) {
@@ -1408,8 +1408,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     testcase.stdin.reset();
     testcase.acceptedStdout.reset();
-    testcase.stdin.write(stdin, true);
-    testcase.acceptedStdout.write(acceptedStdout, true);
+    testcase.stdin.write(stdin, "final");
+    testcase.acceptedStdout.write(acceptedStdout, "final");
 
     // Manual save: determine status from output comparison only
     if (testcase.acceptedStdout.data === "\n") {
@@ -1447,7 +1447,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
 
     testcase.interactorSecret.reset();
-    testcase.interactorSecret.write(secret, true);
+    testcase.interactorSecret.write(secret, "final");
 
     if (testcase.interactorSecretResolver) {
       testcase.interactorSecretResolver();
