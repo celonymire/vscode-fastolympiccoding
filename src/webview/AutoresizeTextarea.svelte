@@ -1,5 +1,5 @@
 <script lang="ts">
-  type Variant = "default" | "stderr" | "accepted" | "active";
+  type Variant = "default" | "stderr" | "accepted" | "active" | "interactor-secret";
 
   interface Props {
     value: string;

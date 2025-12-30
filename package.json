@@ -68,6 +68,11 @@
           "command": "fastolympiccoding.clearStressTest",
           "group": "navigation@3",
           "when": "view == fastolympiccoding.stress"
+        },
+        {
+          "command": "fastolympiccoding.toggleStressSettings",
+          "group": "navigation@4",
+          "when": "view == fastolympiccoding.stress"
         }
       ],
       "commandPalette": [
@@ -355,6 +360,12 @@
       {
         "command": "fastolympiccoding.toggleJudgeSettings",
         "title": "Toggle Judge Settings",
+        "category": "Fast Olympic Coding",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "fastolympiccoding.toggleStressSettings",
+        "title": "Toggle Stress Settings",
         "category": "Fast Olympic Coding",
         "icon": "$(gear)"
       }

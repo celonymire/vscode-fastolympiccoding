@@ -2,8 +2,6 @@
   import type * as v from "valibot";
 
   import type { TestcaseSchema } from "../../shared/schemas";
-  import type { Stdio } from "../../shared/enums";
-  import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
   import { type ActionValue } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
   import Tooltip from "../Tooltip.svelte";
@@ -96,7 +94,7 @@
         <p class="testcase-elapsed-text">CE</p>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
           <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
@@ -202,7 +200,7 @@
         </p>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
           <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
@@ -306,7 +304,7 @@
         <p class="testcase-elapsed-text">COMPILING</p>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
           <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
@@ -321,7 +319,7 @@
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
           <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
@@ -344,7 +342,7 @@
         <div class="codicon codicon-sync codicon-modifier-spin"></div>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status={"CE"}>
+        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
           <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>

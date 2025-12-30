@@ -376,6 +376,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
+
+        testcase.process.process?.kill();
+      })
+      .on("close", () => {
+        testcase.process.process?.stdin.end();
       });
 
     testcase.process
@@ -397,6 +402,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         );
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
+
+        testcase.interactorProcess.process?.kill();
+      })
+      .on("close", () => {
+        testcase.interactorProcess.process?.stdin.end();
       });
 
     const [termination, interactorTermination] = await Promise.all([
@@ -889,9 +899,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         data,
       });
 
-    newTestcase.stdin.write(testcase?.stdin ?? "", !!testcase ? "final" : "batch");
-    newTestcase.stderr.write(testcase?.stderr ?? "", !!testcase ? "final" : "batch");
-    newTestcase.stdout.write(testcase?.stdout ?? "", !!testcase ? "final" : "batch");
+    newTestcase.stdin.write(testcase?.stdin ?? "", testcase ? "final" : "batch");
+    newTestcase.stderr.write(testcase?.stderr ?? "", testcase ? "final" : "batch");
+    newTestcase.stdout.write(testcase?.stdout ?? "", testcase ? "final" : "batch");
     newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", "final"); // force endline for empty answer comparison
     // We treat interactor secrets as final because there are problems where
     // the solution queries the interactor without reading any input first. The
