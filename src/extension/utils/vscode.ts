@@ -81,6 +81,7 @@ export class TextHandler {
   private _newlineCount = 0;
   private _lastWrite = Number.NEGATIVE_INFINITY;
   private _callback: ((data: string) => void) | undefined = undefined;
+  private _finalWritten = false;
 
   private _appendPendingCharacter(char: string) {
     if (
@@ -111,6 +112,7 @@ export class TextHandler {
     ) {
       this._pending += "...";
       this._shortDataLength = TextHandler._maxDisplayCharacters + 1; // prevent further appends
+      this._finalWritten = true;
     }
     if (this._callback) {
       this._callback(this._pending);
@@ -127,6 +129,10 @@ export class TextHandler {
   }
 
   write(_data: string, mode: WriteMode) {
+    if (this._finalWritten) {
+      return;
+    }
+
     const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
 
     // Update the "full" version
@@ -166,6 +172,7 @@ export class TextHandler {
     this._spacesCount = 0;
     this._newlineCount = 0;
     this._lastWrite = Number.NEGATIVE_INFINITY;
+    this._finalWritten = false;
   }
 
   isEmpty() {
