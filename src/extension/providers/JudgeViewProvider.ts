@@ -79,7 +79,6 @@ type LaunchTestcaseParams = {
 type LaunchInteractiveTestcaseParams = Omit<LaunchTestcaseParams, "resolvedArgs"> & {
   solutionResolvedArgs: string[];
   interactorResolvedArgs: string[];
-  newTestcase: boolean;
 };
 
 type ExecutionContext = {
@@ -1000,7 +999,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         cwd,
         timeout: newTestcase ? 0 : this._timeLimit,
         memoryLimit: newTestcase ? 0 : this._memoryLimit,
-        newTestcase,
       });
     } else {
       const resolvedArgs = resolveCommand(languageSettings.runCommand);
@@ -1030,15 +1028,37 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
       const logger = getLogger("judge");
-      logger.warn(
+      logger.error(
         `Debug settings missing for language (file=${file}, hasDebugCommand=${!!languageSettings.debugCommand}, hasDebugAttachConfig=${!!languageSettings.debugAttachConfig})`
       );
-      vscode.window.showWarningMessage("Missing debug settings for this language.");
+      vscode.window.showErrorMessage("Missing debug settings for this language.");
       return;
     }
 
-    if (await this._compileIfNeeded(id, token, file, testcase, languageSettings)) {
-      return;
+    const compilePromises = [this._compileIfNeeded(id, token, file, testcase, languageSettings)];
+
+    let interactorFile: string | undefined;
+    if (testcase.mode === "interactive") {
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      const interactorFileFromConfig = config.get<string>("interactorFile");
+      if (!interactorFileFromConfig) {
+        const logger = getLogger("judge");
+        logger.error(`Interactor file not set for interactive testcase (file=${file})`);
+        vscode.window.showErrorMessage(
+          "Interactor file is not set. Please set it in the Fast Olympic Coding settings."
+        );
+        return;
+      }
+      interactorFile = resolveVariables(interactorFileFromConfig);
+      compilePromises.push(
+        this._compileIfNeeded(id, token, interactorFile, testcase, languageSettings)
+      );
+    }
+    const errored = await Promise.all(compilePromises);
+    for (const hadError of errored) {
+      if (hadError) {
+        return;
+      }
     }
     if (token.isCancellationRequested) {
       return;
@@ -1083,19 +1103,58 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._prepareRunningState(id, testcase);
 
     // No limits for debugging; user stops it manually.
-    this._launchTestcase({
-      id,
-      token,
-      testcase,
-      resolvedArgs,
-      cwd,
-      timeout: 0,
-      memoryLimit: 0,
-    });
+    if (testcase.mode === "interactive") {
+      const solutionResolvedArgs = resolveCommand(
+        languageSettings.debugCommand,
+        file,
+        extraVariables
+      );
+      const interactorResolvedArgs = resolveCommand(languageSettings.runCommand, interactorFile);
+      const cwd = languageSettings.currentWorkingDirectory
+        ? resolveVariables(languageSettings.currentWorkingDirectory)
+        : undefined;
+
+      this._launchInteractiveTestcase({
+        id,
+        token,
+        testcase,
+        solutionResolvedArgs,
+        interactorResolvedArgs,
+        cwd,
+        timeout: 0,
+        memoryLimit: 0,
+      });
+    } else {
+      const resolvedArgs = resolveCommand(languageSettings.debugCommand, file, extraVariables);
+      const cwd = languageSettings.currentWorkingDirectory
+        ? resolveVariables(languageSettings.currentWorkingDirectory)
+        : undefined;
+
+      this._launchTestcase({
+        id,
+        token,
+        testcase,
+        resolvedArgs,
+        cwd,
+        timeout: 0,
+        memoryLimit: 0,
+      });
+    }
 
     // Wait for the debug process to spawn before attaching
-    const spawned = await testcase.process.spawned;
-    if (!spawned || token.isCancellationRequested) {
+    const spawnedPromises = [testcase.process.spawned];
+    if (testcase.mode === "interactive") {
+      spawnedPromises.push(testcase.interactorProcess.spawned);
+    }
+    const spawned = await Promise.all(spawnedPromises);
+    let allSpawned = true;
+    for (const spawnedProcess of spawned) {
+      if (!spawnedProcess) {
+        allSpawned = false;
+        break;
+      }
+    }
+    if (!allSpawned || token.isCancellationRequested) {
       await testcase.process.done;
       const exitCode = testcase.process.exitCode;
       const signal = testcase.process.signal;
