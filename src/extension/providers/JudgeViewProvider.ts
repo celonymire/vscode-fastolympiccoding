@@ -117,14 +117,12 @@ function updateInteractiveTestcaseFromTermination(
       terminationSeverityNumber(interactorTermination)
     )
   );
-  if (state.status === "NA") {
-    // Exit succeeded; refine with output comparison
-    if (state.acceptedStdout.isEmpty()) {
-      state.status = "NA";
-    } else if (state.stdout.data === state.acceptedStdout.data) {
-      state.status = "AC";
-    } else {
-      state.status = "WA";
+  if (state.status === "WA") {
+    // Either judge or interactor returned non-zero error code, so we have 2 cases:
+    // 1. Judge returned non-zero, meaning it crashed
+    // 2. Interactor returned non-zero, which indicates wrong answer
+    if (termination === "error") {
+      state.status = "RE";
     }
   }
 }
