@@ -734,8 +734,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (this._interactiveMode) {
         // Generator provides the secret for the interactor
         this._judgeState.process.process?.stdin.write(data);
-        this._interactorSecretResolver?.();
-        this._interactorSecretResolver = undefined;
       } else {
         // Generator pipes to solution and good solution
         this._solutionState.process.process?.stdin.write(data);
@@ -765,6 +763,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _onStdoutEnd(stateId: StateId) {
+    if (this._interactiveMode && stateId === "Generator") {
+      this._interactorSecretResolver?.();
+      this._interactorSecretResolver = undefined;
+    }
+
     const state = this._findState(stateId);
     state?.stdout.write("", "final");
   }
