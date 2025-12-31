@@ -116,11 +116,54 @@
     }
   }
 
+  function isMouseOverTarget(mouseX: number, mouseY: number): boolean {
+    if (!currentTarget) return false;
+    const rect = currentTarget.getBoundingClientRect();
+    return (
+      mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom
+    );
+  }
+
   onMount(() => {
+    // Reset state on mount
+    tooltipText = "";
+    tooltipOpacity = 0;
+    tooltipX = 0;
+    tooltipY = 0;
+    currentTarget = null;
+    clearTimeout(showTimeout);
+    clearTimeout(hideTimeout);
+
+    const mutationObserver = new MutationObserver(() => {
+      // If the target element is no longer in the DOM, hide the tooltip
+      if (currentTarget && !document.contains(currentTarget)) {
+        hideTooltip();
+      }
+    });
+
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Hide tooltip on window resize
+    window.addEventListener("resize", hideTooltip);
+
+    // Hide tooltip if mouse leaves target element
+    const handleMouseMove = (event: MouseEvent) => {
+      if (tooltipOpacity > 0 && !isMouseOverTarget(event.clientX, event.clientY)) {
+        hideTooltip();
+      }
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+
     document.addEventListener("mouseenter", handleMouseEnter, true);
     document.addEventListener("mouseleave", handleMouseLeave, true);
 
     return () => {
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", hideTooltip);
+      document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseenter", handleMouseEnter, true);
       document.removeEventListener("mouseleave", handleMouseLeave, true);
       clearTimeout(showTimeout);
