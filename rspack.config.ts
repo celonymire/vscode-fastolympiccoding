@@ -20,11 +20,6 @@ function getSharedConfig(isProd: boolean, mode: Configuration["mode"]): Configur
 }
 
 function addonCopyPlugins(): Configuration["plugins"] {
-  // Respect explicit CI flag to skip addon copying
-  if (process.env.SKIP_ADDON_COPY === "true") {
-    return [];
-  }
-
   const plugins: Configuration["plugins"] = [];
 
   if (process.platform === "win32") {
@@ -37,7 +32,7 @@ function addonCopyPlugins(): Configuration["plugins"] {
             to: "win32-memory-stats.node",
           },
         ],
-      }),
+      })
     );
   } else if (process.platform === "linux") {
     const linuxPath = path.join("build", "Release", "linux-memory-stats.node");
@@ -49,7 +44,7 @@ function addonCopyPlugins(): Configuration["plugins"] {
             to: "linux-memory-stats.node",
           },
         ],
-      }),
+      })
     );
   }
 
