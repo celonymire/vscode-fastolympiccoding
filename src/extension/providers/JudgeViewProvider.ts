@@ -358,7 +358,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
         interactorProc.stdin.write(testcase.interactorSecret.data);
       })
-      .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
       .on("stdout:data", (data: string) => {
         testcase.stdin.write(data, "force");
         proc.stdin.write(data);
@@ -382,7 +382,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
 
     testcase.process
-      .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
       .on("stdout:data", async (data: string) => {
         if (testcase.interactorSecretResolver) {
           await secretPromise;
