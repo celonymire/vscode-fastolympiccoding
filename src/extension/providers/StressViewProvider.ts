@@ -3,73 +3,82 @@ import * as v from "valibot";
 
 import { StatusSchema, type Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
-import { compile, mapTestcaseTermination, Runnable } from "../utils/runtime";
+import {
+  compile,
+  mapTestcaseTermination,
+  Runnable,
+  terminationSeverityNumber,
+} from "../utils/runtime";
 import {
   getLanguageSettings,
   openInNewEditor,
   resolveCommand,
   resolveVariables,
   TextHandler,
+  type WriteMode,
 } from "../utils/vscode";
 import { getLogger } from "../utils/logging";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
   ProviderMessageSchema,
+  SaveMessageSchema,
+  StateIdValue,
   ViewMessageSchema,
+  type StateId,
   type WebviewMessage,
 } from "../../shared/stress-messages";
 
 const StressDataSchema = v.object({
-  data: v.fallback(v.string(), ""),
+  stdin: v.fallback(v.string(), ""),
+  stdout: v.fallback(v.string(), ""),
+  stderr: v.fallback(v.string(), ""),
   status: v.fallback(StatusSchema, "NA"),
+  state: v.picklist(StateIdValue),
 });
 
-type StressData = v.InferOutput<typeof StressDataSchema>;
+const FileDataSchema = v.object({
+  interactiveMode: v.fallback(v.boolean(), false),
+  states: v.fallback(v.array(StressDataSchema), []),
+});
 
-const defaultStressDataItem = v.parse(StressDataSchema, {});
-const defaultStressData: StressData[] = [
-  defaultStressDataItem,
-  defaultStressDataItem,
-  defaultStressDataItem,
-];
+type FileData = v.InferOutput<typeof FileDataSchema>;
 
 type State = {
-  data: TextHandler;
+  state: StateId;
+  stdin: TextHandler;
+  stdout: TextHandler;
+  stderr: TextHandler;
   status: Status;
   process: Runnable;
+  errorHandler: (err: Error) => void;
+  stdoutDataHandler: (data: string) => void;
+  stdoutEndHandler: () => void;
+  stderrDataHandler: (data: string) => void;
+  stderrEndHandler: () => void;
+  closeHandler: (code: number | null) => void;
 };
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: State[] = [
-    { data: new TextHandler(), status: "NA", process: new Runnable() },
-    { data: new TextHandler(), status: "NA", process: new Runnable() },
-    { data: new TextHandler(), status: "NA", process: new Runnable() },
-  ]; // [generator, solution, good solution]
+  private _state: State[] = [];
   private _stopFlag = false;
-  private _stopRequested = [false, false, false]; // track intentional stops per process
   private _clearFlag = false;
   private _running = false;
-  // Context for current run (used by handlers)
-  private _runCommands: string[][] = [[], [], []];
   private _runCwd: string | undefined;
-  // Bound handlers (created once, reused across iterations)
-  private readonly _errorHandlers: [
-    (err: Error) => void,
-    (err: Error) => void,
-    (err: Error) => void,
-  ];
-  private readonly _stdoutDataHandlers: [
-    (data: string) => void,
-    (data: string) => void,
-    (data: string) => void,
-  ];
-  private readonly _stdoutEndHandlers: [() => void, () => void, () => void];
-  private readonly _closeHandlers: [
-    (code: number | null) => void,
-    (code: number | null) => void,
-    (code: number | null) => void,
-  ];
+  private _interactiveMode = false;
+  private _interactiveSecretPromise: Promise<void> | null = null;
+  private _interactorSecretResolver?: () => void;
+  private _generatorState: State;
+  private _solutionState: State;
+  private _judgeState: State;
+
+  private _findState(id: StateId): State | null {
+    const index = this._state.findIndex((state) => state.state === id);
+    if (index === -1) {
+      return null;
+    }
+    return this._state[index];
+  }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
@@ -91,6 +100,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "CLEAR":
         this.clear();
         break;
+      case "SAVE":
+        this._save(msg);
     }
   }
 
@@ -110,33 +121,79 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   ) {
     super("stress", context, ProviderMessageSchema);
 
-    // Initialize bound handlers once
-    this._errorHandlers = [
-      this._onProcessError.bind(this, 0),
-      this._onProcessError.bind(this, 1),
-      this._onProcessError.bind(this, 2),
-    ];
-    this._stdoutDataHandlers = [
-      this._onStdoutData.bind(this, 0),
-      this._onStdoutData.bind(this, 1),
-      this._onStdoutData.bind(this, 2),
-    ];
-    this._stdoutEndHandlers = [
-      this._onStdoutEnd.bind(this, 0),
-      this._onStdoutEnd.bind(this, 1),
-      this._onStdoutEnd.bind(this, 2),
-    ];
-    this._closeHandlers = [
-      this._onProcessClose.bind(this, 0),
-      this._onProcessClose.bind(this, 1),
-      this._onProcessClose.bind(this, 2),
+    // Initialize state with handlers bound to each StateId
+    this._state = [
+      {
+        state: "Generator",
+        stdin: new TextHandler(),
+        stdout: new TextHandler(),
+        stderr: new TextHandler(),
+        status: "NA",
+        process: new Runnable(),
+        errorHandler: this._onProcessError.bind(this, "Generator"),
+        stdoutDataHandler: this._onStdoutData.bind(this, "Generator"),
+        stdoutEndHandler: this._onStdoutEnd.bind(this, "Generator"),
+        stderrDataHandler: this._onStderrData.bind(this, "Generator"),
+        stderrEndHandler: this._onStderrEnd.bind(this, "Generator"),
+        closeHandler: this._onProcessClose.bind(this, "Generator"),
+      },
+      {
+        state: "Solution",
+        stdin: new TextHandler(),
+        stdout: new TextHandler(),
+        stderr: new TextHandler(),
+        status: "NA",
+        process: new Runnable(),
+        errorHandler: this._onProcessError.bind(this, "Solution"),
+        stdoutDataHandler: this._onStdoutData.bind(this, "Solution"),
+        stdoutEndHandler: this._onStdoutEnd.bind(this, "Solution"),
+        stderrDataHandler: this._onStderrData.bind(this, "Solution"),
+        stderrEndHandler: this._onStderrEnd.bind(this, "Solution"),
+        closeHandler: this._onProcessClose.bind(this, "Solution"),
+      },
+      {
+        state: "Judge",
+        stdin: new TextHandler(),
+        stdout: new TextHandler(),
+        stderr: new TextHandler(),
+        status: "NA",
+        process: new Runnable(),
+        errorHandler: this._onProcessError.bind(this, "Judge"),
+        stdoutDataHandler: this._onStdoutData.bind(this, "Judge"),
+        stdoutEndHandler: this._onStdoutEnd.bind(this, "Judge"),
+        stderrDataHandler: this._onStderrData.bind(this, "Judge"),
+        stderrEndHandler: this._onStderrEnd.bind(this, "Judge"),
+        closeHandler: this._onProcessClose.bind(this, "Judge"),
+      },
     ];
 
-    for (let id = 0; id < 3; id++) {
-      this._state[id].data.callback = (data: string) => {
+    this._solutionState = this._findState("Solution")!;
+    this._judgeState = this._findState("Judge")!;
+    this._generatorState = this._findState("Generator")!;
+
+    // Set up callbacks to send STDIO messages to webview
+    for (const state of this._state) {
+      state.stdin.callback = (data: string) => {
         super._postMessage({
           type: "STDIO",
-          id,
+          id: state.state,
+          stdio: "STDIN",
+          data,
+        });
+      };
+      state.stdout.callback = (data: string) => {
+        super._postMessage({
+          type: "STDIO",
+          id: state.state,
+          stdio: "STDOUT",
+          data,
+        });
+      };
+      state.stderr.callback = (data: string) => {
+        super._postMessage({
+          type: "STDIO",
+          id: state.state,
+          stdio: "STDERR",
           data,
         });
       };
@@ -151,10 +208,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   protected override _switchToNoFile() {
     this.stop();
-    for (let id = 0; id < 3; id++) {
-      this._state[id].data.reset();
-      this._state[id].status = "NA";
-      this._stopRequested[id] = false;
+    for (const state of this._state) {
+      state.stdin.reset();
+      state.stdout.reset();
+      state.stderr.reset();
+      state.status = "NA";
     }
     this._currentFile = undefined;
     this._sendShowMessage(false);
@@ -164,25 +222,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Stop any running stress loop for the previous file.
     this.stop();
 
-    // Reset in-memory state.
-    for (let id = 0; id < 3; id++) {
-      this._state[id].data.reset();
-      this._state[id].status = "NA";
-      this._stopRequested[id] = false;
-    }
-
     this._currentFile = file;
     this._sendShowMessage(true);
 
     // Load persisted state from workspaceState.
     const fileData = super.readStorage()[file];
-    const arrayDataSchema = v.fallback(v.array(StressDataSchema), []);
-    const state = v.parse(arrayDataSchema, fileData);
-    for (let id = 0; id < Math.min(state.length, this._state.length); id++) {
-      const testcase = state[id];
-      this._state[id].status = testcase.status;
-      this._state[id].data.reset();
-      this._state[id].data.write(testcase.data, true);
+    const persistedState = v.parse(FileDataSchema, fileData ?? {});
+    this._interactiveMode = persistedState.interactiveMode;
+    for (const fileState of persistedState.states) {
+      const state = this._findState(fileState.state);
+      if (!state) continue;
+      state.status = fileState.status;
+      state.stdin.reset();
+      state.stdout.reset();
+      state.stderr.reset();
+      state.stdin.write(fileState.stdin, "force");
+      state.stdout.write(fileState.stdout, "force");
+      state.stderr.write(fileState.stderr, "force");
     }
 
     // Send full state to webview.
@@ -190,14 +246,33 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _rehydrateWebviewFromState() {
-    super._postMessage({
-      type: "INIT",
-      states: [
-        { data: this._state[0].data.data, status: this._state[0].status },
-        { data: this._state[1].data.data, status: this._state[1].status },
-        { data: this._state[2].data.data, status: this._state[2].status },
-      ],
-    });
+    super._postMessage({ type: "INIT", interactiveMode: this._interactiveMode });
+    super._postMessage({ type: "CLEAR" });
+    for (const state of this._state) {
+      super._postMessage({
+        type: "STATUS",
+        id: state.state,
+        status: state.status,
+      });
+      super._postMessage({
+        type: "STDIO",
+        id: state.state,
+        stdio: "STDIN",
+        data: state.stdin.data,
+      });
+      super._postMessage({
+        type: "STDIO",
+        id: state.state,
+        stdio: "STDOUT",
+        data: state.stdout.data,
+      });
+      super._postMessage({
+        type: "STDIO",
+        id: state.state,
+        stdio: "STDERR",
+        data: state.stderr.data,
+      });
+    }
   }
 
   async run(): Promise<void> {
@@ -215,7 +290,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     if (languageSettings.compileCommand) {
-      for (let id = 0; id < 3; id++) {
+      for (const id of StateIdValue) {
         super._postMessage({
           type: "STATUS",
           id,
@@ -223,31 +298,46 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         });
       }
 
-      const callback = (id: number, code: number) => {
-        const status = code ? "CE" : "NA";
-        this._state[id].status = status;
-        super._postMessage({ type: "STATUS", id, status });
+      const callback = (id: StateId, code: number) => {
+        const state = this._findState(id);
+        if (state) {
+          const status = code ? "CE" : "NA";
+          state.status = status;
+          super._postMessage({ type: "STATUS", id, status });
+        }
         return code;
       };
-      const promises = [
+      const compilePromises = [
         compile(
           resolveVariables(config.get("generatorFile")!),
           languageSettings.compileCommand,
           this._context
-        ).then(callback.bind(this, 0)),
+        ).then(callback.bind(this, "Generator")),
         compile(resolveVariables("${file}"), languageSettings.compileCommand, this._context).then(
-          callback.bind(this, 1)
+          callback.bind(this, "Solution")
         ),
-        compile(
-          resolveVariables(config.get("goodSolutionFile")!),
-          languageSettings.compileCommand,
-          this._context
-        ).then(callback.bind(this, 2)),
       ];
-      const codes = await Promise.all(promises);
+      if (this._interactiveMode) {
+        compilePromises.push(
+          compile(
+            resolveVariables(config.get<string>("interactorFile")!),
+            languageSettings.compileCommand,
+            this._context
+          ).then(callback.bind(this, "Judge"))
+        );
+      } else {
+        compilePromises.push(
+          compile(
+            resolveVariables(config.get("goodSolutionFile")!),
+            languageSettings.compileCommand,
+            this._context
+          ).then(callback.bind(this, "Judge"))
+        );
+      }
+      const compileCodes = await Promise.all(compilePromises);
 
       let anyFailedToCompile = false;
-      for (const code of codes) {
+      for (const code of compileCodes) {
         if (code) {
           anyFailedToCompile = true;
           break;
@@ -259,7 +349,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
     }
 
-    for (let id = 0; id < 3; id++) {
+    for (const id of StateIdValue) {
       super._postMessage({
         type: "STATUS",
         id,
@@ -281,121 +371,207 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       config.get("generatorFile")!
     );
     const solutionRunArguments = this._resolveRunArguments(languageSettings.runCommand, "${file}");
-    const goodSolutionRunArguments = this._resolveRunArguments(
-      languageSettings.runCommand,
-      config.get("goodSolutionFile")!
-    );
 
-    let anyFailed = false;
-    this._stopFlag = false;
-    for (let i = 0; i < 3; i++) {
-      this._stopRequested[i] = false;
+    let judgeRunArguments: string[];
+    if (this._interactiveMode) {
+      judgeRunArguments = this._resolveRunArguments(
+        languageSettings.runCommand,
+        config.get("interactorFile")!
+      );
+    } else {
+      judgeRunArguments = this._resolveRunArguments(
+        languageSettings.runCommand,
+        config.get("goodSolutionFile")!
+      );
     }
+
+    this._stopFlag = false;
     this._clearFlag = false;
     this._running = true;
     while (!this._stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
       super._postMessage({ type: "CLEAR" });
-      for (let i = 0; i < 3; i++) {
-        this._state[i].data.reset();
-      }
+      for (const state of this._state) {
+        state.stdin.reset();
+        state.stdout.reset();
+        state.stderr.reset();
 
+        state.status = "RUNNING";
+        super._postMessage({
+          type: "STATUS",
+          id: state.state,
+          status: state.status,
+        });
+      }
       const seed = Math.round(Math.random() * 9007199254740991);
-      this._runCommands[0] = generatorRunArguments;
-      this._state[0].process.run(
-        generatorRunArguments[0],
+      this._interactiveSecretPromise = new Promise<void>((resolve) => {
+        this._interactorSecretResolver = resolve;
+      });
+
+      this._judgeState.process.run(
+        judgeRunArguments[0],
         testcaseTimeLimit,
         testcaseMemoryLimit,
         cwd,
+        ...judgeRunArguments.slice(1)
+      );
+      this._judgeState.process
+        .on("error", this._judgeState.errorHandler)
+        .on("stdout:data", this._judgeState.stdoutDataHandler)
+        .on("stdout:end", this._judgeState.stdoutEndHandler)
+        .on("stderr:data", this._judgeState.stderrDataHandler)
+        .on("stderr:end", this._judgeState.stderrEndHandler)
+        .on("close", this._judgeState.closeHandler);
+
+      this._generatorState.process.run(
+        generatorRunArguments[0],
+        0,
+        0,
+        cwd,
         ...generatorRunArguments.slice(1)
       );
-      this._state[0].process
+      this._generatorState.process
         .on("spawn", () => {
-          this._state[0].process.process?.stdin.write(`${seed}\n`);
+          this._generatorState.process.process?.stdin.write(`${seed}\n`);
         })
-        .on("error", this._errorHandlers[0])
-        .on("stdout:data", this._stdoutDataHandlers[0])
-        .on("stdout:end", this._stdoutEndHandlers[0]);
+        .on("error", this._generatorState.errorHandler)
+        .on("stdout:data", this._generatorState.stdoutDataHandler)
+        .on("stdout:end", this._generatorState.stdoutEndHandler)
+        .on("stderr:data", this._generatorState.stderrDataHandler)
+        .on("stderr:end", this._generatorState.stderrEndHandler)
+        .on("close", this._generatorState.closeHandler);
 
-      this._runCommands[1] = solutionRunArguments;
-      this._state[1].process.run(
+      this._solutionState.process.run(
         solutionRunArguments[0],
         testcaseTimeLimit,
         testcaseMemoryLimit,
         cwd,
         ...solutionRunArguments.slice(1)
       );
-      this._state[1].process
-        .on("error", this._errorHandlers[1])
-        .on("stdout:data", this._stdoutDataHandlers[1])
-        .on("stdout:end", this._stdoutEndHandlers[1]);
+      this._solutionState.process
+        .on("error", this._solutionState.errorHandler)
+        .on("stdout:data", this._solutionState.stdoutDataHandler)
+        .on("stdout:end", this._solutionState.stdoutEndHandler)
+        .on("stderr:data", this._solutionState.stderrDataHandler)
+        .on("stderr:end", this._solutionState.stderrEndHandler)
+        .on("close", this._solutionState.closeHandler);
 
-      this._runCommands[2] = goodSolutionRunArguments;
-      this._state[2].process.run(
-        goodSolutionRunArguments[0],
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
-        cwd,
-        ...goodSolutionRunArguments.slice(1)
-      );
-      this._state[2].process
-        .on("error", this._errorHandlers[2])
-        .on("stdout:data", this._stdoutDataHandlers[2])
-        .on("stdout:end", this._stdoutEndHandlers[2])
-        .on("close", this._closeHandlers[2]);
+      const executionPromise = (state: State) => {
+        return new Promise<number>((resolve) => {
+          void (async () => {
+            const termination = await state.process.done;
+            state.status = mapTestcaseTermination(termination);
+            super._postMessage({
+              type: "STATUS",
+              id: state.state,
+              status: state.status,
+            });
+            resolve(terminationSeverityNumber(termination));
+          })();
+        });
+      };
 
-      this._state[0].process.on("close", this._closeHandlers[0]);
-      this._state[1].process.on("close", this._closeHandlers[1]);
+      const generatorPromise = executionPromise(this._generatorState);
+      const solutionPromise = executionPromise(this._solutionState);
+      const judgePromise = executionPromise(this._judgeState);
 
-      const terminations = await Promise.all(this._state.map((value) => value.process.done));
-      for (let i = 0; i < 3; i++) {
-        this._state[i].status = mapTestcaseTermination(terminations[i]);
-        if (this._stopRequested[i]) {
-          this._state[i].status = "NA";
-        } else if (this._state[i].status !== "NA") {
-          anyFailed = true;
+      const severities = await Promise.all([generatorPromise, solutionPromise, judgePromise]);
+      const maxSeverity = Math.max(...severities);
+
+      if (this._interactiveMode) {
+        if (maxSeverity <= 1) {
+          // All the processes finished successfully, therefore the judge
+          // returned 0 so the answer is correct
+          this._solutionState.status = "AC";
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+        } else if (this._judgeState.process.exitCode === null) {
+          // The judge crashed
+          break;
+        } else if (this._judgeState.process.exitCode !== 0) {
+          // Judge returned non-zero code which means answer is invalid
+          this._judgeState.status = "NA";
+          this._solutionState.status = "WA";
+          super._postMessage({
+            type: "STATUS",
+            id: this._judgeState.state,
+            status: this._judgeState.status,
+          });
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+          break;
+        }
+      } else {
+        if (maxSeverity > 1) {
+          // Something had gone wrong so stop
+          break;
+        } else if (this._solutionState.stdout.data !== this._judgeState.stdout.data) {
+          this._solutionState.status = "WA";
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+          break;
+        } else {
+          this._solutionState.status = "AC";
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
         }
       }
-      if (anyFailed || this._state[1].data.data !== this._state[2].data.data) {
-        break;
-      }
+
       await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
     }
     this._running = false;
 
     if (this._clearFlag) {
-      for (let id = 0; id < 3; id++) {
-        this._state[id].data.reset();
-        this._state[id].status = "NA";
+      for (const state of this._state) {
+        state.stdin.reset();
+        state.stdout.reset();
+        state.stderr.reset();
+        state.status = "NA";
       }
 
       super._postMessage({ type: "CLEAR" });
-    } else if (!anyFailed && this._state[1].data.data !== this._state[2].data.data) {
-      this._state[1].status = "WA";
     }
     this._clearFlag = false;
 
-    for (let id = 0; id < 3; id++) {
-      super._postMessage({
-        type: "STATUS",
-        id,
-        status: this._state[id].status,
-      });
-    }
     this._saveState();
   }
 
   stop() {
     if (this._running) {
       this._stopFlag = true;
-      for (let i = 0; i < 3; i++) {
-        this._stopRequested[i] = true;
-        this._state[i].process.process?.kill();
+      for (const state of this._state) {
+        state.process.stop();
       }
     }
   }
 
-  private _view({ id }: v.InferOutput<typeof ViewMessageSchema>) {
-    void openInNewEditor(this._state[id].data.data);
+  private _view({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
+    const state = this._findState(id);
+    if (!state) {
+      return;
+    }
+    switch (stdio) {
+      case "STDIN":
+        void openInNewEditor(state.stdin.data);
+        break;
+      case "STDOUT":
+        void openInNewEditor(state.stdout.data);
+        break;
+      case "STDERR":
+        void openInNewEditor(state.stderr.data);
+        break;
+    }
   }
 
   private _add({ id }: v.InferOutput<typeof AddMessageSchema>) {
@@ -405,11 +581,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     let resolvedFile: string;
-    if (id === 0) {
+    if (id === "Generator") {
       resolvedFile = resolveVariables(
         vscode.workspace.getConfiguration("fastolympiccoding").get("generatorFile")!
       );
-    } else if (id === 1) {
+    } else if (id === "Solution") {
       resolvedFile = file;
     } else {
       resolvedFile = resolveVariables(
@@ -417,18 +593,58 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
     }
 
-    this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
-      stdin: this._state[0].data.data,
-      stderr: "",
-      stdout: this._state[1].data.data,
-      acceptedStdout: this._state[2].data.data,
-      elapsed: 0,
-      memoryBytes: this._state[id].process.maxMemoryBytes,
-      status: this._state[id].status,
-      shown: true,
-      toggled: false,
-      skipped: false,
-    });
+    if (this._interactiveMode) {
+      const currentState = this._findState(id);
+
+      if (currentState?.state === "Solution") {
+        this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+          stdin: this._solutionState.stdin.data,
+          stderr: this._solutionState.stderr.data,
+          stdout: this._solutionState.stdout.data,
+          acceptedStdout: "",
+          elapsed: currentState?.process.elapsed ?? 0,
+          memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
+          status: currentState?.status ?? "NA",
+          shown: true,
+          toggled: false,
+          skipped: false,
+          mode: "interactive",
+          interactorSecret: this._generatorState.stdout.data,
+        });
+      } else if (currentState?.state === "Judge") {
+        this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+          stdin: this._judgeState.stdin.data,
+          stderr: this._judgeState.stderr.data,
+          stdout: this._judgeState.stdout.data,
+          acceptedStdout: "",
+          elapsed: currentState?.process.elapsed ?? 0,
+          memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
+          status: currentState?.status ?? "NA",
+          shown: true,
+          toggled: false,
+          skipped: false,
+          mode: "interactive",
+          interactorSecret: this._generatorState.stdout.data,
+        });
+      }
+    } else {
+      const currentState = this._findState(id);
+
+      this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+        stdin: this._generatorState.stdout.data,
+        stderr: currentState?.stderr.data ?? "",
+        stdout: currentState?.stdout.data ?? "",
+        acceptedStdout: this._judgeState.stdout.data,
+        elapsed: currentState?.process.elapsed ?? 0,
+        memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
+        status: currentState?.status ?? "NA",
+        shown: true,
+        toggled: false,
+        skipped: false,
+        mode: "standard",
+        interactorSecret: "",
+      });
+    }
   }
 
   clear() {
@@ -436,14 +652,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._clearFlag = true;
       this.stop();
     } else {
-      for (let id = 0; id < 3; id++) {
-        this._state[id].data.reset();
-        this._state[id].status = "NA";
+      for (const state of this._state) {
+        state.stdin.reset();
+        state.stdout.reset();
+        state.stderr.reset();
+        state.status = "NA";
       }
 
       super._postMessage({ type: "CLEAR" });
       this._saveState();
     }
+  }
+
+  _save({ interactiveMode }: v.InferOutput<typeof SaveMessageSchema>) {
+    this._interactiveMode = interactiveMode;
+
+    this._saveState();
   }
 
   private _saveState() {
@@ -452,13 +676,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const data = this._state.map<StressData>((value) => ({
-      data: value.data.data,
-      status: value.status,
-    }));
+    const defaultData = v.parse(FileDataSchema, {});
+    const data: FileData = {
+      interactiveMode: this._interactiveMode,
+      states: [],
+    };
+    for (const state of this._state) {
+      data.states.push({
+        state: state.state,
+        status: state.status,
+        stdin: state.stdin.data,
+        stdout: state.stdout.data,
+        stderr: state.stderr.data,
+      });
+    }
     void super.writeStorage(
       file,
-      JSON.stringify(data) === JSON.stringify(defaultStressData) ? undefined : data
+      JSON.stringify(defaultData) === JSON.stringify(data) ? undefined : data
     );
   }
 
@@ -468,50 +702,102 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     return resolvedArgs;
   }
 
-  private _onProcessError(processId: 0 | 1 | 2, data: Error) {
+  private _onProcessError(stateId: StateId, data: Error) {
     if (data.name !== "AbortError") {
       const logger = getLogger("stress");
-      const config = vscode.workspace.getConfiguration("fastolympiccoding");
-      const fileLabels = [
-        `generatorFile: ${config.get("generatorFile")}`,
-        `solution: ${this._currentFile}`,
-        `goodSolutionFile: ${config.get("goodSolutionFile")}`,
-      ];
+      const state = this._findState(stateId);
       logger.error(
-        `${fileLabels[processId]} process error (file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${this._runCommands[processId].join(" ")}, cwd=${this._runCwd ?? "undefined"})`
+        `${stateId} process error (file=${this._currentFile ?? "undefined"}, error=${data.message}, cwd=${this._runCwd ?? "undefined"})`
       );
-      this._state[processId].data.write(data.message, true);
+      state?.stderr.write(data.message, "final");
+    }
+
+    for (const stateId of StateIdValue) {
+      const state = this._findState(stateId);
+      state?.process.process?.kill();
     }
   }
 
-  private _onStdoutData(processId: 0 | 1 | 2, data: string) {
-    this._state[processId].data.write(data, false);
-    if (processId === 0) {
-      // Generator pipes to solution and good solution
-      this._state[1].process.process?.stdin.write(data);
-      this._state[2].process.process?.stdin.write(data);
+  private async _onStdoutData(stateId: StateId, data: string) {
+    const state = this._findState(stateId);
+    if (stateId === "Generator") {
+      const writeMode: WriteMode = this._interactiveMode ? "force" : "batch";
+      this._generatorState.stdout.write(data, writeMode);
+
+      if (this._interactiveMode) {
+        // Generator provides the secret for the interactor
+        this._judgeState.process.process?.stdin.write(data);
+      } else {
+        // Generator pipes to solution and good solution
+        this._solutionState.process.process?.stdin.write(data);
+        this._judgeState.process.process?.stdin.write(data);
+      }
+    } else if (stateId === "Judge") {
+      if (this._interactiveMode) {
+        this._solutionState.process.process?.stdin.write(data);
+        state?.stdin.write(data, "force");
+      } else {
+        state?.stdout.write(data, "batch");
+      }
+    } else {
+      if (this._interactiveMode) {
+        // Make sure generator sends the secret before sending our queries
+        if (this._interactiveSecretPromise) {
+          await this._interactiveSecretPromise;
+          this._interactiveSecretPromise = null;
+        }
+
+        this._judgeState.process.process?.stdin.write(data);
+        state?.stdout.write(data, "force");
+      } else {
+        state?.stdout.write(data, "batch");
+      }
     }
   }
 
-  private _onStdoutEnd(processId: 0 | 1 | 2) {
-    this._state[processId].data.write("", true);
+  private _onStdoutEnd(stateId: StateId) {
+    if (this._interactiveMode && stateId === "Generator") {
+      this._interactorSecretResolver?.();
+      this._interactorSecretResolver = undefined;
+    }
+
+    const state = this._findState(stateId);
+    state?.stdout.write("", "final");
   }
 
-  private _onProcessClose(processId: 0 | 1 | 2, code: number | null) {
-    const proc = this._state[processId].process.process;
-    if (!proc) return;
+  private _onProcessClose(stateId: StateId, code: number | null) {
+    const state = this._findState(stateId);
+    if (!state) {
+      return;
+    }
 
-    // Detach listeners using stored references
-    proc.off("error", this._errorHandlers[processId]);
-    proc.stdout.off("data", this._stdoutDataHandlers[processId]);
+    const proc = state?.process.process;
+    proc?.off("error", state.errorHandler);
+    proc?.stdout.off("data", state.stdoutDataHandler);
+    proc?.stderr.off("data", state.stderrDataHandler);
 
-    if (code === null || code) {
-      // Cascade kill siblings (not user-requested stop)
-      for (let i = 0; i < 3; i++) {
-        if (i !== processId) {
-          this._state[i].process.process?.kill();
+    if (code !== 0) {
+      for (const siblingId of StateIdValue) {
+        const sibling = this._findState(siblingId);
+        if (sibling && sibling.state !== stateId) {
+          sibling.process.stop();
         }
       }
     }
+  }
+
+  private _onStderrData(stateId: StateId, data: string) {
+    const state = this._findState(stateId);
+    const writeMode: WriteMode = this._interactiveMode ? "force" : "batch";
+    state?.stderr.write(data, writeMode);
+  }
+
+  private _onStderrEnd(stateId: StateId) {
+    const state = this._findState(stateId);
+    state?.stderr.write("", "final");
+  }
+
+  toggleWebviewSettings() {
+    super._postMessage({ type: "SETTINGS_TOGGLE" });
   }
 }

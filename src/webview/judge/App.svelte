@@ -25,6 +25,7 @@
   let newMemoryLimit = $state(0);
   let show = $state(true);
   let showSettings = $state(false);
+  let showTestcaseDropdown = $state(false);
 
   // Helper to find testcase by id
   function findTestcaseIndex(id: number): number {
@@ -48,6 +49,8 @@
           shown: true,
           toggled: false,
           skipped: false,
+          mode: "standard",
+          interactorSecret: "",
         },
       });
     }
@@ -76,6 +79,9 @@
         break;
       case "ACCEPTED_STDOUT":
         tc.acceptedStdout += data;
+        break;
+      case "INTERACTOR_SECRET":
+        tc.interactorSecret += data;
         break;
     }
   }
@@ -113,11 +119,23 @@
   }
 
   function handleSettingsToggle() {
+    showTestcaseDropdown = false;
     showSettings = !showSettings;
   }
 
+  function handleToggleDropdown() {
+    showTestcaseDropdown = !showTestcaseDropdown;
+  }
+
   function handleNewTestcase(e: Event) {
-    postProviderMessage({ type: "NEXT" });
+    postProviderMessage({ type: "NEXT", mode: "standard" });
+    showTestcaseDropdown = false;
+    (e.currentTarget as HTMLElement | null)?.blur();
+  }
+
+  function handleNewInteractiveTestcase(e: Event) {
+    postProviderMessage({ type: "NEXT", mode: "interactive" });
+    showTestcaseDropdown = false;
     (e.currentTarget as HTMLElement | null)?.blur();
   }
 
@@ -176,11 +194,29 @@
       }
     };
 
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const wrapper = document.querySelector(".new-button-wrapper");
+      const dropdown = document.querySelector(".dropdown-menu");
+
+      if (
+        showTestcaseDropdown &&
+        wrapper &&
+        dropdown &&
+        !wrapper.contains(target) &&
+        !dropdown.contains(target)
+      ) {
+        showTestcaseDropdown = false;
+      }
+    };
+
     window.addEventListener("message", handleMessage);
+    document.addEventListener("click", handleClickOutside);
     postProviderMessage({ type: "LOADED" });
 
     return () => {
       window.removeEventListener("message", handleMessage);
+      document.removeEventListener("click", handleClickOutside);
     };
   });
 </script>
@@ -218,10 +254,34 @@
       {#each testcases as { id, data } (id)}
         <Testcase {id} testcase={data} {updateTestcaseData} />
       {/each}
-      <button type="button" class="text-button" onclick={handleNewTestcase}>
-        <div class="codicon codicon-add"></div>
-        New Testcase
-      </button>
+      <div class="new-button-wrapper">
+        <button class="text-button grow-1" type="button" onclick={handleNewTestcase}>
+          <div class="codicon codicon-add"></div>
+          New Testcase
+        </button>
+        <div class="center-everything grow-0 new-button-dropdown-group">
+          <div class="new-button-dropdown-separator"></div>
+          <button
+            aria-label="New Testcase Dropdown"
+            type="button"
+            onclick={handleToggleDropdown}
+            class="text-button new-button-dropdown-icon"
+          >
+            <div class="codicon codicon-chevron-down"></div>
+          </button>
+        </div>
+      </div>
+      {#if showTestcaseDropdown}
+        <div class="dropdown-menu">
+          <button type="button" class="dropdown-item" onclick={handleNewTestcase}>
+            New Testcase
+          </button>
+          <br />
+          <button type="button" class="dropdown-item" onclick={handleNewInteractiveTestcase}>
+            New Interactive Testcase
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 {:else}
@@ -255,6 +315,79 @@
 
   .text-button :global(.codicon) {
     margin-right: 4px;
+  }
+
+  .new-button-wrapper {
+    display: flex;
+    margin-top: 8px;
+    border: 1px solid var(--vscode-button-border, transparent);
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-radius: 2px;
+  }
+
+  .center-everything {
+    display: flex;
+    text-align: center;
+    cursor: pointer;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    flex-grow: 1;
+    height: 100%;
+  }
+
+  .grow-1 {
+    flex-grow: 1;
+  }
+
+  .grow-0 {
+    flex-grow: 0;
+  }
+
+  .new-button-dropdown-separator {
+    width: 1px;
+    height: 20px;
+    background-color: var(--vscode-button-separator);
+  }
+
+  .new-button-dropdown-group {
+    gap: 0;
+  }
+
+  .new-button-dropdown-icon {
+    padding-left: 4px;
+    padding-right: 0;
+  }
+
+  .new-button-dropdown-icon:hover {
+    background-color: var(--vscode-button-hoverBackground);
+  }
+
+  .dropdown-menu {
+    width: fit-content;
+    margin-left: auto;
+    background: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px var(--vscode-menu-shadow);
+    padding: 3px;
+  }
+
+  .dropdown-item {
+    width: 100%;
+    padding: 6px 24px;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--vscode-menu-foreground);
+    cursor: pointer;
+  }
+
+  .dropdown-item:hover {
+    background: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
   }
 
   /* Main View */

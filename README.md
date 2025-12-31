@@ -15,6 +15,7 @@
 - [📜](#-judge) Minimal and _adaptive_ UI for maximized functionality and view utilization
 - [🪲](#-debugging) Extension agnostic configuration for VSCode debugging UX with real-time inputs
 - [🐞](#-stress-tester) Built-in stress tester to aid your debugging
+- [🗨️](#️-interactive-mode) First-class support for interactive problems for **both** [Judge](#-judge) and [Stress Tester](#-stress-tester!
 - [👜](#-inserting-prewritten-code) Insert file templates without leaving your code
 - [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) for efficient problem gathering
 - ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
@@ -281,9 +282,9 @@ Required files (naming scheme can be configured in settings):
 
 - **💡TIP**: To stress test for **Runtime Error** instead of **Wrong Answer**, have the good solution be the same as the one to bruteforce against!
 
-|                   ![Stress Tester Gif](media/stress_tester.gif)                   |
-| :-------------------------------------------------------------------------------: |
-| _Stress Tester was able to find a counterexample due to an integer overflow bug!_ |
+| ![Stress Tester Gif](media/stress_tester.gif) |
+| :-------------------------------------------: |
+|         _Demo of stress testing A+B!_         |
 
 <details>
   <summary>Settings for Stress Tester</summary>
@@ -295,6 +296,41 @@ Required files (naming scheme can be configured in settings):
 - `stressTestcaseMemoryLimit`: Maximum time in megabytes the Stress Tester is allowed to use on one testcase **(`0` for no limit)**
 - `stressTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to run **(`0` for no limit)**
 </details>
+
+---
+
+### 🗨️ Interactive Mode
+
+Required files (naming scheme can be configured in settings):
+
+- `<name>.[ext]`: the solution to bruteforce against
+- `<name>__Interactor.[ext]`: the interactor to communicate with
+
+If you're using the stress tester, then you'll also need:
+
+- `<name>__Generator.[ext]`: the generator to give the interactor the secret answer
+
+‼️**FLUSH YOUR OUTPUTS!** Even though this requirement has been stated in every interactive problem, it is still worth mentioning in case the files are interacting weirdly. **FLUSHING SHOULD BE THE FIRST THING TO DOUBLE CHECK**.
+
+Due to the lack of standardization of interactor's results, I have taken the middle ground of various online judges' interactor's behavior. **The exit code of the interactor will be used to determine the acceptance of the solution**. Below lists the exit codes and the verdict:
+
+| Code                      | Verdict          |
+| ------------------------- | ---------------- |
+| 0                         | ✅ Accepted      |
+| Non-zero                  | ❌ Wrong Answer  |
+| _null_ (often from crash) | ⚠️ Runtime Error |
+
+**ℹ️ Partial points are not supported!**
+
+Interactive testcases have a special badge to make them distinguishable. If there is no set secret, the testcase will ask you to provide one. **This is a multi-line textbox because you have to give all the data in one go!**
+
+| ![Interactive Workflow Gif](media/interactive-workflow.gif) |
+| :---------------------------------------------------------: |
+| _The convenient workflow of running interactive testcases!_ |
+
+|      ![Interactive Stress Test Gif](media/interactive-stress-test.gif)      |
+| :-------------------------------------------------------------------------: |
+| _Stress testing interactives is almost the same as regular stress testing!_ |
 
 ---
 
@@ -319,6 +355,8 @@ Required files (naming scheme can be configured in settings):
 ---
 
 ### 🛜 Competitive Companion
+
+[Competitive Companion](https://github.com/jmerle/competitive-companion) is a widely recognized browser plugin to conveniently fetch problem inputs. The plugin works with wide range of online judges and is actively maintained. Native support has been integrated directly into the extension for optimal workflow.
 
 |      ![Problem Parsing Gif](media/problem_parsing.gif)      |
 | :---------------------------------------------------------: |

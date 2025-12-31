@@ -1,6 +1,9 @@
 import * as v from "valibot";
 import { StatusSchema } from "./enums";
 
+export const MODES = ["standard", "interactive"] as const;
+export type Mode = (typeof MODES)[number];
+
 export const LanguageSettingsSchema = v.object({
   compileCommand: v.optional(v.string()),
   runCommand: v.string(),
@@ -25,6 +28,8 @@ export const TestcaseSchema = v.object({
   shown: v.fallback(v.boolean(), true),
   toggled: v.fallback(v.boolean(), false),
   skipped: v.fallback(v.boolean(), false),
+  mode: v.fallback(v.picklist(MODES), "standard"),
+  interactorSecret: v.fallback(v.string(), ""),
 });
 
 export const InputTypeValues = ["stdin", "file", "regex"] as const;

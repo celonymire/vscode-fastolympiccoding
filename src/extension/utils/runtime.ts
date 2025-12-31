@@ -33,6 +33,41 @@ export type RunTermination =
   | "exit" // normal exit (zero exit code)
   | "signal"; // killed by OS signal
 
+export function terminationSeverityNumber(termination: RunTermination): number {
+  switch (termination) {
+    case "exit":
+      return 0;
+    case "stopped":
+      return 1;
+    case "error":
+      return 2;
+    case "signal":
+      return 3;
+    case "memory":
+      return 4;
+    case "timeout":
+      return 5;
+  }
+}
+
+export function severityNumberToStatus(severity: number): Status {
+  switch (severity) {
+    case 0:
+    case 1:
+      return "AC";
+    case 2:
+      return "WA";
+    case 3:
+      return "RE";
+    case 4:
+      return "ML";
+    case 5:
+      return "TL";
+    default:
+      return "RE";
+  }
+}
+
 export function mapCompilationTermination(termination: RunTermination): Status {
   switch (termination) {
     case "timeout":
@@ -162,6 +197,8 @@ export class Runnable {
   private _startTime = 0;
   private _endTime = 0;
   private _signal: NodeJS.Signals | null = null;
+  private _abortController: AbortController | null = null;
+  private _combinedAbortSignal: AbortSignal | null = null;
   private _timedOut = false;
   private _exitCode: number | null = 0;
   private _memoryCancellationTokenSource: vscode.CancellationTokenSource | null = null;
@@ -169,7 +206,6 @@ export class Runnable {
   private _maxMemoryBytes = 0;
   private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
-  private _stopRequested = false;
 
   private async _sampleMemory(pid: number) {
     try {
@@ -262,12 +298,17 @@ export class Runnable {
     this._maxMemoryBytes = 0;
     this._memoryLimitExceeded = false;
     this._memoryLimitBytes = memoryLimit * Runnable.BYTES_PER_MEGABYTE;
-    this._stopRequested = false;
+    this._abortController = new AbortController();
 
-    const timeoutSignal = timeout > 0 ? AbortSignal.timeout(timeout) : undefined;
+    const signals = [this._abortController.signal];
+    const timeoutSignal = timeout > 0 ? AbortSignal.timeout(timeout) : null;
+    if (timeoutSignal) {
+      signals.push(timeoutSignal);
+    }
+    this._combinedAbortSignal = AbortSignal.any(signals);
     this._process = childProcess.spawn(command, args, {
       cwd,
-      signal: timeoutSignal,
+      signal: this._combinedAbortSignal,
     });
     this._process.stdout.setEncoding("utf-8");
     this._process.stderr.setEncoding("utf-8");
@@ -360,6 +401,10 @@ export class Runnable {
     return promise.then(() => this._computeTermination());
   }
 
+  stop() {
+    this._abortController?.abort();
+  }
+
   /**
    * Attach a listener to a process event. Returns this for method chaining.
    * Listeners are automatically removed on cleanup() or at the start of the next run().
@@ -410,14 +455,15 @@ export class Runnable {
   }
 
   private _computeTermination(): RunTermination {
-    if (this._stopRequested) {
-      return "stopped";
-    }
     if (this._timedOut) {
       return "timeout";
     }
     if (this._memoryLimitExceeded) {
       return "memory";
+    }
+    // Check this after timeout because timeout also sets this signal
+    if (this._combinedAbortSignal?.aborted) {
+      return "stopped";
     }
     if (this._signal) {
       return "signal";

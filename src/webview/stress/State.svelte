@@ -1,31 +1,41 @@
 <script lang="ts">
-  import type { Status } from "../../shared/enums";
+  import type { Status, Stdio } from "../../shared/enums";
+  import type { StateId } from "../../shared/stress-messages";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
   import Tooltip from "../Tooltip.svelte";
 
   interface IState {
-    data: string;
+    stdin: string;
+    stdout: string;
+    stderr: string;
     status: Status;
   }
 
   interface Props {
     state: IState;
-    id: number;
-    onView: (id: number) => void;
-    onAdd: (id: number) => void;
+    id: StateId;
+    interactiveMode: boolean;
+    placeholder: string;
+    onView: (id: StateId, stdio: Stdio) => void;
+    onAdd: (id: StateId) => void;
   }
 
-  let { state, id, onView, onAdd }: Props = $props();
-
-  const from = ["Generator", "Solution", "Judge"];
-  const placeholders = ["Generator input...", "Solution output...", "Accepted output..."];
+  let { state, id, interactiveMode, placeholder, onView, onAdd }: Props = $props();
 
   function handleAdd() {
     onAdd(id);
   }
 
-  function handleExpand() {
-    onView(id);
+  function handleViewStdin() {
+    onView(id, "STDIN");
+  }
+
+  function handleViewStdout() {
+    onView(id, "STDOUT");
+  }
+
+  function handleViewStderr() {
+    onView(id, "STDERR");
   }
 
   const status = $derived(state.status);
@@ -39,7 +49,9 @@
           ? "Time Limit Exceeded"
           : status === "ML"
             ? "Memory Limit Exceeded"
-            : ""
+            : status === "AC"
+              ? "Accepted"
+              : ""
   );
 </script>
 
@@ -52,9 +64,16 @@
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
           <p class="state-badge-text">
-            {from[id]}
+            {id}
           </p>
         </div>
+        {#if interactiveMode}
+          <div class="state-badge state-status" data-status="CE">
+            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+              <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+            </div>
+          </div>
+        {/if}
         <div class="state-badge state-status" data-status={status}>
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-loading codicon-modifier-spin"></div>
@@ -73,20 +92,30 @@
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
           <p class="state-badge-text">
-            {from[id]}
+            {id}
           </p>
         </div>
+        {#if interactiveMode}
+          <div class="state-badge state-status" data-status="CE">
+            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+              <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+            </div>
+          </div>
+        {/if}
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
       </div>
     </div>
+    <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
     <AutoresizeTextarea
-      value={state.data}
+      value={state.stderr}
       readonly
-      placeholder={placeholders[id]}
-      onexpand={handleExpand}
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      variant="stderr"
     />
+    <AutoresizeTextarea value={state.stdout} readonly {placeholder} onexpand={handleViewStdout} />
   </div>
 {:else if status === "CE"}
   <div class="state-container">
@@ -97,9 +126,16 @@
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
           <p class="state-badge-text">
-            {from[id]}
+            {id}
           </p>
         </div>
+        {#if interactiveMode}
+          <div class="state-badge state-status" data-status="CE">
+            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+              <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+            </div>
+          </div>
+        {/if}
         <div class="state-badge state-status" data-status={status}>
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-terminal-bash"></div>
@@ -108,52 +144,6 @@
         </div>
       </div>
     </div>
-  </div>
-{:else if status === "WA" || status === "RE" || status === "TL" || status === "ML"}
-  <div class="state-container">
-    <div class="state-toolbar">
-      <div class="state-toolbar-left">
-        <div class="state-badge state-status" data-status="NA">
-          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-play"></div>
-          </div>
-          <p class="state-badge-text">
-            {from[id]}
-          </p>
-        </div>
-        <div class="state-badge state-status" data-status={status}>
-          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            {#if status === "WA"}
-              <div class="codicon codicon-bolded codicon-error"></div>
-            {:else if status === "RE"}
-              <div class="codicon codicon-bolded codicon-warning"></div>
-            {:else if status === "TL"}
-              <div class="codicon codicon-bolded codicon-clock"></div>
-            {:else if status === "ML"}
-              <div class="codicon codicon-bolded codicon-chip"></div>
-            {/if}
-          </div>
-          <p class="state-badge-text">{statusText}</p>
-        </div>
-      </div>
-      <div class="state-toolbar-right">
-        <button
-          class="state-toolbar-icon"
-          data-tooltip="Add to Judge"
-          aria-label="Add"
-          onclick={handleAdd}
-        >
-          <div class="codicon codicon-insert"></div>
-        </button>
-      </div>
-    </div>
-    <AutoresizeTextarea
-      value={state.data}
-      readonly
-      placeholder={placeholders[id]}
-      onexpand={handleExpand}
-      variant="stderr"
-    />
   </div>
 {:else}
   <div class="state-container">
@@ -164,16 +154,62 @@
             <div class="codicon codicon-bolded codicon-play"></div>
           </div>
           <p class="state-badge-text">
-            {from[id]}
+            {id}
           </p>
         </div>
+        {#if interactiveMode}
+          <div class="state-badge state-status" data-status="CE">
+            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+              <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+            </div>
+          </div>
+        {/if}
+        {#if status !== "NA"}
+          <div class="state-badge state-status" data-status={status}>
+            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+              {#if status === "WA"}
+                <div class="codicon codicon-bolded codicon-error"></div>
+              {:else if status === "RE"}
+                <div class="codicon codicon-bolded codicon-warning"></div>
+              {:else if status === "TL"}
+                <div class="codicon codicon-bolded codicon-clock"></div>
+              {:else if status === "ML"}
+                <div class="codicon codicon-bolded codicon-chip"></div>
+              {:else if status === "AC"}
+                <div class="codicon codicon-bolded codicon-check"></div>
+              {/if}
+            </div>
+            <p class="state-badge-text">{statusText}</p>
+          </div>
+        {/if}
       </div>
+      {#if status !== "NA" && status !== "AC"}
+        <div class="state-toolbar-right">
+          <button
+            class="state-toolbar-icon"
+            data-tooltip="Add to Judge"
+            aria-label="Add"
+            onclick={handleAdd}
+          >
+            <div class="codicon codicon-insert"></div>
+          </button>
+        </div>
+      {/if}
     </div>
+    <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
     <AutoresizeTextarea
-      value={state.data}
+      value={state.stderr}
       readonly
-      placeholder={placeholders[id]}
-      onexpand={handleExpand}
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea
+      value={state.stdout}
+      readonly
+      {placeholder}
+      onexpand={handleViewStdout}
+      variant={id === "Generator" && interactiveMode ? "interactor-secret" : "default"}
     />
   </div>
 {/if}

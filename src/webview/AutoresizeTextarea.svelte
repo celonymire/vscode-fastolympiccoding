@@ -1,5 +1,5 @@
 <script lang="ts">
-  type Variant = "default" | "stderr" | "accepted" | "active";
+  type Variant = "default" | "stderr" | "accepted" | "active" | "interactor-secret";
 
   interface Props {
     value: string;
@@ -123,6 +123,10 @@
 
   .content[data-variant="active"] {
     border-color: var(--vscode-inputOption-activeBorder);
+  }
+
+  .content[data-variant="interactor-secret"] {
+    border-color: var(--vscode-inputOption-ansiMagenta);
   }
 
   .content.readonly {

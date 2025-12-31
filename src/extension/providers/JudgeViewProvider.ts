@@ -1,9 +1,16 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { ProblemSchema, TestSchema, TestcaseSchema } from "../../shared/schemas";
+import { ProblemSchema, TestSchema, TestcaseSchema, type Mode } from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
-import { compile, findAvailablePort, mapTestcaseTermination, Runnable } from "../utils/runtime";
+import {
+  compile,
+  findAvailablePort,
+  mapTestcaseTermination,
+  Runnable,
+  severityNumberToStatus,
+  terminationSeverityNumber,
+} from "../utils/runtime";
 import type { RunTermination } from "../utils/runtime";
 import {
   getLanguageSettings,
@@ -17,7 +24,9 @@ import {
 import { getLogger } from "../utils/logging";
 import {
   ActionMessageSchema,
+  NextMessageSchema,
   ProviderMessageSchema,
+  SaveInteractorSecretMessageSchema,
   SaveMessageSchema,
   SetMemoryLimitSchema,
   SetTimeLimitSchema,
@@ -42,16 +51,22 @@ const FileDataSchema = v.fallback(
 
 const defaultFileData = v.parse(FileDataSchema, {});
 
-type State = Omit<ITestcase, "stdin" | "stderr" | "stdout" | "acceptedStdout"> & {
+type State = Omit<
+  ITestcase,
+  "stdin" | "stderr" | "stdout" | "acceptedStdout" | "interactorSecret"
+> & {
   stdin: TextHandler;
   stderr: TextHandler;
   stdout: TextHandler;
   acceptedStdout: TextHandler;
+  interactorSecret: TextHandler;
   id: number;
   process: Runnable;
+  interactorProcess: Runnable;
+  interactorSecretResolver?: () => void;
 };
 
-type LaunchProcessParams = {
+type LaunchTestcaseParams = {
   id: number;
   token: vscode.CancellationToken;
   testcase: State;
@@ -61,6 +76,11 @@ type LaunchProcessParams = {
   memoryLimit: number;
 };
 
+type LaunchInteractiveTestcaseParams = Omit<LaunchTestcaseParams, "resolvedArgs"> & {
+  solutionResolvedArgs: string[];
+  interactorResolvedArgs: string[];
+};
+
 type ExecutionContext = {
   token: vscode.CancellationToken;
   file: string;
@@ -68,10 +88,35 @@ type ExecutionContext = {
   languageSettings: ILanguageSettings;
 };
 
-function setTestcaseStats(state: State, termination: RunTermination) {
+function updateTestcaseFromTermination(state: State, termination: RunTermination) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
   state.status = mapTestcaseTermination(termination);
+  if (state.status === "NA") {
+    // Exit succeeded; refine with output comparison
+    if (state.acceptedStdout.isEmpty()) {
+      state.status = "NA";
+    } else if (state.stdout.data === state.acceptedStdout.data) {
+      state.status = "AC";
+    } else {
+      state.status = "WA";
+    }
+  }
+}
+
+function updateInteractiveTestcaseFromTermination(
+  state: State,
+  termination: RunTermination,
+  interactorTermination: RunTermination
+) {
+  state.elapsed = state.process.elapsed;
+  state.memoryBytes = state.process.maxMemoryBytes;
+  state.status = severityNumberToStatus(
+    Math.max(
+      terminationSeverityNumber(termination),
+      terminationSeverityNumber(interactorTermination)
+    )
+  );
   if (state.status === "NA") {
     // Exit succeeded; refine with output comparison
     if (state.acceptedStdout.isEmpty()) {
@@ -168,6 +213,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "status",
       value: "RUNNING",
     });
+    if (testcase.mode === "interactive") {
+      testcase.stdin.reset();
+      super._postMessage({
+        type: "SET",
+        id,
+        property: "stdin",
+        value: "",
+      });
+    }
     testcase.stderr.reset();
     super._postMessage({
       type: "SET",
@@ -184,7 +238,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _launchProcess(params: LaunchProcessParams) {
+  private _launchTestcase(params: LaunchTestcaseParams) {
     const { id, token, testcase, resolvedArgs, cwd, timeout, memoryLimit } = params;
 
     testcase.process.run(resolvedArgs[0], timeout, memoryLimit, cwd, ...resolvedArgs.slice(1));
@@ -194,19 +248,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    // Write stdin once the process is spawned (more reliable than writing immediately).
-    testcase.process.on("spawn", () => {
-      if (token.isCancellationRequested) {
-        return;
-      }
-      proc.stdin.write(testcase.stdin.data);
-    });
-
     testcase.process
-      .on("stderr:data", (data: string) => testcase.stderr.write(data, false))
-      .on("stdout:data", (data: string) => testcase.stdout.write(data, false))
-      .on("stderr:end", () => testcase.stderr.write("", true))
-      .on("stdout:end", () => testcase.stdout.write("", true))
+      .on("spawn", () => {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        proc.stdin.write(testcase.stdin.data);
+      })
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
+      .on("stdout:data", (data: string) => testcase.stdout.write(data, "batch"))
+      .on("stderr:end", () => testcase.stderr.write("", "final"))
+      .on("stdout:end", () => testcase.stdout.write("", "final"))
       .on("error", (data: Error) => {
         if (token.isCancellationRequested) {
           return;
@@ -215,7 +267,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         logger.error(
           `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
         );
-        testcase.stderr.write(data.message, true);
+        testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
         super._postMessage({
           type: "SET",
@@ -230,7 +282,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           return;
         }
         const termination = await testcase.process.done;
-        setTestcaseStats(testcase, termination);
+        updateTestcaseFromTermination(testcase, termination);
         super._postMessage({
           type: "SET",
           id,
@@ -254,19 +306,155 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
   }
 
+  private async _launchInteractiveTestcase(params: LaunchInteractiveTestcaseParams) {
+    const {
+      id,
+      token,
+      testcase,
+      solutionResolvedArgs,
+      interactorResolvedArgs,
+      cwd,
+      timeout,
+      memoryLimit,
+    } = params;
+
+    testcase.process.run(
+      solutionResolvedArgs[0],
+      timeout,
+      memoryLimit,
+      cwd,
+      ...solutionResolvedArgs.slice(1)
+    );
+    testcase.interactorProcess.run(
+      interactorResolvedArgs[0],
+      0,
+      0,
+      cwd,
+      ...interactorResolvedArgs.slice(1)
+    );
+
+    const proc = testcase.process.process;
+    const interactorProc = testcase.interactorProcess.process;
+    if (!proc || !interactorProc) {
+      return;
+    }
+
+    // Pass the secret input before the outputs of the solution
+    // This is a deliberate design choice to allow minimal changes to adapt
+    // to various online judges, where the secret answer can come from various
+    // places, e.g. dynamic filename (CodeForces) or fixed filename (others).
+    // Use a promise to execute this strategy
+    const secretPromise = new Promise<void>((resolve) => {
+      testcase.interactorSecretResolver = resolve;
+    });
+
+    testcase.interactorProcess
+      .on("spawn", async () => {
+        if (testcase.interactorSecret.isEmpty()) {
+          await secretPromise;
+        } else {
+          testcase.interactorSecretResolver?.();
+          testcase.interactorSecretResolver = undefined;
+        }
+        interactorProc.stdin.write(testcase.interactorSecret.data);
+      })
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
+      .on("stdout:data", (data: string) => {
+        testcase.stdin.write(data, "force");
+        proc.stdin.write(data);
+      })
+      .on("error", (data: Error) => {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        const logger = getLogger("judge");
+        logger.error(
+          `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
+        );
+        testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
+        testcase.stderr.write(data.message, "final");
+        testcase.status = "RE";
+
+        testcase.process.process?.kill();
+      })
+      .on("close", () => {
+        testcase.process.process?.stdin.end();
+      });
+
+    testcase.process
+      .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
+      .on("stdout:data", async (data: string) => {
+        if (testcase.interactorSecretResolver) {
+          await secretPromise;
+        }
+        testcase.stdout.write(data, "force");
+        interactorProc.stdin.write(data);
+      })
+      .on("error", (data: Error) => {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        const logger = getLogger("judge");
+        logger.error(
+          `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
+        );
+        testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
+        testcase.stderr.write(data.message, "final");
+
+        testcase.interactorProcess.process?.kill();
+      })
+      .on("close", () => {
+        testcase.interactorProcess.process?.stdin.end();
+      });
+
+    const [termination, interactorTermination] = await Promise.all([
+      testcase.process.done,
+      testcase.interactorProcess.done,
+    ]);
+
+    testcase.stdin.write("", "final");
+    testcase.stderr.write("", "final");
+    testcase.stdout.write("", "final");
+
+    updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "status",
+      value: testcase.status,
+    });
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "elapsed",
+      value: testcase.elapsed,
+    });
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "memoryBytes",
+      value: testcase.memoryBytes,
+    });
+
+    this._saveFileData();
+  }
+
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
       case "LOADED":
         this.loadCurrentFileData();
         break;
       case "NEXT":
-        this._nextTestcase();
+        this._nextTestcase(msg);
         break;
       case "ACTION":
         this._action(msg);
         break;
       case "SAVE":
         this._save(msg);
+        break;
+      case "SAVE_INTERACTOR_SECRET":
+        this._saveInteractorSecret(msg);
         break;
       case "VIEW":
         this._viewStdio(msg);
@@ -366,13 +554,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._sendShowMessage(true);
 
     const storageData = super.readStorage()[file];
-    const fileData = v.parse(FileDataSchema, storageData);
+    const fileData = v.parse(FileDataSchema, storageData ?? {});
     const testcases = fileData.testcases;
     this._timeLimit = fileData.timeLimit;
     this._memoryLimit = fileData.memoryLimit;
     for (let i = 0; i < testcases.length; i++) {
       const testcase = v.parse(TestcaseSchema, testcases[i]);
-      this._addTestcase(testcase);
+      this._addTestcase(testcase.mode, testcase);
     }
 
     super._postMessage({
@@ -456,6 +644,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         property: "skipped",
         value: testcase.skipped,
       });
+      super._postMessage({
+        type: "SET",
+        id,
+        property: "mode",
+        value: testcase.mode,
+      });
+      super._postMessage({
+        type: "SET",
+        id,
+        property: "interactorSecret",
+        value: testcase.interactorSecret.data,
+      });
     }
   }
 
@@ -472,6 +672,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         shown: true,
         toggled: false,
         skipped: false,
+        mode: data.interactive ? "interactive" : "standard",
+        interactorSecret: "", // Competitive Companion doesn't provide interactor secret
       })
     );
 
@@ -481,7 +683,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._timeLimit = data.timeLimit;
       this._memoryLimit = data.memoryLimit;
       for (const testcase of testcases) {
-        this._addTestcase(testcase);
+        this._addTestcase(data.interactive ? "interactive" : "standard", testcase);
       }
       this._saveFileData();
 
@@ -505,7 +707,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
     if (file === current) {
-      this._addTestcase(testcase);
+      this._addTestcase("standard", testcase); // FIXME: Properly set interactive parameter when stress tester is updated
       this._saveFileData();
     } else {
       const storageData = super.readStorage()[file];
@@ -543,8 +745,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   deleteAll() {
-    for (const testcase of this._state) {
-      this._delete(testcase.id);
+    const ids = [...this._state.map((testcase) => testcase.id)];
+    for (const id of ids) {
+      this._delete(id);
     }
   }
 
@@ -556,8 +759,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: "SETTINGS_TOGGLE" });
   }
 
-  private _nextTestcase() {
-    void this._run(this._addTestcase(), true);
+  private _nextTestcase({ mode }: v.InferOutput<typeof NextMessageSchema>) {
+    void this._run(this._addTestcase(mode, undefined), true);
   }
 
   private _action({ id, action }: v.InferOutput<typeof ActionMessageSchema>) {
@@ -614,6 +817,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         shown: testcase.shown,
         toggled: testcase.toggled,
         skipped: testcase.skipped,
+        mode: testcase.mode,
+        interactorSecret: testcase.interactorSecret.data,
       });
     }
     const fileData: FileData = {
@@ -627,13 +832,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     );
   }
 
-  private _addTestcase(testcase?: Partial<ITestcase>) {
+  private _addTestcase(mode: Mode, testcase?: Partial<ITestcase>) {
     const id = this._newId++;
-    this._state.push(this._createTestcaseState(id, testcase));
+    this._state.push(this._createTestcaseState(id, mode, testcase));
     return id;
   }
 
-  private _createTestcaseState(id: number, testcase?: Partial<ITestcase>) {
+  private _createTestcaseState(id: number, mode: Mode, testcase?: Partial<ITestcase>) {
     // using partial type to have backward compatibility with old testcases
     // create a new testcase in webview and fill it in later
     super._postMessage({ type: "NEW", id });
@@ -649,8 +854,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       shown: testcase?.shown ?? true,
       toggled: testcase?.toggled ?? false,
       skipped: testcase?.skipped ?? false,
+      mode: testcase?.mode ?? mode,
+      interactorSecret: new TextHandler(),
       id,
       process: new Runnable(),
+      interactorProcess: new Runnable(),
+      interactorSecretResolver: undefined,
     };
 
     newTestcase.stdin.callback = (data: string) =>
@@ -681,11 +890,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         stdio: "ACCEPTED_STDOUT",
         data,
       });
+    newTestcase.interactorSecret.callback = (data: string) =>
+      super._postMessage({
+        type: "STDIO",
+        id,
+        stdio: "INTERACTOR_SECRET",
+        data,
+      });
 
-    newTestcase.stdin.write(testcase?.stdin ?? "", !!testcase);
-    newTestcase.stderr.write(testcase?.stderr ?? "", !!testcase);
-    newTestcase.stdout.write(testcase?.stdout ?? "", !!testcase);
-    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", true); // force endline for empty answer comparison
+    newTestcase.stdin.write(testcase?.stdin ?? "", testcase ? "final" : "batch");
+    newTestcase.stderr.write(testcase?.stderr ?? "", testcase ? "final" : "batch");
+    newTestcase.stdout.write(testcase?.stdout ?? "", testcase ? "final" : "batch");
+    newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", "final"); // force endline for empty answer comparison
+    // We treat interactor secrets as final because there are problems where
+    // the solution queries the interactor without reading any input first. The
+    // best assumption is to send the complete secret at the start.
+    newTestcase.interactorSecret.write(testcase?.interactorSecret ?? "", "final");
 
     super._postMessage({
       type: "SET",
@@ -723,6 +943,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "skipped",
       value: newTestcase.skipped,
     });
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "mode",
+      value: newTestcase.mode,
+    });
 
     return newTestcase;
   }
@@ -735,8 +961,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const { token, file, testcase, languageSettings } = ctx;
 
-    if (await this._compileIfNeeded(id, token, file, testcase, languageSettings)) {
-      return;
+    const compilePromises = [this._compileIfNeeded(id, token, file, testcase, languageSettings)];
+
+    let interactorFile: string | undefined;
+    if (testcase.mode === "interactive") {
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      const interactorFileFromConfig = config.get<string>("interactorFile");
+      if (!interactorFileFromConfig) {
+        const logger = getLogger("judge");
+        logger.error(`Interactor file not set for interactive testcase (file=${file})`);
+        vscode.window.showErrorMessage("Interactor file is not set.");
+        return;
+      }
+      interactorFile = resolveVariables(interactorFileFromConfig);
+      compilePromises.push(
+        this._compileIfNeeded(id, token, interactorFile, testcase, languageSettings)
+      );
+    }
+    const errored = await Promise.all(compilePromises);
+    for (const hadError of errored) {
+      if (hadError) {
+        return;
+      }
     }
     if (token.isCancellationRequested) {
       return;
@@ -744,20 +990,39 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     this._prepareRunningState(id, testcase);
 
-    const resolvedArgs = resolveCommand(languageSettings.runCommand);
-    const cwd = languageSettings.currentWorkingDirectory
-      ? resolveVariables(languageSettings.currentWorkingDirectory)
-      : undefined;
+    if (testcase.mode === "interactive") {
+      const solutionResolvedArgs = resolveCommand(languageSettings.runCommand);
+      const interactorResolvedArgs = resolveCommand(languageSettings.runCommand, interactorFile);
+      const cwd = languageSettings.currentWorkingDirectory
+        ? resolveVariables(languageSettings.currentWorkingDirectory)
+        : undefined;
 
-    this._launchProcess({
-      id,
-      token,
-      testcase,
-      resolvedArgs,
-      cwd,
-      timeout: newTestcase ? 0 : this._timeLimit,
-      memoryLimit: newTestcase ? 0 : this._memoryLimit,
-    });
+      this._launchInteractiveTestcase({
+        id,
+        token,
+        testcase,
+        solutionResolvedArgs,
+        interactorResolvedArgs,
+        cwd,
+        timeout: newTestcase ? 0 : this._timeLimit,
+        memoryLimit: newTestcase ? 0 : this._memoryLimit,
+      });
+    } else {
+      const resolvedArgs = resolveCommand(languageSettings.runCommand);
+      const cwd = languageSettings.currentWorkingDirectory
+        ? resolveVariables(languageSettings.currentWorkingDirectory)
+        : undefined;
+
+      this._launchTestcase({
+        id,
+        token,
+        testcase,
+        resolvedArgs,
+        cwd,
+        timeout: newTestcase ? 0 : this._timeLimit,
+        memoryLimit: newTestcase ? 0 : this._memoryLimit,
+      });
+    }
   }
 
   private async _debug(id: number): Promise<void> {
@@ -770,15 +1035,37 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
       const logger = getLogger("judge");
-      logger.warn(
+      logger.error(
         `Debug settings missing for language (file=${file}, hasDebugCommand=${!!languageSettings.debugCommand}, hasDebugAttachConfig=${!!languageSettings.debugAttachConfig})`
       );
-      vscode.window.showWarningMessage("Missing debug settings for this language.");
+      vscode.window.showErrorMessage("Missing debug settings for this language.");
       return;
     }
 
-    if (await this._compileIfNeeded(id, token, file, testcase, languageSettings)) {
-      return;
+    const compilePromises = [this._compileIfNeeded(id, token, file, testcase, languageSettings)];
+
+    let interactorFile: string | undefined;
+    if (testcase.mode === "interactive") {
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      const interactorFileFromConfig = config.get<string>("interactorFile");
+      if (!interactorFileFromConfig) {
+        const logger = getLogger("judge");
+        logger.error(`Interactor file not set for interactive testcase (file=${file})`);
+        vscode.window.showErrorMessage(
+          "Interactor file is not set. Please set it in the Fast Olympic Coding settings."
+        );
+        return;
+      }
+      interactorFile = resolveVariables(interactorFileFromConfig);
+      compilePromises.push(
+        this._compileIfNeeded(id, token, interactorFile, testcase, languageSettings)
+      );
+    }
+    const errored = await Promise.all(compilePromises);
+    for (const hadError of errored) {
+      if (hadError) {
+        return;
+      }
     }
     if (token.isCancellationRequested) {
       return;
@@ -823,19 +1110,58 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._prepareRunningState(id, testcase);
 
     // No limits for debugging; user stops it manually.
-    this._launchProcess({
-      id,
-      token,
-      testcase,
-      resolvedArgs,
-      cwd,
-      timeout: 0,
-      memoryLimit: 0,
-    });
+    if (testcase.mode === "interactive") {
+      const solutionResolvedArgs = resolveCommand(
+        languageSettings.debugCommand,
+        file,
+        extraVariables
+      );
+      const interactorResolvedArgs = resolveCommand(languageSettings.runCommand, interactorFile);
+      const cwd = languageSettings.currentWorkingDirectory
+        ? resolveVariables(languageSettings.currentWorkingDirectory)
+        : undefined;
+
+      this._launchInteractiveTestcase({
+        id,
+        token,
+        testcase,
+        solutionResolvedArgs,
+        interactorResolvedArgs,
+        cwd,
+        timeout: 0,
+        memoryLimit: 0,
+      });
+    } else {
+      const resolvedArgs = resolveCommand(languageSettings.debugCommand, file, extraVariables);
+      const cwd = languageSettings.currentWorkingDirectory
+        ? resolveVariables(languageSettings.currentWorkingDirectory)
+        : undefined;
+
+      this._launchTestcase({
+        id,
+        token,
+        testcase,
+        resolvedArgs,
+        cwd,
+        timeout: 0,
+        memoryLimit: 0,
+      });
+    }
 
     // Wait for the debug process to spawn before attaching
-    const spawned = await testcase.process.spawned;
-    if (!spawned || token.isCancellationRequested) {
+    const spawnedPromises = [testcase.process.spawned];
+    if (testcase.mode === "interactive") {
+      spawnedPromises.push(testcase.interactorProcess.spawned);
+    }
+    const spawned = await Promise.all(spawnedPromises);
+    let allSpawned = true;
+    for (const spawnedProcess of spawned) {
+      if (!spawnedProcess) {
+        allSpawned = false;
+        break;
+      }
+    }
+    if (!allSpawned || token.isCancellationRequested) {
       await testcase.process.done;
       const exitCode = testcase.process.exitCode;
       const signal = testcase.process.signal;
@@ -889,6 +1215,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     testcase.process.process?.kill();
+    testcase.interactorProcess.process?.kill();
   }
 
   private _delete(id: number) {
@@ -948,7 +1275,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       value: "",
     });
     testcase.acceptedStdout.reset();
-    testcase.acceptedStdout.write(testcase.stdout.data, true);
+    testcase.acceptedStdout.write(testcase.stdout.data, "final");
 
     this._saveFileData();
   }
@@ -1047,6 +1374,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "ACCEPTED_STDOUT":
         void openInNewEditor(testcase.acceptedStdout.data);
         break;
+      case "INTERACTOR_SECRET":
+        void openInNewEditor(testcase.interactorSecret.data);
+        break;
     }
   }
 
@@ -1055,8 +1385,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!testcase) {
       return;
     }
-    testcase.process.process?.stdin.write(data);
-    testcase.stdin.write(data, false);
+
+    if (testcase.mode === "interactive") {
+      testcase.interactorProcess.process?.stdin.write(data);
+      testcase.stdout.write(data, "force");
+    } else {
+      testcase.process.process?.stdin.write(data);
+      testcase.stdin.write(data, "force");
+    }
   }
 
   private _save({ id, stdin, acceptedStdout }: v.InferOutput<typeof SaveMessageSchema>) {
@@ -1080,8 +1416,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     testcase.stdin.reset();
     testcase.acceptedStdout.reset();
-    testcase.stdin.write(stdin, true);
-    testcase.acceptedStdout.write(acceptedStdout, true);
+    testcase.stdin.write(stdin, "final");
+    testcase.acceptedStdout.write(acceptedStdout, "final");
 
     // Manual save: determine status from output comparison only
     if (testcase.acceptedStdout.data === "\n") {
@@ -1098,6 +1434,33 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "status",
       value: testcase.status,
     });
+
+    this._saveFileData();
+  }
+
+  private _saveInteractorSecret({
+    id,
+    secret,
+  }: v.InferOutput<typeof SaveInteractorSecretMessageSchema>) {
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
+
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "interactorSecret",
+      value: "",
+    });
+
+    testcase.interactorSecret.reset();
+    testcase.interactorSecret.write(secret, "final");
+
+    if (testcase.interactorSecretResolver) {
+      testcase.interactorSecretResolver();
+      testcase.interactorSecretResolver = undefined;
+    }
 
     this._saveFileData();
   }

@@ -2,54 +2,102 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import type { Status } from "../../shared/enums";
+  import type { Status, Stdio } from "../../shared/enums";
   import {
-    type InitMessageSchema,
+    StateIdValue,
     type ShowMessageSchema,
     type StatusMessageSchema,
     type StdioMessageSchema,
     type WebviewMessage,
+    type StateId,
+    InitMessageSchema,
   } from "../../shared/stress-messages";
   import { postProviderMessage } from "./message";
   import State from "./State.svelte";
 
   type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
   type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
-  type IInitMessage = v.InferOutput<typeof InitMessageSchema>;
 
   interface IStateData {
-    data: string;
+    stdin: string;
+    stdout: string;
+    stderr: string;
     status: Status;
+    id: StateId;
+    placeholder: string;
   }
 
-  // Reactive state using Svelte 5 runes
-  let items = $state<IStateData[]>([
-    { data: "", status: "NA" },
-    { data: "", status: "NA" },
-    { data: "", status: "NA" },
-  ]);
+  const placeholderMap: Record<StateId, string> = {
+    Generator: "Generator output...",
+    Solution: "Solution output...",
+    Judge: "Judge output...",
+  } as const;
+
+  let states = $state<IStateData[]>(
+    StateIdValue.map<IStateData>((id) => ({
+      stdin: "",
+      stdout: "",
+      stderr: "",
+      status: "NA",
+      id,
+      placeholder: placeholderMap[id],
+    }))
+  );
   let showView = $state(true);
+  let showSettings = $state(false);
+  let interactiveMode = $state(false);
 
-  function expand(id: number) {
-    postProviderMessage({ type: "VIEW", id });
+  function findStateIndex(id: StateId): number {
+    return states.findIndex((item) => item.id === id);
   }
 
-  function add(id: number) {
+  function findState(id: StateId): IStateData | null {
+    const index = findStateIndex(id);
+    return index !== -1 ? states[index] : null;
+  }
+
+  function handleView(id: StateId, stdio: Stdio) {
+    postProviderMessage({ type: "VIEW", id, stdio });
+  }
+
+  function handleAdd(id: StateId) {
     postProviderMessage({ type: "ADD", id });
   }
 
-  function handleStatus({ id, status }: v.InferOutput<typeof StatusMessageSchema>) {
-    items[id].status = status;
+  function handleInit({ interactiveMode: mode }: v.InferOutput<typeof InitMessageSchema>) {
+    interactiveMode = mode;
   }
 
-  function handleStdio({ id, data }: IStdioMessage) {
-    items[id].data += data;
+  function handleStatus({ id, status }: v.InferOutput<typeof StatusMessageSchema>) {
+    const state = findState(id);
+    if (state) {
+      state.status = status;
+    }
+  }
+
+  function handleStdio({ id, stdio, data }: IStdioMessage) {
+    const state = findState(id);
+    if (state) {
+      switch (stdio) {
+        case "STDIN":
+          state.stdin += data;
+          break;
+        case "STDOUT":
+          state.stdout += data;
+          break;
+        case "STDERR":
+          state.stderr += data;
+          break;
+      }
+    }
   }
 
   function handleClear() {
-    for (let i = 0; i < 3; i++) {
-      items[i].data = "";
-      items[i].status = "NA";
+    for (const state of states) {
+      state.stdin = "";
+      state.stdout = "";
+      state.stderr = "";
+      state.status = "NA";
     }
   }
 
@@ -57,16 +105,26 @@
     showView = visible;
   }
 
-  function handleInit({ states }: IInitMessage) {
-    for (let i = 0; i < 3; i++) {
-      items[i].data = states[i].data;
-      items[i].status = states[i].status;
-    }
+  function handleSettingsToggle() {
+    showSettings = !showSettings;
+  }
+
+  function handleInteractiveModeChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    interactiveMode = target.checked;
+  }
+
+  function handleSaveSettings() {
+    handleSettingsToggle();
+    postProviderMessage({ type: "SAVE", interactiveMode });
   }
 
   onMount(() => {
     const handleMessage = (event: MessageEvent<WebviewMessage>) => {
       switch (event.data.type) {
+        case "INIT":
+          handleInit(event.data);
+          break;
         case "STATUS":
           handleStatus(event.data);
           break;
@@ -79,8 +137,8 @@
         case "SHOW":
           handleShow(event.data);
           break;
-        case "INIT":
-          handleInit(event.data);
+        case "SETTINGS_TOGGLE":
+          handleSettingsToggle();
           break;
       }
     };
@@ -96,9 +154,40 @@
 
 {#if showView}
   <div class="state-container">
-    {#each items as item, index (index)}
-      <State id={index} state={item} onView={expand} onAdd={add} />
-    {/each}
+    {#if showSettings}
+      <div class="settings-section">
+        <div class="checkbox-group">
+          <input
+            id="interactive-mode-checkbox"
+            type="checkbox"
+            checked={interactiveMode}
+            onchange={handleInteractiveModeChange}
+            class="settings-checkbox"
+          />
+          <label for="interactive-mode-checkbox" class="settings-checkbox-label">
+            Interactive Mode
+          </label>
+        </div>
+        <p class="settings-additional-info">
+          Enable interactive mode for stress testing with interactive problems.
+        </p>
+      </div>
+      <button type="button" class="text-button" onclick={handleSaveSettings}>
+        <div class="codicon codicon-save"></div>
+        Save
+      </button>
+    {:else}
+      {#each states as item (item.id)}
+        <State
+          id={item.id}
+          state={item}
+          placeholder={item.placeholder}
+          {interactiveMode}
+          onView={handleView}
+          onAdd={handleAdd}
+        />
+      {/each}
+    {/if}
   </div>
 {:else}
   <div id="empty-state">
@@ -110,6 +199,7 @@
 <style>
   .state-container {
     margin-top: 4px;
+    margin-bottom: 24px;
   }
 
   #empty-state {
@@ -123,5 +213,94 @@
 
   .codicon.empty-state-icon {
     font-size: 150px;
+  }
+
+  /* Settings View */
+  .settings-section {
+    margin-bottom: 16px;
+  }
+
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .settings-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    border: 1px solid var(--vscode-checkbox-border, var(--vscode-input-border));
+    background: var(--vscode-checkbox-background, var(--vscode-input-background));
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .settings-checkbox:hover {
+    background: var(--vscode-checkbox-hoverBackground, var(--vscode-input-background));
+    border-color: var(--vscode-checkbox-hoverBorder, var(--vscode-input-border));
+  }
+
+  .settings-checkbox:checked {
+    background: var(--vscode-checkbox-checkedBackground, var(--vscode-inputOption-activeBorder));
+    border-color: var(--vscode-checkbox-checkedBorder, var(--vscode-inputOption-activeBorder));
+  }
+
+  .settings-checkbox:checked::after {
+    content: "✓";
+    color: var(--vscode-checkbox-foreground, white);
+    font-weight: bold;
+    font-size: 12px;
+    display: block;
+  }
+
+  .settings-checkbox:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+  }
+
+  .settings-checkbox-label {
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 13px;
+    user-select: none;
+  }
+
+  .settings-additional-info {
+    color: var(--vscode-descriptionForeground);
+    font-size: 12px;
+    margin-top: 2px;
+    margin-bottom: 16px;
+  }
+
+  /* Standard VSCode button styling */
+  .text-button {
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    padding: 4px;
+    border-radius: 2px;
+    text-align: center;
+    cursor: pointer;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid var(--vscode-button-border, transparent);
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    line-height: 18px;
+  }
+
+  .text-button:hover {
+    background: var(--vscode-button-hoverBackground);
+  }
+
+  .text-button :global(.codicon) {
+    margin-right: 4px;
   }
 </style>
