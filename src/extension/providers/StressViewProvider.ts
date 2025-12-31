@@ -460,6 +460,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           void (async () => {
             const termination = await state.process.done;
             state.status = mapTestcaseTermination(termination);
+            console.log(
+              "Testcase termination",
+              state.state,
+              termination,
+              state.status,
+              state.process.exitCode
+            );
             super._postMessage({
               type: "STATUS",
               id: state.state,
@@ -476,22 +483,56 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       const severities = await Promise.all([generatorPromise, solutionPromise, judgePromise]);
       const maxSeverity = Math.max(...severities);
-      console.log("Max severity:", maxSeverity);
-      if (maxSeverity > 1) {
-        break;
-      }
 
-      if (
-        !this._interactiveMode &&
-        this._solutionState.stdout.data !== this._judgeState.stdout.data
-      ) {
-        this._solutionState.status = "WA";
-        super._postMessage({
-          type: "STATUS",
-          id: this._solutionState.state,
-          status: this._solutionState.status,
-        });
-        break;
+      if (this._interactiveMode) {
+        if (maxSeverity <= 1) {
+          // All the processes finished successfully, therefore the judge
+          // returned 0 so the answer is correct
+          this._solutionState.status = "AC";
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+        } else if (this._judgeState.process.exitCode === null) {
+          // The judge crashed
+          break;
+        } else if (this._judgeState.process.exitCode !== 0) {
+          // Judge returned non-zero code which means answer is invalid
+          this._judgeState.status = "NA";
+          this._solutionState.status = "WA";
+          super._postMessage({
+            type: "STATUS",
+            id: this._judgeState.state,
+            status: this._judgeState.status,
+          });
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+          break;
+        }
+      } else {
+        if (maxSeverity > 1) {
+          // Something had gone wrong so stop
+          break;
+        } else if (this._solutionState.stdout.data !== this._judgeState.stdout.data) {
+          this._solutionState.status = "WA";
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+          break;
+        } else {
+          this._solutionState.status = "AC";
+          super._postMessage({
+            type: "STATUS",
+            id: this._solutionState.state,
+            status: this._solutionState.status,
+          });
+        }
       }
 
       await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
