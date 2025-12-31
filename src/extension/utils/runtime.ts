@@ -455,14 +455,15 @@ export class Runnable {
   }
 
   private _computeTermination(): RunTermination {
-    if (this._combinedAbortSignal?.aborted) {
-      return "stopped";
-    }
     if (this._timedOut) {
       return "timeout";
     }
     if (this._memoryLimitExceeded) {
       return "memory";
+    }
+    // Check this after timeout because timeout also sets this signal
+    if (this._combinedAbortSignal?.aborted) {
+      return "stopped";
     }
     if (this._signal) {
       return "signal";
