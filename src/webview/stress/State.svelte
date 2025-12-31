@@ -209,7 +209,7 @@
       readonly
       {placeholder}
       onexpand={handleViewStdout}
-      variant={id === "Generator" ? "interactor-secret" : "default"}
+      variant={id === "Generator" && interactiveMode ? "interactor-secret" : "default"}
     />
   </div>
 {/if}
