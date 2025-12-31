@@ -460,13 +460,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           void (async () => {
             const termination = await state.process.done;
             state.status = mapTestcaseTermination(termination);
-            console.log(
-              "Testcase termination",
-              state.state,
-              termination,
-              state.status,
-              state.process.exitCode
-            );
             super._postMessage({
               type: "STATUS",
               id: state.state,
