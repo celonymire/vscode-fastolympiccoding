@@ -41,11 +41,11 @@ export function terminationSeverityNumber(termination: RunTermination): number {
       return 1;
     case "error":
       return 2;
-    case "memory":
-      return 3;
-    case "timeout":
-      return 4;
     case "signal":
+      return 3;
+    case "memory":
+      return 4;
+    case "timeout":
       return 5;
   }
 }
@@ -58,11 +58,11 @@ export function severityNumberToStatus(severity: number): Status {
     case 2:
       return "WA";
     case 3:
-      return "ML";
-    case 4:
-      return "TL";
-    case 5:
       return "RE";
+    case 4:
+      return "ML";
+    case 5:
+      return "TL";
     default:
       return "RE";
   }
