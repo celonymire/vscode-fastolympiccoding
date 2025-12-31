@@ -745,8 +745,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   deleteAll() {
-    for (const testcase of this._state) {
-      this._delete(testcase.id);
+    const ids = [...this._state.map((testcase) => testcase.id)];
+    for (const id of ids) {
+      this._delete(id);
     }
   }
 
