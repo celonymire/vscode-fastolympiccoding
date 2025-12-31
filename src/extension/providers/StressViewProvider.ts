@@ -236,9 +236,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       state.stdin.reset();
       state.stdout.reset();
       state.stderr.reset();
-      state.stdin.write(fileState.stdin, "final");
-      state.stdout.write(fileState.stdout, "final");
-      state.stderr.write(fileState.stderr, "final");
+      state.stdin.write(fileState.stdin, "force");
+      state.stdout.write(fileState.stdout, "force");
+      state.stderr.write(fileState.stderr, "force");
     }
 
     // Send full state to webview.
