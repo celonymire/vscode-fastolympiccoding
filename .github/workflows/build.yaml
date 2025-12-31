@@ -61,9 +61,7 @@ jobs:
         run: echo "SKIP_ADDON_COPY=true" >> $GITHUB_ENV
 
       - name: Install dependencies
-        run: |
-          npm cache clean --force
-          npm ci --ignore-scripts
+        run: npm install --ignore-scripts
 
       - name: Build native addon
         if: matrix.vsceTarget != ''
