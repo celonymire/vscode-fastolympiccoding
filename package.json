@@ -150,12 +150,12 @@
         "properties": {
           "fastolympiccoding.goodSolutionFile": {
             "type": "string",
-            "default": "${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}",
+            "default": "${path:${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}}",
             "description": "The full path to the good solution file."
           },
           "fastolympiccoding.generatorFile": {
             "type": "string",
-            "default": "${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}",
+            "default": "${path:${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}}",
             "description": "The full path to the generator file."
           },
           "fastolympiccoding.delayBetweenTestcases": {
