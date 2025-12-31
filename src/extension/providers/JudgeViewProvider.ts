@@ -248,15 +248,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    // Write stdin once the process is spawned (more reliable than writing immediately).
-    testcase.process.on("spawn", () => {
-      if (token.isCancellationRequested) {
-        return;
-      }
-      proc.stdin.write(testcase.stdin.data);
-    });
-
     testcase.process
+      .on("spawn", () => {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        proc.stdin.write(testcase.stdin.data);
+      })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
       .on("stdout:data", (data: string) => testcase.stdout.write(data, "batch"))
       .on("stderr:end", () => testcase.stderr.write("", "final"))
@@ -761,7 +759,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _nextTestcase({ mode }: v.InferOutput<typeof NextMessageSchema>) {
-    void this._run(this._addTestcase(mode, {}), true);
+    void this._run(this._addTestcase(mode, undefined), true);
   }
 
   private _action({ id, action }: v.InferOutput<typeof ActionMessageSchema>) {
@@ -971,9 +969,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (!interactorFileFromConfig) {
         const logger = getLogger("judge");
         logger.error(`Interactor file not set for interactive testcase (file=${file})`);
-        vscode.window.showErrorMessage(
-          "Interactor file is not set. Please set it in the Fast Olympic Coding settings."
-        );
+        vscode.window.showErrorMessage("Interactor file is not set.");
         return;
       }
       interactorFile = resolveVariables(interactorFileFromConfig);
@@ -1394,6 +1390,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       testcase.stdout.write(data, "force");
     } else {
       testcase.process.process?.stdin.write(data);
+      testcase.stdin.write(data, "force");
     }
   }
 
