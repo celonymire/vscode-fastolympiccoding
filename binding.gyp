@@ -35,6 +35,16 @@
       "conditions": [
         ["OS != \"linux\"", { "type": "none" }]
       ]
+    },
+    {
+      "target_name": "noop-memory-stats",
+      "conditions": [
+        ["OS != \"win\"", {
+          "conditions": [
+            ["OS != \"linux\"", { "type": "none" }]
+          ]
+        }]
+      ]
     }
   ]
 }

@@ -425,9 +425,9 @@
     "format": "prettier --write src",
     "check": "prettier --check src",
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json",
-    "build": "rspack build --mode development",
-    "prod": "rspack build --mode production",
-    "watch": "rspack build --watch --mode development"
+    "build": "npm run build:addon && rspack build --mode development",
+    "prod": "npm run build:addon && rspack build --mode production",
+    "watch": "npm run build:addon && rspack build --watch --mode development"
   },
   "author": "Sam Huang",
   "license": "MIT",
