@@ -15,7 +15,7 @@
 - [📜](#-judge) Minimal and _adaptive_ UI for maximized functionality and view utilization
 - [🪲](#-debugging) Extension agnostic configuration for VSCode debugging UX with real-time inputs
 - [🐞](#-stress-tester) Built-in stress tester to aid your debugging
-- [🗨️](#️-interactive-mode) First-class support for interactive problems for **both** [Judge](#-judge) and [Stress Tester](#-stress-tester!
+- [🗨️](#️-interactive-mode) First-class support for interactive problems for **both** [Judge](#-judge) and [Stress Tester](#-stress-tester)!
 - [👜](#-inserting-prewritten-code) Insert file templates without leaving your code
 - [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) for efficient problem gathering
 - ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
