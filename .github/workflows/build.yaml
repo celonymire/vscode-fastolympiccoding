@@ -56,6 +56,9 @@ jobs:
           node-version: latest
           cache: npm
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Package VSIX (universal)
         if: matrix.vsceTarget == ''
         run: npx --yes @vscode/vsce package
