@@ -8,7 +8,7 @@ import * as vscode from "vscode";
 
 import pidusage from "pidusage";
 
-import { ReadonlyTerminal, resolveCommand } from "./vscode";
+import { getFileCommandArguments, getLanguageSettings, ReadonlyTerminal } from "./vscode";
 import { getLogger } from "./logging";
 import type { Status } from "../../shared/enums";
 
@@ -17,7 +17,6 @@ type Win32MemoryAddon = {
 };
 
 type LinuxMemoryAddon = {
-  // Reads /proc/<pid>/status and returns current RSS and peak RSS (high-water mark), in bytes.
   getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
 };
 
@@ -488,26 +487,12 @@ export async function getFileChecksum(file: string): Promise<string> {
   });
 }
 
-const errorTerminal: Map<string, vscode.Terminal> = new Map();
-const lastCompiled: Map<string, [string, string]> = new Map(); // [file checksum, compile command]
-const compilePromise: Map<string, Promise<number>> = new Map();
-export async function compile(
-  file: string,
-  compileCommand: string,
-  context: vscode.ExtensionContext
-): Promise<number> {
-  errorTerminal.get(file)?.dispose();
-
-  if (!fs.existsSync(file)) {
-    vscode.window.showErrorMessage(`${file} does not exist`);
-    return 1;
-  }
-
-  const resolvedArgs = resolveCommand(compileCommand, file);
-  const currentCommand = resolvedArgs.join(" ");
+async function doCompile(file: string, context: vscode.ExtensionContext): Promise<number> {
+  const compileArguments = getFileCommandArguments(file, "compileCommand")!;
+  const compileCommand = compileArguments.join(" ");
   const currentChecksum = await getFileChecksum(file);
   const [cachedChecksum, cachedCommand] = lastCompiled.get(file) ?? [-1, ""];
-  if (currentChecksum === cachedChecksum && currentCommand === cachedCommand) {
+  if (currentChecksum === cachedChecksum && compileCommand === cachedCommand) {
     return 0; // avoid unnecessary recompilation
   }
 
@@ -515,7 +500,7 @@ export async function compile(
   if (!promise) {
     promise = (async () => {
       const logger = getLogger("compilation");
-      logger.info(`Compilation started: ${file} (${currentCommand})`);
+      logger.info(`Compilation started: ${file} (${compileCommand})`);
 
       const compilationStatusItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
@@ -530,7 +515,7 @@ export async function compile(
       context.subscriptions.push(compilationStatusItem);
 
       const runnable = new Runnable();
-      runnable.run(resolvedArgs[0], 0, 0, undefined, ...resolvedArgs.slice(1));
+      runnable.run(compileArguments[0], 0, 0, undefined, ...compileArguments.slice(1));
 
       let err = "";
       runnable
@@ -548,7 +533,7 @@ export async function compile(
       const status = mapCompilationTermination(termination);
       if (status === "CE" || status === "RE") {
         logger.error(
-          `Compilation failed (file=${file}, command=${currentCommand}, exitCode=${runnable.exitCode}, termination=${termination}, stderr=${err.substring(0, 500)})`
+          `Compilation failed (file=${file}, command=${compileCommand}, exitCode=${runnable.exitCode}, termination=${termination}, stderr=${err.substring(0, 500)})`
         );
 
         const dummy = new ReadonlyTerminal();
@@ -568,7 +553,7 @@ export async function compile(
         return runnable.exitCode ?? 1;
       }
 
-      lastCompiled.set(file, [currentChecksum, currentCommand]);
+      lastCompiled.set(file, [currentChecksum, compileCommand]);
       logger.info(`Compilation succeeded (file=${file})`);
       return 0;
     })();
@@ -578,6 +563,28 @@ export async function compile(
   const code = await promise;
   compilePromise.delete(file);
   return code;
+}
+
+const errorTerminal: Map<string, vscode.Terminal> = new Map();
+const lastCompiled: Map<string, [string, string]> = new Map(); // [file checksum, compile command]
+const compilePromise: Map<string, Promise<number>> = new Map();
+export function compile(file: string, context: vscode.ExtensionContext): Promise<number> | null {
+  errorTerminal.get(file)?.dispose();
+
+  if (!fs.existsSync(file)) {
+    vscode.window.showErrorMessage(`${file} does not exist`);
+    return Promise.resolve(1);
+  }
+
+  const languageSettings = getLanguageSettings(file);
+  if (!languageSettings) {
+    return Promise.resolve(1);
+  }
+  if (!languageSettings.compileCommand) {
+    return null;
+  }
+
+  return doCompile(file, context);
 }
 
 /**

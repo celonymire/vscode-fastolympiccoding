@@ -1,15 +1,13 @@
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { LanguageSettingsSchema } from "../../shared/schemas";
+import { LanguageSettingsSchema, type LanguageSettings } from "../../shared/schemas";
 import { type ILogger, getLogger } from "./logging";
 
 let logger: ILogger;
-
-export type ILanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
 export type WriteMode = "batch" | "force" | "final";
 
@@ -363,13 +361,18 @@ export function resolveVariables(
   return value;
 }
 
-export function resolveCommand(
-  command: string,
-  inContextOfFile?: string,
+export function getFileCommandArguments(
+  file: string,
+  commandProperty: keyof LanguageSettings,
   extraVariables?: Record<string, string>
-) {
-  const args = command.trim().split(" ");
-  return args.map((arg) => resolveVariables(arg, inContextOfFile, extraVariables));
+): string[] | null {
+  const settings = getLanguageSettings(file);
+  if (!settings) {
+    return null;
+  }
+
+  const args = settings[commandProperty]!.trim().split(" ");
+  return args.map((arg: string) => resolveVariables(arg, file, extraVariables));
 }
 
 export async function openInNewEditor(content: string): Promise<void> {
@@ -411,9 +414,7 @@ export function initializeRunSettingsWatcher(context: vscode.ExtensionContext): 
  * Loads and parses a runSettings.json file from the specified directory.
  * Returns undefined if the file doesn't exist or is invalid.
  */
-async function loadRunSettingsFromDirectory(
-  directory: string
-): Promise<Record<string, unknown> | undefined> {
+function loadRunSettingsFromDirectory(directory: string): Record<string, unknown> | undefined {
   const cacheKey = directory;
 
   // Check cache first
@@ -424,7 +425,7 @@ async function loadRunSettingsFromDirectory(
   const runSettingsPath = path.join(directory, "runSettings.json");
 
   try {
-    const content = await fs.readFile(runSettingsPath, "utf8");
+    const content = fs.readFileSync(runSettingsPath, "utf8");
     const parsed = JSON.parse(content);
 
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -448,10 +449,7 @@ async function loadRunSettingsFromDirectory(
  * loading and merging runSettings.json files along the way.
  * Returns the merged settings for the specified extension.
  */
-async function getFileSpecificRunSettings(
-  file: string,
-  extension: string
-): Promise<Record<string, unknown>> {
+function getFileSpecificRunSettings(file: string, extension: string): Record<string, unknown> {
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
   if (!workspaceFolder) {
     logger.warn(`No workspace folder found for file ${file}`);
@@ -464,7 +462,7 @@ async function getFileSpecificRunSettings(
   // Iterate from file folder back down to workspace root
   const settingsStack: Record<string, unknown>[] = [];
   while (currentDir.startsWith(workspaceRoot)) {
-    const dirSettings = await loadRunSettingsFromDirectory(currentDir);
+    const dirSettings = loadRunSettingsFromDirectory(currentDir);
     if (dirSettings) {
       settingsStack.push(dirSettings);
     }
@@ -496,7 +494,7 @@ async function getFileSpecificRunSettings(
  * Shows a warning if settings are invalid or missing.
  * @returns The validated language settings, or undefined if invalid/missing.
  */
-export async function getLanguageSettings(file: string): Promise<ILanguageSettings | undefined> {
+export function getLanguageSettings(file: string): LanguageSettings | null {
   const extension = path.extname(file);
 
   // Start with VS Code configuration settings
@@ -508,19 +506,19 @@ export async function getLanguageSettings(file: string): Promise<ILanguageSettin
   }
 
   // Get folder-specific settings
-  const fileSpecificSettings = await getFileSpecificRunSettings(file, extension);
+  const fileSpecificSettings = getFileSpecificRunSettings(file, extension);
   const finalSettings = Object.assign({}, baseSettings, fileSpecificSettings);
 
   // Validate the merged settings
   const parseResult = v.safeParse(LanguageSettingsSchema, finalSettings);
   if (!parseResult.success) {
-    logger.warn(
+    logger.error(
       `Invalid or missing run setting for file extension "${extension}": ${parseResult.issues}`
     );
-    vscode.window.showWarningMessage(
+    vscode.window.showErrorMessage(
       `Invalid or missing run setting for file extension "${extension}"`
     );
-    return undefined;
+    return null;
   }
 
   return parseResult.output;

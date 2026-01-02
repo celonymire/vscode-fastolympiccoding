@@ -11,6 +11,7 @@ export const LanguageSettingsSchema = v.object({
   debugCommand: v.optional(v.string()),
   debugAttachConfig: v.optional(v.string()),
 });
+export type LanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
 
 export const TestSchema = v.object({
   input: v.string(),
@@ -31,6 +32,7 @@ export const TestcaseSchema = v.object({
   mode: v.fallback(v.picklist(MODES), "standard"),
   interactorSecret: v.fallback(v.string(), ""),
 });
+export type Testcase = v.InferOutput<typeof TestcaseSchema>;
 
 export const InputTypeValues = ["stdin", "file", "regex"] as const;
 export type InputType = (typeof InputTypeValues)[number];
@@ -44,41 +46,31 @@ export type TestType = (typeof TestTypeValues)[number];
 const InputStdinSchema = v.object({
   type: v.literal("stdin"),
 });
-
 const InputFileSchema = v.object({
   type: v.literal("file"),
   fileName: v.string(),
 });
-
 const InputRegexSchema = v.object({
   type: v.literal("regex"),
   pattern: v.string(),
 });
-
 const InputSchema = v.union([InputStdinSchema, InputFileSchema, InputRegexSchema]);
-
 const OutputStdoutSchema = v.object({
   type: v.literal("stdout"),
 });
-
 const OutputFileSchema = v.object({
   type: v.literal("file"),
   fileName: v.string(),
 });
-
 const OutputSchema = v.union([OutputStdoutSchema, OutputFileSchema]);
-
 const LanguagesStringSchema = v.record(v.string(), v.string());
-
 const LanguagesJavaSchema = v.object({
   java: v.object({
     mainClass: v.string(),
     taskClass: v.string(),
   }),
 });
-
 const LanguagesSchema = v.union([LanguagesStringSchema, LanguagesJavaSchema]);
-
 export const ProblemSchema = v.object({
   name: v.string(),
   group: v.string(),
