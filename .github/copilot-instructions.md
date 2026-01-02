@@ -16,3 +16,7 @@ Path-specific rules live in `.github/instructions/*.instructions.md` and are app
 - Shared contracts: `.github/instructions/shared-contracts.instructions.md` (`src/shared/**`)
 - Webview frontend: `.github/instructions/webview-frontend.instructions.md` (`src/webview/**`)
 - Native addons: `.github/instructions/native-addon.instructions.md` (binding.gyp, addons, runtime loader)
+
+Avoid adding comments that are not strictly necessary for understanding the code. Prioritize clear and concise code over comments. If a piece of code requires extensive commenting to be understood, consider refactoring it for better clarity.
+
+Always use context7 when I need code generation, setup or configuration steps, or library/API documentation. This means you should automatically use the Context7 MCP tools to resolve library id and get library docs without me having to explicitly ask.
