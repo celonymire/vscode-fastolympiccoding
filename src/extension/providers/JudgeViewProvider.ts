@@ -1082,7 +1082,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       await testcase.interactorProcess.done;
       const logger = getLogger("judge");
       logger.error(`Debug process failed to spawn`);
-      vscode.window.showErrorMessage(`Debug process failed to soawb`);
+      vscode.window.showErrorMessage(`Debug process failed to spawn`);
       return;
     }
 
