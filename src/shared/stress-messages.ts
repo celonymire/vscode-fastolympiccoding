@@ -53,7 +53,15 @@ export const WebviewMessageSchema = v.union([
 
 export type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>;
 
-export const ProviderMessageTypeValues = ["LOADED", "RUN", "STOP", "VIEW", "ADD", "CLEAR"] as const;
+export const ProviderMessageTypeValues = [
+  "LOADED",
+  "RUN",
+  "STOP",
+  "VIEW",
+  "ADD",
+  "CLEAR",
+  "SAVE",
+] as const;
 
 export type ProviderMessageTypeValue = (typeof ProviderMessageTypeValues)[number];
 

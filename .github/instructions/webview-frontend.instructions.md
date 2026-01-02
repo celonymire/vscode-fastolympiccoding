@@ -18,7 +18,7 @@ When changing files under `src/webview/**`:
   - Use `$props()` to destructure component props with types.
   - Use `{#each items as item (key)}` for list rendering with keyed iterations.
   - Avoid introducing additional state libraries; follow the patterns in the Judge and Stress apps.
-- The shared `AutoresizeTextarea.svelte` component is used by both webviews and lives in `src/webview/`.
+- The shared `AutoresizeTextarea.svelte` and `Tooltip.svelte` components are used by both webviews and live in `src/webview/`.
 - Keep UI logic decoupled from process execution details. The webview should focus on rendering state and sending/receiving typed messages, not on spawning processes or resolving filesystem paths.
 - Maintain consistency with existing components such as `AutoresizeTextarea.svelte`, `Testcase.svelte`, and `State.svelte` in terms of props, message handling, and minimal DOM manipulation.
 - Keep the file layout lean (e.g., flat component files per view) and avoid introducing extra nested directories unless there's a clear benefit; mirror the existing Judge/Stress structure when adding new pieces.
