@@ -117,7 +117,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
           return;
         }
         if (languageSettings.compileCommand) {
-          void compile(file, languageSettings.compileCommand, context); // we don't care about exit code of compilation
+          void compile(file, context); // we don't care about exit code of compilation
         }
       })();
     })

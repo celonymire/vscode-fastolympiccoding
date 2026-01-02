@@ -10,9 +10,9 @@ import {
   terminationSeverityNumber,
 } from "../utils/runtime";
 import {
+  getFileCommandArguments,
   getLanguageSettings,
   openInNewEditor,
-  resolveCommand,
   resolveVariables,
   TextHandler,
   type WriteMode,
@@ -276,77 +276,81 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   async run(): Promise<void> {
-    const file = this._currentFile;
-    if (!file) {
+    if (!this._currentFile) {
       return;
     }
 
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
-    const languageSettings = await getLanguageSettings(file);
+    const languageSettings = getLanguageSettings(this._currentFile);
     if (!languageSettings) {
       return;
     }
 
-    if (languageSettings.compileCommand) {
-      for (const id of StateIdValue) {
-        super._postMessage({
-          type: "STATUS",
-          id,
-          status: "COMPILING",
-        });
-      }
+    const callback = (state: State, code: number) => {
+      const status = code ? "CE" : "NA";
+      state.status = status;
+      super._postMessage({ type: "STATUS", id: state.state, status });
 
-      const callback = (id: StateId, code: number) => {
-        const state = this._findState(id);
-        if (state) {
-          const status = code ? "CE" : "NA";
-          state.status = status;
-          super._postMessage({ type: "STATUS", id, status });
-        }
-        return code;
-      };
-      const compilePromises = [
-        compile(
-          resolveVariables(config.get("generatorFile")!),
-          languageSettings.compileCommand,
-          this._context
-        ).then(callback.bind(this, "Generator")),
-        compile(resolveVariables("${file}"), languageSettings.compileCommand, this._context).then(
-          callback.bind(this, "Solution")
-        ),
-      ];
-      if (this._interactiveMode) {
-        compilePromises.push(
-          compile(
-            resolveVariables(config.get<string>("interactorFile")!),
-            languageSettings.compileCommand,
-            this._context
-          ).then(callback.bind(this, "Judge"))
-        );
-      } else {
-        compilePromises.push(
-          compile(
-            resolveVariables(config.get("goodSolutionFile")!),
-            languageSettings.compileCommand,
-            this._context
-          ).then(callback.bind(this, "Judge"))
-        );
-      }
-      const compileCodes = await Promise.all(compilePromises);
+      return code;
+    };
+    const compilePromises = [];
 
-      let anyFailedToCompile = false;
-      for (const code of compileCodes) {
-        if (code) {
-          anyFailedToCompile = true;
-          break;
-        }
+    const generatorCompilePromise = compile(
+      resolveVariables(config.get("generatorFile")!),
+      this._context
+    );
+    if (generatorCompilePromise) {
+      super._postMessage({
+        type: "STATUS",
+        id: "Generator",
+        status: "COMPILING",
+      });
+      compilePromises.push(generatorCompilePromise.then(callback.bind(this, this._generatorState)));
+    }
+
+    const solutionCompilePromise = compile(this._currentFile, this._context);
+    if (solutionCompilePromise) {
+      super._postMessage({
+        type: "STATUS",
+        id: "Solution",
+        status: "COMPILING",
+      });
+      compilePromises.push(solutionCompilePromise.then(callback.bind(this, this._solutionState)));
+    }
+
+    let judgeCompilePromise: Promise<number> | null;
+    if (this._interactiveMode) {
+      judgeCompilePromise = compile(
+        resolveVariables(config.get<string>("interactorFile")!),
+        this._context
+      );
+    } else {
+      judgeCompilePromise = compile(
+        resolveVariables(config.get("goodSolutionFile")!),
+        this._context
+      );
+    }
+    if (judgeCompilePromise) {
+      super._postMessage({
+        type: "STATUS",
+        id: "Judge",
+        status: "COMPILING",
+      });
+      compilePromises.push(judgeCompilePromise.then(callback.bind(this, this._judgeState)));
+    }
+
+    const compileCodes = await Promise.all(compilePromises);
+    let anyFailedToCompile = false;
+    for (const code of compileCodes) {
+      if (code) {
+        anyFailedToCompile = true;
       }
-      if (anyFailedToCompile) {
-        this._saveState();
-        return;
-      }
+    }
+    if (anyFailedToCompile) {
+      this._saveState();
+      return;
     }
 
     for (const id of StateIdValue) {
@@ -366,23 +370,33 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const timeLimit = config.get<number>("stressTimeLimit")!;
     const start = Date.now();
 
-    const generatorRunArguments = this._resolveRunArguments(
-      languageSettings.runCommand,
-      config.get("generatorFile")!
+    const generatorRunArguments = getFileCommandArguments(
+      resolveVariables(config.get("generatorFile")!),
+      "runCommand"
     );
-    const solutionRunArguments = this._resolveRunArguments(languageSettings.runCommand, "${file}");
+    if (!generatorRunArguments) {
+      return;
+    }
 
-    let judgeRunArguments: string[];
+    const solutionRunArguments = getFileCommandArguments(this._currentFile, "runCommand");
+    if (!solutionRunArguments) {
+      return;
+    }
+
+    let judgeRunArguments: string[] | null;
     if (this._interactiveMode) {
-      judgeRunArguments = this._resolveRunArguments(
-        languageSettings.runCommand,
-        config.get("interactorFile")!
+      judgeRunArguments = getFileCommandArguments(
+        resolveVariables(config.get("interactorFile")!),
+        "runCommand"
       );
     } else {
-      judgeRunArguments = this._resolveRunArguments(
-        languageSettings.runCommand,
-        config.get("goodSolutionFile")!
+      judgeRunArguments = getFileCommandArguments(
+        resolveVariables(config.get("goodSolutionFile")!),
+        "runCommand"
       );
+    }
+    if (!judgeRunArguments) {
+      return;
     }
 
     this._stopFlag = false;
@@ -694,12 +708,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       file,
       JSON.stringify(defaultData) === JSON.stringify(data) ? undefined : data
     );
-  }
-
-  private _resolveRunArguments(runCommand: string, fileVariable: string) {
-    const resolvedFile = resolveVariables(fileVariable);
-    const resolvedArgs = resolveCommand(runCommand, resolvedFile);
-    return resolvedArgs;
   }
 
   private _onProcessError(stateId: StateId, data: Error) {

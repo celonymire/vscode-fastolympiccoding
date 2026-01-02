@@ -1,7 +1,13 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { ProblemSchema, TestSchema, TestcaseSchema, type Mode } from "../../shared/schemas";
+import {
+  ProblemSchema,
+  TestSchema,
+  TestcaseSchema,
+  type LanguageSettings,
+  type Mode,
+} from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
 import {
   compile,
@@ -13,13 +19,12 @@ import {
 } from "../utils/runtime";
 import type { RunTermination } from "../utils/runtime";
 import {
+  getFileCommandArguments,
   getLanguageSettings,
   openInNewEditor,
   ReadonlyStringProvider,
-  resolveCommand,
   resolveVariables,
   TextHandler,
-  type ILanguageSettings,
 } from "../utils/vscode";
 import { getLogger } from "../utils/logging";
 import {
@@ -66,26 +71,13 @@ type State = Omit<
   interactorSecretResolver?: () => void;
 };
 
-type LaunchTestcaseParams = {
-  id: number;
-  token: vscode.CancellationToken;
-  testcase: State;
-  resolvedArgs: string[];
-  cwd?: string;
-  timeout: number;
-  memoryLimit: number;
-};
-
-type LaunchInteractiveTestcaseParams = Omit<LaunchTestcaseParams, "resolvedArgs"> & {
-  solutionResolvedArgs: string[];
-  interactorResolvedArgs: string[];
-};
-
 type ExecutionContext = {
   token: vscode.CancellationToken;
-  file: string;
   testcase: State;
-  languageSettings: ILanguageSettings;
+  languageSettings: LanguageSettings;
+  solutionArgs: string[];
+  interactorArgs?: string[];
+  cwd?: string;
 };
 
 function updateTestcaseFromTermination(state: State, termination: RunTermination) {
@@ -135,46 +127,93 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _fileCancellation?: vscode.CancellationTokenSource;
   private _activeDebugTestcaseId?: number;
 
-  private async _getExecutionContext(id: number): Promise<ExecutionContext | undefined> {
+  private async _getExecutionContext(
+    id: number,
+    commandProperty: keyof LanguageSettings
+  ): Promise<ExecutionContext | null> {
     const token = this._fileCancellation?.token;
     if (!token || token.isCancellationRequested) {
-      return;
+      return null;
     }
 
     const file = this._currentFile;
     if (!file) {
-      return;
+      return null;
     }
 
     const testcase = this._getTestcase(id);
     if (!testcase) {
-      return;
+      return null;
     }
 
     // stop already-running process
     this._stop(id);
     await testcase.process.done;
-
-    if (token.isCancellationRequested || testcase.skipped) {
-      return;
+    if (testcase.skipped) {
+      return null;
     }
 
-    const languageSettings = await getLanguageSettings(file);
+    const languageSettings = getLanguageSettings(file);
     if (!languageSettings) {
-      return;
+      return null;
     }
 
-    return { token, file, testcase, languageSettings };
+    const compilePromises = [this._compileIfNeeded(id, token, file, testcase)];
+    let interactorFile: string;
+    if (testcase.mode === "interactive") {
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      interactorFile = resolveVariables(config.get<string>("interactorFile")!);
+      compilePromises.push(this._compileIfNeeded(id, token, interactorFile, testcase));
+    }
+    const errored = await Promise.all(compilePromises);
+    const anyErrored = errored.some((hadError) => hadError);
+    if (anyErrored) {
+      return null;
+    }
+
+    const solutionArgs = getFileCommandArguments(file, commandProperty);
+    if (!solutionArgs) {
+      return null;
+    }
+
+    const cwd = languageSettings.currentWorkingDirectory
+      ? resolveVariables(languageSettings.currentWorkingDirectory)
+      : undefined;
+
+    if (token.isCancellationRequested) {
+      return null;
+    }
+
+    return { token, testcase, languageSettings, solutionArgs, cwd };
+  }
+
+  private async _getInteractiveExecutionContext(
+    id: number,
+    commandProperty: keyof LanguageSettings
+  ): Promise<ExecutionContext | null> {
+    const baseContext = await this._getExecutionContext(id, commandProperty);
+    if (!baseContext) {
+      return null;
+    }
+
+    const config = vscode.workspace.getConfiguration("fastolympiccoding");
+    const interactorFile = resolveVariables(config.get("interactorFile")!);
+    const interactorArgs = getFileCommandArguments(interactorFile, "runCommand");
+    if (!interactorArgs) {
+      return null;
+    }
+
+    return { ...baseContext, interactorArgs };
   }
 
   private async _compileIfNeeded(
     id: number,
     token: vscode.CancellationToken,
     file: string,
-    testcase: State,
-    languageSettings: ILanguageSettings
+    testcase: State
   ): Promise<boolean> {
-    if (!languageSettings.compileCommand) {
+    const compilePromise = compile(file, this._context);
+    if (!compilePromise) {
       return false;
     }
 
@@ -186,9 +225,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       value: "COMPILING",
     });
 
-    const code = await compile(file, languageSettings.compileCommand, this._context);
-
-    if (!token.isCancellationRequested && code) {
+    if (!token.isCancellationRequested && (await compilePromise)) {
       testcase.status = "CE";
       super._postMessage({
         type: "SET",
@@ -236,10 +273,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _launchTestcase(params: LaunchTestcaseParams) {
-    const { id, token, testcase, resolvedArgs, cwd, timeout, memoryLimit } = params;
+  private _launchTestcase(ctx: ExecutionContext, newTestcase: boolean) {
+    const { token, testcase, solutionArgs, cwd } = ctx;
 
-    testcase.process.run(resolvedArgs[0], timeout, memoryLimit, cwd, ...resolvedArgs.slice(1));
+    testcase.process.run(
+      solutionArgs[0],
+      newTestcase ? 0 : this._timeLimit,
+      newTestcase ? 0 : this._memoryLimit,
+      cwd,
+      ...solutionArgs.slice(1)
+    );
 
     const proc = testcase.process.process;
     if (!proc) {
@@ -262,14 +305,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           return;
         }
         const logger = getLogger("judge");
-        logger.error(
-          `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
-        );
+        logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
         super._postMessage({
           type: "SET",
-          id,
+          id: testcase.id,
           property: "status",
           value: "RE",
         });
@@ -283,19 +324,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         updateTestcaseFromTermination(testcase, termination);
         super._postMessage({
           type: "SET",
-          id,
+          id: testcase.id,
           property: "status",
           value: testcase.status,
         });
         super._postMessage({
           type: "SET",
-          id,
+          id: testcase.id,
           property: "elapsed",
           value: testcase.elapsed,
         });
         super._postMessage({
           type: "SET",
-          id,
+          id: testcase.id,
           property: "memoryBytes",
           value: testcase.memoryBytes,
         });
@@ -304,32 +345,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
   }
 
-  private async _launchInteractiveTestcase(params: LaunchInteractiveTestcaseParams) {
-    const {
-      id,
-      token,
-      testcase,
-      solutionResolvedArgs,
-      interactorResolvedArgs,
-      cwd,
-      timeout,
-      memoryLimit,
-    } = params;
+  private async _launchInteractiveTestcase(ctx: ExecutionContext, bypassLimits: boolean) {
+    const { token, testcase, solutionArgs, interactorArgs, cwd } = ctx;
 
     testcase.process.run(
-      solutionResolvedArgs[0],
-      timeout,
-      memoryLimit,
+      solutionArgs[0],
+      bypassLimits ? 0 : this._timeLimit,
+      bypassLimits ? 0 : this._memoryLimit,
       cwd,
-      ...solutionResolvedArgs.slice(1)
+      ...solutionArgs.slice(1)
     );
-    testcase.interactorProcess.run(
-      interactorResolvedArgs[0],
-      0,
-      0,
-      cwd,
-      ...interactorResolvedArgs.slice(1)
-    );
+    // Don't restrict the interactor's time and memory limit
+    testcase.interactorProcess.run(interactorArgs![0], 0, 0, cwd, ...interactorArgs!.slice(1));
 
     const proc = testcase.process.process;
     const interactorProc = testcase.interactorProcess.process;
@@ -366,9 +393,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           return;
         }
         const logger = getLogger("judge");
-        logger.error(
-          `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
-        );
+        logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
@@ -393,9 +418,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           return;
         }
         const logger = getLogger("judge");
-        logger.error(
-          `Process error during testcase execution (testcaseId=${id}, file=${this._currentFile ?? "undefined"}, error=${data.message}, command=${proc.spawnargs.join(" ")})`
-        );
+        logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
 
@@ -417,19 +440,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
     super._postMessage({
       type: "SET",
-      id,
+      id: testcase.id,
       property: "status",
       value: testcase.status,
     });
     super._postMessage({
       type: "SET",
-      id,
+      id: testcase.id,
       property: "elapsed",
       value: testcase.elapsed,
     });
     super._postMessage({
       type: "SET",
-      id,
+      id: testcase.id,
       property: "memoryBytes",
       value: testcase.memoryBytes,
     });
@@ -952,142 +975,75 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _run(id: number, newTestcase: boolean): Promise<void> {
-    const ctx = await this._getExecutionContext(id);
-    if (!ctx) {
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
       return;
     }
 
-    const { token, file, testcase, languageSettings } = ctx;
-
-    const compilePromises = [this._compileIfNeeded(id, token, file, testcase, languageSettings)];
-
-    let interactorFile: string | undefined;
+    let ctx: ExecutionContext | null;
     if (testcase.mode === "interactive") {
-      const config = vscode.workspace.getConfiguration("fastolympiccoding");
-      const interactorFileFromConfig = config.get<string>("interactorFile");
-      if (!interactorFileFromConfig) {
-        const logger = getLogger("judge");
-        logger.error(`Interactor file not set for interactive testcase (file=${file})`);
-        vscode.window.showErrorMessage("Interactor file is not set.");
-        return;
-      }
-      interactorFile = resolveVariables(interactorFileFromConfig);
-      compilePromises.push(
-        this._compileIfNeeded(id, token, interactorFile, testcase, languageSettings)
-      );
+      ctx = await this._getInteractiveExecutionContext(id, "runCommand");
+    } else {
+      ctx = await this._getExecutionContext(id, "runCommand");
     }
-    const errored = await Promise.all(compilePromises);
-    for (const hadError of errored) {
-      if (hadError) {
-        return;
-      }
-    }
-    if (token.isCancellationRequested) {
+    if (!ctx) {
       return;
     }
 
     this._prepareRunningState(id, testcase);
-
     if (testcase.mode === "interactive") {
-      const solutionResolvedArgs = resolveCommand(languageSettings.runCommand);
-      const interactorResolvedArgs = resolveCommand(languageSettings.runCommand, interactorFile);
-      const cwd = languageSettings.currentWorkingDirectory
-        ? resolveVariables(languageSettings.currentWorkingDirectory)
-        : undefined;
-
-      this._launchInteractiveTestcase({
-        id,
-        token,
-        testcase,
-        solutionResolvedArgs,
-        interactorResolvedArgs,
-        cwd,
-        timeout: newTestcase ? 0 : this._timeLimit,
-        memoryLimit: newTestcase ? 0 : this._memoryLimit,
-      });
+      this._launchInteractiveTestcase(ctx, newTestcase);
     } else {
-      const resolvedArgs = resolveCommand(languageSettings.runCommand);
-      const cwd = languageSettings.currentWorkingDirectory
-        ? resolveVariables(languageSettings.currentWorkingDirectory)
-        : undefined;
-
-      this._launchTestcase({
-        id,
-        token,
-        testcase,
-        resolvedArgs,
-        cwd,
-        timeout: newTestcase ? 0 : this._timeLimit,
-        memoryLimit: newTestcase ? 0 : this._memoryLimit,
-      });
+      this._launchTestcase(ctx, newTestcase);
     }
   }
 
   private async _debug(id: number): Promise<void> {
-    const ctx = await this._getExecutionContext(id);
+    if (!this._currentFile) {
+      return;
+    }
+    const languageSettings = getLanguageSettings(this._currentFile);
+    if (!languageSettings) {
+      return;
+    }
+
+    if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
+      const logger = getLogger("judge");
+      logger.error(`Debug settings missing for language`);
+      vscode.window.showErrorMessage("Missing debug settings for this language");
+      return;
+    }
+
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
+
+    let ctx: ExecutionContext | null;
+    if (testcase.mode === "interactive") {
+      ctx = await this._getInteractiveExecutionContext(id, "debugCommand");
+    } else {
+      ctx = await this._getExecutionContext(id, "debugCommand");
+    }
     if (!ctx) {
       return;
     }
 
-    const { token, file, testcase, languageSettings } = ctx;
-
-    if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
-      const logger = getLogger("judge");
-      logger.error(
-        `Debug settings missing for language (file=${file}, hasDebugCommand=${!!languageSettings.debugCommand}, hasDebugAttachConfig=${!!languageSettings.debugAttachConfig})`
-      );
-      vscode.window.showErrorMessage("Missing debug settings for this language.");
-      return;
-    }
-
-    const compilePromises = [this._compileIfNeeded(id, token, file, testcase, languageSettings)];
-
-    let interactorFile: string | undefined;
-    if (testcase.mode === "interactive") {
-      const config = vscode.workspace.getConfiguration("fastolympiccoding");
-      const interactorFileFromConfig = config.get<string>("interactorFile");
-      if (!interactorFileFromConfig) {
-        const logger = getLogger("judge");
-        logger.error(`Interactor file not set for interactive testcase (file=${file})`);
-        vscode.window.showErrorMessage(
-          "Interactor file is not set. Please set it in the Fast Olympic Coding settings."
-        );
-        return;
-      }
-      interactorFile = resolveVariables(interactorFileFromConfig);
-      compilePromises.push(
-        this._compileIfNeeded(id, token, interactorFile, testcase, languageSettings)
-      );
-    }
-    const errored = await Promise.all(compilePromises);
-    for (const hadError of errored) {
-      if (hadError) {
-        return;
-      }
-    }
-    if (token.isCancellationRequested) {
-      return;
-    }
-
-    // Generate a dynamic port for this debug session
     let debugPort: number;
     try {
       debugPort = await findAvailablePort();
     } catch (error) {
       const logger = getLogger("judge");
-      logger.error(
-        `Failed to allocate debug port (file=${file}, testcaseId=${id}, error=${error instanceof Error ? error.message : String(error)})`
-      );
-      vscode.window.showErrorMessage(
-        `Failed to find available port for debugging: ${error instanceof Error ? error.message : String(error)}`
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to allocate debug port because ${errorMessage}`);
+      vscode.window.showErrorMessage("Failed to find available port for debugging");
       return;
     }
     const extraVariables = { debugPort: String(debugPort) };
 
     // get the attach debug configuration
     const folder =
-      vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file)) ??
+      vscode.workspace.getWorkspaceFolder(vscode.Uri.file(this._currentFile)) ??
       vscode.workspace.workspaceFolders?.at(0);
     const attachConfig = vscode.workspace
       .getConfiguration("launch", folder)
@@ -1095,55 +1051,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       .find((config) => config.name === languageSettings.debugAttachConfig);
     if (!attachConfig) {
       const logger = getLogger("judge");
-      logger.warn(`Debug attach configuration not found: ${languageSettings.debugAttachConfig}`);
-      vscode.window.showWarningMessage("Debug attach configuration not found.");
+      logger.error(`Debug attach configuration not found: ${languageSettings.debugAttachConfig}`);
+      vscode.window.showErrorMessage("Debug attach configuration not found.");
       return;
     }
 
-    const resolvedArgs = resolveCommand(languageSettings.debugCommand, file, extraVariables);
-    const cwd = languageSettings.currentWorkingDirectory
-      ? resolveVariables(languageSettings.currentWorkingDirectory, file, extraVariables)
-      : undefined;
-
     this._prepareRunningState(id, testcase);
-
-    // No limits for debugging; user stops it manually.
+    // No limits for debugging testcases
     if (testcase.mode === "interactive") {
-      const solutionResolvedArgs = resolveCommand(
-        languageSettings.debugCommand,
-        file,
-        extraVariables
-      );
-      const interactorResolvedArgs = resolveCommand(languageSettings.runCommand, interactorFile);
-      const cwd = languageSettings.currentWorkingDirectory
-        ? resolveVariables(languageSettings.currentWorkingDirectory)
-        : undefined;
-
-      this._launchInteractiveTestcase({
-        id,
-        token,
-        testcase,
-        solutionResolvedArgs,
-        interactorResolvedArgs,
-        cwd,
-        timeout: 0,
-        memoryLimit: 0,
-      });
+      this._launchInteractiveTestcase(ctx, true);
     } else {
-      const resolvedArgs = resolveCommand(languageSettings.debugCommand, file, extraVariables);
-      const cwd = languageSettings.currentWorkingDirectory
-        ? resolveVariables(languageSettings.currentWorkingDirectory)
-        : undefined;
-
-      this._launchTestcase({
-        id,
-        token,
-        testcase,
-        resolvedArgs,
-        cwd,
-        timeout: 0,
-        memoryLimit: 0,
-      });
+      this._launchTestcase(ctx, true);
     }
 
     // Wait for the debug process to spawn before attaching
@@ -1156,25 +1074,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     for (const spawnedProcess of spawned) {
       if (!spawnedProcess) {
         allSpawned = false;
-        break;
       }
     }
-    if (!allSpawned || token.isCancellationRequested) {
+
+    if (!allSpawned || ctx.token.isCancellationRequested) {
       await testcase.process.done;
-      const exitCode = testcase.process.exitCode;
-      const signal = testcase.process.signal;
+      await testcase.interactorProcess.done;
       const logger = getLogger("judge");
-      logger.error(
-        `Debug process failed to spawn (file=${file}, testcaseId=${id}, command=${resolvedArgs.join(" ")}, cwd=${cwd ?? "undefined"}, exitCode=${exitCode}, signal=${signal ?? "null"})`
-      );
-      vscode.window.showErrorMessage(
-        `Debug process failed to start (exit code ${exitCode}, signal ${signal})`
-      );
+      logger.error(`Debug process failed to spawn`);
+      vscode.window.showErrorMessage(`Debug process failed to soawb`);
       return;
     }
 
     // resolve the values in the attach configuration
-    const resolvedConfig = resolveVariables(attachConfig, file, extraVariables);
+    const resolvedConfig = resolveVariables(attachConfig, this._currentFile, extraVariables);
 
     // Tag this debug session so we can identify which testcase is being debugged.
     // VS Code preserves custom fields on session.configuration.
