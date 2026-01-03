@@ -5,6 +5,7 @@
 !CHANGELOG.md
 !LICENSE
 !media/**
+!walkthroughs/**
 !schemas/runSettings.schema.json
 !dist/judge/index.js
 !dist/judge/index.css
