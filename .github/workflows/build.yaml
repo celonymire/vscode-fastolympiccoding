@@ -8,6 +8,8 @@ jobs:
   check:
     name: Sanity Checks
     runs-on: ubuntu-latest
+    env:
+      npm_config_cache: ${{ runner.temp }}/npm-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -17,55 +19,9 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-        env:
-          npm_config_cache: .npm-cache
 
       - name: Install dependencies
-        env:
-          npm_config_cache: .npm-cache
         run: npm ci
-
-      - name: Display npm logs on failure
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== NPM Debug Log (newest) ==="
-          $cacheDir = $env:NPM_CONFIG_CACHE
-          if ([string]::IsNullOrWhiteSpace($cacheDir)) {
-            $cacheDir = (npm config get cache).Trim()
-          }
-          Write-Host "npm cache: $cacheDir"
-          $logDir = Join-Path $cacheDir "_logs"
-          if (!(Test-Path $logDir)) {
-            Write-Host "No npm log dir found at: $logDir"
-            exit 0
-          }
-
-          $candidateLogs = Get-ChildItem -Path $logDir -Filter "*-debug-0.log" | Sort-Object LastWriteTime -Descending
-          if ($null -eq $candidateLogs -or $candidateLogs.Count -eq 0) {
-            Write-Host "No *-debug-0.log files found in: $logDir"
-            exit 0
-          }
-
-          $failingLog = $null
-          foreach ($log in $candidateLogs) {
-            $hit = Select-String -Path $log.FullName -Pattern "\bECOMPROMISED\b|\bLock compromised\b|^\d+\s+verbose\s+exit\s+1\b|^\d+\s+verbose\s+code\s+1\b|^\d+\s+(error|warn)\b" -CaseSensitive:$false -Quiet
-            if ($hit) {
-              $failingLog = $log
-              break
-            }
-          }
-
-          if ($null -eq $failingLog) {
-            $failingLog = $candidateLogs | Select-Object -First 1
-          }
-
-          Write-Host "\n--- $($failingLog.Name) ($($failingLog.LastWriteTime.ToString('s'))) ---"
-          Write-Host "Path: $($failingLog.FullName)"
-          Write-Host "\n--- npm ERR!/WARN lines ---"
-          Select-String -Path $failingLog.FullName -Pattern "^\d+\s+(error|warn)\b|\bECOMPROMISED\b|\bLock compromised\b|^\d+\s+verbose\s+code\b|^\d+\s+verbose\s+exit\b" -CaseSensitive:$false | ForEach-Object { $_.Line }
-          Write-Host "\n--- Tail (last 400 lines) ---"
-          Get-Content $failingLog.FullName -Tail 400
 
       - name: Check and lint formatting
         run: npm run check
@@ -93,6 +49,8 @@ jobs:
             os: windows-latest
             vsceTarget: "win32-x64"
     runs-on: ${{ matrix.os }}
+    env:
+      npm_config_cache: ${{ runner.temp }}/npm-cache
     steps:
       - name: Setup Dev Drive (Windows)
         if: runner.os == 'Windows'
@@ -108,65 +66,15 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        env:
-          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
         run: npm ci
 
       - name: Package VSIX (universal)
         if: matrix.vsceTarget == ''
-        env:
-          npm_config_cache: .npm-cache
         run: npx --yes @vscode/vsce package
 
       - name: Package VSIX (targeted)
         if: matrix.vsceTarget != ''
-        env:
-          npm_config_cache: .npm-cache
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
-
-      - name: Display npm logs on failure
-        if: failure()
-        shell: pwsh
-        env:
-          npm_config_cache: .npm-cache
-        run: |
-          Write-Host "=== NPM Debug Log (newest) ==="
-          $cacheDir = $env:npm_config_cache
-          if ([string]::IsNullOrWhiteSpace($cacheDir)) {
-            $cacheDir = (npm config get cache).Trim()
-          }
-          Write-Host "npm cache: $cacheDir"
-          $logDir = Join-Path $cacheDir "_logs"
-          if (!(Test-Path $logDir)) {
-            Write-Host "No npm log dir found at: $logDir"
-            exit 0
-          }
-
-          $candidateLogs = Get-ChildItem -Path $logDir -Filter "*-debug-0.log" | Sort-Object LastWriteTime -Descending
-          if ($null -eq $candidateLogs -or $candidateLogs.Count -eq 0) {
-            Write-Host "No *-debug-0.log files found in: $logDir"
-            exit 0
-          }
-
-          $failingLog = $null
-          foreach ($log in $candidateLogs) {
-            $hit = Select-String -Path $log.FullName -Pattern "\bECOMPROMISED\b|\bLock compromised\b|^\d+\s+verbose\s+exit\s+1\b|^\d+\s+verbose\s+code\s+1\b|^\d+\s+(error|warn)\b" -CaseSensitive:$false -Quiet
-            if ($hit) {
-              $failingLog = $log
-              break
-            }
-          }
-
-          if ($null -eq $failingLog) {
-            $failingLog = $candidateLogs | Select-Object -First 1
-          }
-
-          Write-Host "\n--- $($failingLog.Name) ($($failingLog.LastWriteTime.ToString('s'))) ---"
-          Write-Host "Path: $($failingLog.FullName)"
-          Write-Host "\n--- npm ERR!/WARN lines ---"
-          Select-String -Path $failingLog.FullName -Pattern "^\d+\s+(error|warn)\b|\bECOMPROMISED\b|\bLock compromised\b|^\d+\s+verbose\s+code\b|^\d+\s+verbose\s+exit\b" -CaseSensitive:$false | ForEach-Object { $_.Line }
-          Write-Host "\n--- Tail (last 400 lines) ---"
-          Get-Content $failingLog.FullName -Tail 400
 
       - name: Detect VSIX filename
         id: vsix-file
