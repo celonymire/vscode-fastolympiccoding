@@ -94,8 +94,8 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "=== NPM Debug Logs ==="
-          if (Test-Path "$env:APPDATA\npm-cache\_logs") {
-            Get-ChildItem -Path "$env:APPDATA\npm-cache\_logs" -Filter "*-debug-0.log" | ForEach-Object {
+          if (Test-Path "C:\npm\cache\_logs") {
+            Get-ChildItem -Path "C:\npm\cache\_logs" -Filter "*-debug-0.log" | ForEach-Object {
               Write-Host "\n--- $($_.Name) ---"
               Get-Content $_ -Tail 100
             }
