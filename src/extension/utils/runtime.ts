@@ -583,6 +583,7 @@ async function doCompile(
 const errorTerminal: Map<string, vscode.Terminal> = new Map();
 const lastCompiled: Map<string, [string, string[]]> = new Map(); // [file checksum, compile command]
 const compilePromise: Map<string, Promise<number>> = new Map();
+
 export function compile(file: string, context: vscode.ExtensionContext): Promise<number> | null {
   errorTerminal.get(file)?.dispose();
 
@@ -598,11 +599,7 @@ export function compile(file: string, context: vscode.ExtensionContext): Promise
   }
 
   const extension = path.extname(file);
-  const languageSettings = settings[extension] as LanguageSettings | undefined;
-  if (!languageSettings) {
-    return Promise.resolve(1);
-  }
-
+  const languageSettings = settings[extension] as LanguageSettings;
   if (!languageSettings.compileCommand) {
     return null;
   }

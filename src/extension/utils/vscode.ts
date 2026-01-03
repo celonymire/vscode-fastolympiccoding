@@ -4,12 +4,14 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { RunSettingsSchema, type RunSettings } from "../../shared/schemas";
+import { RunSettingsSchema, type LanguageSettings, type RunSettings } from "../../shared/schemas";
 import { type ILogger, getLogger } from "./logging";
 
 let logger: ILogger;
 
 export type WriteMode = "batch" | "force" | "final";
+
+export type FileRunSettings = RunSettings & { languageSettings: LanguageSettings };
 
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
   private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
@@ -355,20 +357,6 @@ export function resolveVariables(
   return value;
 }
 
-export function getFileCommandArguments(
-  file: string,
-  commandProperty: "compileCommand" | "runCommand" | "debugCommand",
-  extraVariables?: Record<string, string>
-): string[] | null {
-  const settings = getFileRunSettings(file);
-  if (!settings) {
-    return null;
-  }
-
-  const args = settings[commandProperty]! as string[];
-  return args.map((arg: string) => resolveVariables(arg, file, extraVariables));
-}
-
 export async function openInNewEditor(content: string): Promise<void> {
   const uri = ReadonlyStringProvider.createUri(content);
   const document = await vscode.workspace.openTextDocument(uri);
@@ -476,13 +464,14 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
 /**
  * Traverses from the file directory up to the workspace root,
  * loading and merging runSettings.json files along the way.
+ * Also enforces the settings has the corresponding extension entry.
  * Returns the merged settings with all variables resolved and validated.
  */
-export function getFileRunSettings(file: string): RunSettings | null {
+export function getFileRunSettings(file: string): FileRunSettings | null {
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
   if (!workspaceFolder) {
     logger.warn(`No workspace folder found for file ${file}`);
-    return {};
+    return null;
   }
 
   const workspaceRoot = workspaceFolder.uri.fsPath;
@@ -523,5 +512,12 @@ export function getFileRunSettings(file: string): RunSettings | null {
     return null;
   }
 
-  return parseResult.output;
+  const extension = path.extname(file);
+  const languageSettings = parseResult.output[extension] as LanguageSettings | undefined;
+  if (!languageSettings) {
+    logger.error(`No language settings found for extension ${extension}`);
+    return null;
+  }
+
+  return { ...parseResult.output, languageSettings };
 }

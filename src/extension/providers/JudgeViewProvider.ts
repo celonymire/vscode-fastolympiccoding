@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
-import * as path from "path";
 
 import {
   ProblemSchema,
@@ -20,7 +19,6 @@ import {
 } from "../utils/runtime";
 import type { RunTermination } from "../utils/runtime";
 import {
-  getFileCommandArguments,
   getFileRunSettings,
   openInNewEditor,
   ReadonlyStringProvider,
@@ -151,15 +149,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
-    const extension = path.extname(this._currentFile);
-    const languageSettings = settings[extension] as LanguageSettings | undefined;
-    if (!languageSettings) {
-      const logger = getLogger("judge");
-      logger.error(`No run settings found for file extension "${extension}"`);
-      vscode.window.showErrorMessage(`No run settings found for file extension "${extension}"`);
-      return null;
-    }
-
     const compilePromises = [this._compileIfNeeded(id, token, this._currentFile, testcase)];
     if (testcase.mode === "interactive") {
       if (!settings.interactorFile) {
@@ -179,10 +168,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     let interactorArgs: string[] | null = null;
     if (testcase.mode === "interactive") {
-      interactorArgs = getFileCommandArguments(settings.interactorFile!, "runCommand");
-      if (!interactorArgs) {
+      const interactorSettings = getFileRunSettings(settings.interactorFile!);
+      if (!interactorSettings) {
         return null;
       }
+      interactorArgs = interactorSettings.languageSettings.runCommand;
     }
 
     if (token.isCancellationRequested) {
@@ -192,9 +182,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     return {
       token,
       testcase,
-      languageSettings,
+      languageSettings: settings.languageSettings,
       interactorArgs,
-      cwd: languageSettings.currentWorkingDirectory,
+      cwd: settings.languageSettings.currentWorkingDirectory,
     };
   }
 
