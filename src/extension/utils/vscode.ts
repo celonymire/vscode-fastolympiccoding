@@ -356,6 +356,7 @@ function resolveObjectVariables(
   extraVariables?: Record<string, string>,
   propertyPath?: string
 ): Record<string, unknown> {
+  void propertyPath; // suppress eslint
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
     // Pass the current key as propertyName to child resolution
