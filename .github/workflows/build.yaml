@@ -65,6 +65,10 @@ jobs:
             vsceTarget: "win32-x64"
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Setup Dev Drive (Windows)
+        if: runner.os == 'Windows'
+        uses: samypr100/setup-dev-drive@v3
+
       - name: Checkout repository
         uses: actions/checkout@v6
 
