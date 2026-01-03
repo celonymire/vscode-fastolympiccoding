@@ -2,6 +2,7 @@
 
 !.vscodeignore
 !README.md
+!CHANGELOG.md
 !LICENSE
 !media/**
 !schemas/runSettings.schema.json
