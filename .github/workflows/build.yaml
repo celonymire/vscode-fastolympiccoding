@@ -8,23 +8,26 @@ jobs:
   check:
     name: Sanity Checks
     runs-on: ubuntu-latest
+    env:
+      npm_config_cache: ${{ github.workspace }}/.npm-cache
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: latest
+          node-version: lts/*
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Check and lint formatting
-        run: |
-          npm run check
-          npm run lint
+        run: npm run check
+
+      - name: Lint
+        run: npm run lint
 
       - name: Type check
         run: npm run typecheck
@@ -46,14 +49,20 @@ jobs:
             os: windows-latest
             vsceTarget: "win32-x64"
     runs-on: ${{ matrix.os }}
+    env:
+      npm_config_cache: ${{ github.workspace }}/.npm-cache
     steps:
+      - name: Setup Dev Drive (Windows)
+        if: runner.os == 'Windows'
+        uses: samypr100/setup-dev-drive@v3
+
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: latest
+          node-version: lts/*
           cache: npm
 
       - name: Install dependencies
@@ -80,7 +89,7 @@ jobs:
           echo "vsix_name=$vsix" >> $GITHUB_OUTPUT
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.vsix-file.outputs.vsix_name }}
           path: ${{ steps.vsix-file.outputs.vsix_name }}
