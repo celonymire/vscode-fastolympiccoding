@@ -25,18 +25,27 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "=== NPM Debug Logs ==="
-          if (Test-Path "$env:APPDATA\npm-cache\_logs") {
-            Get-ChildItem -Path "$env:APPDATA\npm-cache\_logs" -Filter "*-debug-0.log" | ForEach-Object {
-              Write-Host "\n--- $($_.Name) ---"
-              Get-Content $_ -Tail 100
-            }
-          } elseif (Test-Path "~/.npm/_logs") {
-            Get-ChildItem -Path "~/.npm/_logs" -Filter "*.log" | ForEach-Object {
-              Write-Host "\n--- $($_.Name) ---"
-              Get-Content $_ -Tail 100
-            }
+          Write-Host "=== NPM Debug Log (newest) ==="
+          $cacheDir = (npm config get cache).Trim()
+          Write-Host "npm cache: $cacheDir"
+          $logDir = Join-Path $cacheDir "_logs"
+          if (!(Test-Path $logDir)) {
+            Write-Host "No npm log dir found at: $logDir"
+            exit 0
           }
+
+          $latestLog = Get-ChildItem -Path $logDir -Filter "*-debug-0.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $latestLog) {
+            Write-Host "No *-debug-0.log files found in: $logDir"
+            exit 0
+          }
+
+          Write-Host "\n--- $($latestLog.Name) ($($latestLog.LastWriteTime.ToString('s'))) ---"
+          Write-Host "Path: $($latestLog.FullName)"
+          Write-Host "\n--- npm ERR!/WARN lines ---"
+          Select-String -Path $latestLog.FullName -Pattern "^\d+\s+(error|warn)\b|^\d+\s+verbose\s+code\b|^\d+\s+verbose\s+exit\b" -CaseSensitive:$false | ForEach-Object { $_.Line }
+          Write-Host "\n--- Tail (last 400 lines) ---"
+          Get-Content $latestLog.FullName -Tail 400
 
       - name: Check and lint formatting
         run: npm run check
@@ -93,18 +102,27 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "=== NPM Debug Logs ==="
-          if (Test-Path "C:\npm\cache\_logs") {
-            Get-ChildItem -Path "C:\npm\cache\_logs" -Filter "*-debug-0.log" | ForEach-Object {
-              Write-Host "\n--- $($_.Name) ---"
-              Get-Content $_ -Tail 100
-            }
-          } elseif (Test-Path "~/.npm/_logs") {
-            Get-ChildItem -Path "~/.npm/_logs" -Filter "*.log" | ForEach-Object {
-              Write-Host "\n--- $($_.Name) ---"
-              Get-Content $_ -Tail 100
-            }
+          Write-Host "=== NPM Debug Log (newest) ==="
+          $cacheDir = (npm config get cache).Trim()
+          Write-Host "npm cache: $cacheDir"
+          $logDir = Join-Path $cacheDir "_logs"
+          if (!(Test-Path $logDir)) {
+            Write-Host "No npm log dir found at: $logDir"
+            exit 0
           }
+
+          $latestLog = Get-ChildItem -Path $logDir -Filter "*-debug-0.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $latestLog) {
+            Write-Host "No *-debug-0.log files found in: $logDir"
+            exit 0
+          }
+
+          Write-Host "\n--- $($latestLog.Name) ($($latestLog.LastWriteTime.ToString('s'))) ---"
+          Write-Host "Path: $($latestLog.FullName)"
+          Write-Host "\n--- npm ERR!/WARN lines ---"
+          Select-String -Path $latestLog.FullName -Pattern "^\d+\s+(error|warn)\b|^\d+\s+verbose\s+code\b|^\d+\s+verbose\s+exit\b" -CaseSensitive:$false | ForEach-Object { $_.Line }
+          Write-Host "\n--- Tail (last 400 lines) ---"
+          Get-Content $latestLog.FullName -Tail 400
 
       - name: Detect VSIX filename
         id: vsix-file
