@@ -224,7 +224,61 @@
         "url": "./schemas/runSettings.schema.json"
       }
     ],
+    "walkthroughs": [
+      {
+        "id": "fastolympiccoding.gettingStarted",
+        "title": "Get Started with Fast Olympic Coding",
+        "description": "Natively test your solutions in VSCode.",
+        "steps": [
+          {
+            "id": "createRunSettings",
+            "title": "Create Run Settings",
+            "description": "Configure compile and run commands for your programming language.\n[Create From Example](command:fastolympiccoding.createRunSettings)",
+            "completionEvents": [
+              "onCommand:fastolympiccoding.createRunSettings"
+            ],
+            "media": {
+              "markdown": "walkthroughs/setting-up.md"
+            }
+          },
+          {
+            "id": "setupDebug",
+            "title": "Enable Debugging (Optional)",
+            "description": "Configure debug support to use breakpoints and step through your code with real-time inputs.\n[Open runSettings.json](command:fastolympiccoding.openRunSettings)",
+            "media": {
+              "markdown": "walkthroughs/debugging.md"
+            }
+          },
+          {
+            "id": "setupStress",
+            "title": "Configure Stress Testing (Optional)",
+            "description": "Stress test your solution to ensure correctness and debug logic errors.\n[Open runSettings.json](command:fastolympiccoding.openRunSettings)",
+            "media": {
+              "markdown": "walkthroughs/stress-testing.md"
+            }
+          },
+          {
+            "id": "setupInteractive",
+            "title": "Enable Interactive Problems (Optional)",
+            "description": "Configure support for interactive problems where your solution communicates with a judge program.\n[Open runSettings.json](command:fastolympiccoding.openRunSettings)",
+            "media": {
+              "markdown": "walkthroughs/interactive.md"
+            }
+          }
+        ]
+      }
+    ],
     "commands": [
+      {
+        "command": "fastolympiccoding.createRunSettings",
+        "title": "Create runSettings.json",
+        "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.openRunSettings",
+        "title": "Open runSettings.json",
+        "category": "Fast Olympic Coding"
+      },
       {
         "command": "fastolympiccoding.compile",
         "title": "Compile",

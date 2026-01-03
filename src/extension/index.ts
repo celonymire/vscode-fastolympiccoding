@@ -8,6 +8,7 @@ import {
   createListener,
   stopCompetitiveCompanion,
 } from "./utils/competitiveCompanion";
+import { registerWalkthroughCommands } from "./walkthrough";
 import {
   initializeRunSettingsWatcher,
   ReadonlyStringProvider,
@@ -93,6 +94,8 @@ function registerDocumentContentProviders(context: vscode.ExtensionContext): voi
 }
 
 function registerCommands(context: vscode.ExtensionContext): void {
+  registerWalkthroughCommands(context);
+
   const compilationStatusItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     10000
