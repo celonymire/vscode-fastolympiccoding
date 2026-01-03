@@ -5,13 +5,38 @@ export const MODES = ["standard", "interactive"] as const;
 export type Mode = (typeof MODES)[number];
 
 export const LanguageSettingsSchema = v.object({
-  compileCommand: v.optional(v.string()),
-  runCommand: v.string(),
+  compileCommand: v.optional(v.array(v.string())),
+  runCommand: v.array(v.string()),
   currentWorkingDirectory: v.optional(v.string()),
-  debugCommand: v.optional(v.string()),
+  debugCommand: v.optional(v.array(v.string())),
   debugAttachConfig: v.optional(v.string()),
 });
 export type LanguageSettings = v.InferOutput<typeof LanguageSettingsSchema>;
+
+export const RunSettingsSchema = v.pipe(
+  v.looseObject({
+    interactorFile: v.optional(v.string()),
+    goodSolutionFile: v.optional(v.string()),
+    generatorFile: v.optional(v.string()),
+  }),
+  v.check((value) => {
+    // Validate that any additional properties have keys starting with '.' (file extension)
+    // and values matching LanguageSettingsSchema
+    for (const [key, val] of Object.entries(value)) {
+      if (key !== "interactorFile" && key !== "goodSolutionFile" && key !== "generatorFile") {
+        if (!key.startsWith(".")) {
+          return false;
+        }
+        const parseResult = v.safeParse(LanguageSettingsSchema, val);
+        if (!parseResult.success) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }, "Additional properties must be file extensions (starting with '.') with language settings as values")
+);
+export type RunSettings = v.InferOutput<typeof RunSettingsSchema>;
 
 export const TestSchema = v.object({
   input: v.string(),

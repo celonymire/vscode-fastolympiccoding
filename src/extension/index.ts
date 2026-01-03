@@ -9,7 +9,6 @@ import {
   stopCompetitiveCompanion,
 } from "./utils/competitiveCompanion";
 import {
-  getLanguageSettings,
   initializeRunSettingsWatcher,
   ReadonlyStringProvider,
   resolveVariables,
@@ -108,15 +107,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerTextEditorCommand("fastolympiccoding.compile", () => {
       void (async () => {
         const file = vscode.window.activeTextEditor?.document.fileName;
-        if (!file) {
-          return;
-        }
-
-        const languageSettings = await getLanguageSettings(file);
-        if (!languageSettings) {
-          return;
-        }
-        if (languageSettings.compileCommand) {
+        if (file) {
           void compile(file, context); // we don't care about exit code of compilation
         }
       })();

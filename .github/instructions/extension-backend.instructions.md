@@ -18,7 +18,7 @@ When changing files under `src/extension/**`:
 - Use `TextHandler` (from the extension utilities) for all streamed output shown in the webviews. It must keep the full data for comparisons while truncating display output, normalizes CRLF to LF, and ensures a trailing newline on final writes. Always call `.reset()` before a fresh run and `.write(data, mode)` to update output (where mode is `"batch"`, `"force"`, or `"final"`) so truncation, batching, and whitespace handling remain correct.
 - For compilation and execution, use the helpers in `src/extension/utils/runtime.ts`. Specifically, use `compile()` (which caches builds by file checksum and compile command) and `Runnable` (which wraps child processes with timing, timeout via `AbortSignal.timeout`, and exit/timeout information) instead of spawning processes manually.
 - In the Stress view logic, keep the sequential generator pattern that feeds testcases to the solution and reference solution, and ensure the loop respects both per-test (`stressTestcaseTimeLimit`) and global (`stressTimeLimit`) limits while exiting early on the first mismatch or failure for speed.
-- Always resolve command variables via `resolveVariables` / `resolveCommand` from `src/extension/utils/vscode.ts` before spawning external processes. Use built-in variables like `${exeExtname}`, `${path:...}`, and `${fileDirnameBasename}` for cross-platform-safe paths.
+- Always resolve command variables via `resolveVariables` / `resolveCommand` from `src/extension/utils/vscode.ts` before spawning external processes.
 - Keep patches minimal, prefer existing patterns, and avoid introducing heavy new dependencies in the extension backend unless strictly necessary.
 
 When extending functionality from the extension side:

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
+import * as path from "path";
 
 import {
   ProblemSchema,
@@ -20,7 +21,7 @@ import {
 import type { RunTermination } from "../utils/runtime";
 import {
   getFileCommandArguments,
-  getLanguageSettings,
+  getFileRunSettings,
   openInNewEditor,
   ReadonlyStringProvider,
   resolveVariables,
@@ -75,8 +76,7 @@ type ExecutionContext = {
   token: vscode.CancellationToken;
   testcase: State;
   languageSettings: LanguageSettings;
-  solutionArgs: string[];
-  interactorArgs?: string[];
+  interactorArgs: string[] | null;
   cwd?: string;
 };
 
@@ -127,17 +127,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _fileCancellation?: vscode.CancellationTokenSource;
   private _activeDebugTestcaseId?: number;
 
-  private async _getExecutionContext(
-    id: number,
-    commandProperty: keyof LanguageSettings
-  ): Promise<ExecutionContext | null> {
+  // If the testcase is interactive, ensure interactive settings are also valid and resolved
+  private async _getExecutionContext(id: number): Promise<ExecutionContext | null> {
     const token = this._fileCancellation?.token;
-    if (!token || token.isCancellationRequested) {
-      return null;
-    }
-
-    const file = this._currentFile;
-    if (!file) {
+    if (!token || token.isCancellationRequested || !this._currentFile) {
       return null;
     }
 
@@ -153,17 +146,30 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
-    const languageSettings = getLanguageSettings(file);
-    if (!languageSettings) {
+    const settings = getFileRunSettings(this._currentFile);
+    if (!settings) {
       return null;
     }
 
-    const compilePromises = [this._compileIfNeeded(id, token, file, testcase)];
-    let interactorFile: string;
+    const extension = path.extname(this._currentFile);
+    const languageSettings = settings[extension] as LanguageSettings | undefined;
+    if (!languageSettings) {
+      const logger = getLogger("judge");
+      logger.error(`No run settings found for file extension "${extension}"`);
+      vscode.window.showErrorMessage(`No run settings found for file extension "${extension}"`);
+      return null;
+    }
+
+    const compilePromises = [this._compileIfNeeded(id, token, this._currentFile, testcase)];
     if (testcase.mode === "interactive") {
-      const config = vscode.workspace.getConfiguration("fastolympiccoding");
-      interactorFile = resolveVariables(config.get<string>("interactorFile")!);
-      compilePromises.push(this._compileIfNeeded(id, token, interactorFile, testcase));
+      if (!settings.interactorFile) {
+        const logger = getLogger("judge");
+        logger.error(`No interactor file specified in run settings`);
+        vscode.window.showErrorMessage(`No interactor file specified in run settings`);
+        return null;
+      }
+
+      compilePromises.push(this._compileIfNeeded(id, token, settings.interactorFile, testcase));
     }
     const errored = await Promise.all(compilePromises);
     const anyErrored = errored.some((hadError) => hadError);
@@ -171,39 +177,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
-    const solutionArgs = getFileCommandArguments(file, commandProperty);
-    if (!solutionArgs) {
-      return null;
+    let interactorArgs: string[] | null = null;
+    if (testcase.mode === "interactive") {
+      interactorArgs = getFileCommandArguments(settings.interactorFile!, "runCommand");
+      if (!interactorArgs) {
+        return null;
+      }
     }
-
-    const cwd = languageSettings.currentWorkingDirectory
-      ? resolveVariables(languageSettings.currentWorkingDirectory)
-      : undefined;
 
     if (token.isCancellationRequested) {
       return null;
     }
 
-    return { token, testcase, languageSettings, solutionArgs, cwd };
-  }
-
-  private async _getInteractiveExecutionContext(
-    id: number,
-    commandProperty: keyof LanguageSettings
-  ): Promise<ExecutionContext | null> {
-    const baseContext = await this._getExecutionContext(id, commandProperty);
-    if (!baseContext) {
-      return null;
-    }
-
-    const config = vscode.workspace.getConfiguration("fastolympiccoding");
-    const interactorFile = resolveVariables(config.get("interactorFile")!);
-    const interactorArgs = getFileCommandArguments(interactorFile, "runCommand");
-    if (!interactorArgs) {
-      return null;
-    }
-
-    return { ...baseContext, interactorArgs };
+    return {
+      token,
+      testcase,
+      languageSettings,
+      interactorArgs,
+      cwd: languageSettings.currentWorkingDirectory,
+    };
   }
 
   private async _compileIfNeeded(
@@ -274,14 +266,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _launchTestcase(ctx: ExecutionContext, newTestcase: boolean) {
-    const { token, testcase, solutionArgs, cwd } = ctx;
+    const { token, testcase, languageSettings, cwd } = ctx;
+    if (!languageSettings.runCommand) {
+      return;
+    }
 
     testcase.process.run(
-      solutionArgs[0],
+      languageSettings.runCommand,
       newTestcase ? 0 : this._timeLimit,
       newTestcase ? 0 : this._memoryLimit,
-      cwd,
-      ...solutionArgs.slice(1)
+      cwd
     );
 
     const proc = testcase.process.process;
@@ -346,17 +340,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _launchInteractiveTestcase(ctx: ExecutionContext, bypassLimits: boolean) {
-    const { token, testcase, solutionArgs, interactorArgs, cwd } = ctx;
+    const { token, testcase, languageSettings, interactorArgs, cwd } = ctx;
+    if (!languageSettings.runCommand || !interactorArgs) {
+      return;
+    }
 
     testcase.process.run(
-      solutionArgs[0],
+      languageSettings.runCommand,
       bypassLimits ? 0 : this._timeLimit,
       bypassLimits ? 0 : this._memoryLimit,
-      cwd,
-      ...solutionArgs.slice(1)
+      cwd
     );
     // Don't restrict the interactor's time and memory limit
-    testcase.interactorProcess.run(interactorArgs![0], 0, 0, cwd, ...interactorArgs!.slice(1));
+    testcase.interactorProcess.run(interactorArgs, 0, 0, cwd);
 
     const proc = testcase.process.process;
     const interactorProc = testcase.interactorProcess.process;
@@ -975,23 +971,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _run(id: number, newTestcase: boolean): Promise<void> {
-    const testcase = this._getTestcase(id);
-    if (!testcase) {
-      return;
-    }
-
-    let ctx: ExecutionContext | null;
-    if (testcase.mode === "interactive") {
-      ctx = await this._getInteractiveExecutionContext(id, "runCommand");
-    } else {
-      ctx = await this._getExecutionContext(id, "runCommand");
-    }
+    const ctx = await this._getExecutionContext(id);
     if (!ctx) {
       return;
     }
 
-    this._prepareRunningState(id, testcase);
-    if (testcase.mode === "interactive") {
+    this._prepareRunningState(id, ctx.testcase);
+    if (ctx.testcase.mode === "interactive") {
       this._launchInteractiveTestcase(ctx, newTestcase);
     } else {
       this._launchTestcase(ctx, newTestcase);
@@ -999,33 +985,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _debug(id: number): Promise<void> {
-    if (!this._currentFile) {
-      return;
-    }
-    const languageSettings = getLanguageSettings(this._currentFile);
-    if (!languageSettings) {
+    const ctx = await this._getExecutionContext(id);
+    if (!ctx || !this._currentFile) {
       return;
     }
 
-    if (!languageSettings.debugCommand || !languageSettings.debugAttachConfig) {
+    if (!ctx.languageSettings.debugCommand || !ctx.languageSettings.debugAttachConfig) {
       const logger = getLogger("judge");
       logger.error(`Debug settings missing for language`);
       vscode.window.showErrorMessage("Missing debug settings for this language");
-      return;
-    }
-
-    const testcase = this._getTestcase(id);
-    if (!testcase) {
-      return;
-    }
-
-    let ctx: ExecutionContext | null;
-    if (testcase.mode === "interactive") {
-      ctx = await this._getInteractiveExecutionContext(id, "debugCommand");
-    } else {
-      ctx = await this._getExecutionContext(id, "debugCommand");
-    }
-    if (!ctx) {
       return;
     }
 
@@ -1048,26 +1016,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const attachConfig = vscode.workspace
       .getConfiguration("launch", folder)
       .get<vscode.DebugConfiguration[]>("configurations", [])
-      .find((config) => config.name === languageSettings.debugAttachConfig);
+      .find((config) => config.name === ctx.languageSettings.debugAttachConfig);
     if (!attachConfig) {
       const logger = getLogger("judge");
-      logger.error(`Debug attach configuration not found: ${languageSettings.debugAttachConfig}`);
+      logger.error(
+        `Debug attach configuration not found: ${ctx.languageSettings.debugAttachConfig}`
+      );
       vscode.window.showErrorMessage("Debug attach configuration not found.");
       return;
     }
 
-    this._prepareRunningState(id, testcase);
+    this._prepareRunningState(id, ctx.testcase);
     // No limits for debugging testcases
-    if (testcase.mode === "interactive") {
+    if (ctx.testcase.mode === "interactive") {
       this._launchInteractiveTestcase(ctx, true);
     } else {
       this._launchTestcase(ctx, true);
     }
 
     // Wait for the debug process to spawn before attaching
-    const spawnedPromises = [testcase.process.spawned];
-    if (testcase.mode === "interactive") {
-      spawnedPromises.push(testcase.interactorProcess.spawned);
+    const spawnedPromises = [ctx.testcase.process.spawned];
+    if (ctx.testcase.mode === "interactive") {
+      spawnedPromises.push(ctx.testcase.interactorProcess.spawned);
     }
     const spawned = await Promise.all(spawnedPromises);
     let allSpawned = true;
@@ -1078,8 +1048,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     if (!allSpawned || ctx.token.isCancellationRequested) {
-      await testcase.process.done;
-      await testcase.interactorProcess.done;
+      await ctx.testcase.process.done;
+      await ctx.testcase.interactorProcess.done;
       const logger = getLogger("judge");
       logger.error(`Debug process failed to spawn`);
       vscode.window.showErrorMessage(`Debug process failed to spawn`);

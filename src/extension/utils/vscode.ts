@@ -4,7 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { LanguageSettingsSchema, type LanguageSettings } from "../../shared/schemas";
+import { RunSettingsSchema, type RunSettings } from "../../shared/schemas";
 import { type ILogger, getLogger } from "./logging";
 
 let logger: ILogger;
@@ -296,13 +296,7 @@ function resolveStringVariables(
       .join("|"),
     "g"
   );
-  const resolvedString = string.replace(variableRegex, (variable) => substitutions[variable]);
-
-  // Resolve ${path:...} last
-  const resolved = resolvedString.replace(/\${path:(.*?)}/g, (_, group: string) =>
-    path.normalize(group)
-  );
-  return resolved;
+  return string.replace(variableRegex, (variable) => substitutions[variable]);
 }
 
 function resolveArrayVariables(
@@ -363,15 +357,15 @@ export function resolveVariables(
 
 export function getFileCommandArguments(
   file: string,
-  commandProperty: keyof LanguageSettings,
+  commandProperty: "compileCommand" | "runCommand" | "debugCommand",
   extraVariables?: Record<string, string>
 ): string[] | null {
-  const settings = getLanguageSettings(file);
+  const settings = getFileRunSettings(file);
   if (!settings) {
     return null;
   }
 
-  const args = settings[commandProperty]!.trim().split(" ");
+  const args = settings[commandProperty]! as string[];
   return args.map((arg: string) => resolveVariables(arg, file, extraVariables));
 }
 
@@ -411,6 +405,41 @@ export function initializeRunSettingsWatcher(context: vscode.ExtensionContext): 
 }
 
 /**
+ * Deep merges two objects, with the second object taking precedence.
+ * Arrays are replaced (not merged), and nested objects are recursively merged.
+ */
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...target };
+
+  for (const [key, sourceValue] of Object.entries(source)) {
+    const targetValue = result[key];
+
+    if (
+      sourceValue &&
+      typeof sourceValue === "object" &&
+      !Array.isArray(sourceValue) &&
+      targetValue &&
+      typeof targetValue === "object" &&
+      !Array.isArray(targetValue)
+    ) {
+      // Both are objects (not arrays), recursively merge
+      result[key] = deepMerge(
+        targetValue as Record<string, unknown>,
+        sourceValue as Record<string, unknown>
+      );
+    } else {
+      // Replace with source value (handles primitives, arrays, null, etc.)
+      result[key] = sourceValue;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Loads and parses a runSettings.json file from the specified directory.
  * Returns undefined if the file doesn't exist or is invalid.
  */
@@ -447,9 +476,9 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
 /**
  * Traverses from the file directory up to the workspace root,
  * loading and merging runSettings.json files along the way.
- * Returns the merged settings for the specified extension.
+ * Returns the merged settings with all variables resolved and validated.
  */
-function getFileSpecificRunSettings(file: string, extension: string): Record<string, unknown> {
+export function getFileRunSettings(file: string): RunSettings | null {
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
   if (!workspaceFolder) {
     logger.warn(`No workspace folder found for file ${file}`);
@@ -480,44 +509,17 @@ function getFileSpecificRunSettings(file: string, extension: string): Record<str
   let mergedSettings: Record<string, unknown> = {};
   while (settingsStack.length > 0) {
     const settings = settingsStack.pop() ?? {};
-    if (settings[extension] && typeof settings[extension] === "object") {
-      mergedSettings = Object.assign({}, mergedSettings, settings[extension]);
-    }
+    mergedSettings = deepMerge(mergedSettings, settings);
   }
 
-  return mergedSettings;
-}
+  // Resolve all variables in the merged settings
+  const resolved = resolveVariables(mergedSettings, file) as Record<string, unknown>;
 
-/**
- * Retrieves and validates language settings for a file extension.
- * Merges VS Code configuration with folder-specific runSettings.json files.
- * Shows a warning if settings are invalid or missing.
- * @returns The validated language settings, or undefined if invalid/missing.
- */
-export function getLanguageSettings(file: string): LanguageSettings | null {
-  const extension = path.extname(file);
-
-  // Start with VS Code configuration settings
-  const runSettings = vscode.workspace.getConfiguration("fastolympiccoding.runSettings");
-  let baseSettings: Record<string, unknown> = {};
-
-  if (runSettings[extension] && typeof runSettings[extension] === "object") {
-    baseSettings = runSettings[extension] as Record<string, unknown>;
-  }
-
-  // Get folder-specific settings
-  const fileSpecificSettings = getFileSpecificRunSettings(file, extension);
-  const finalSettings = Object.assign({}, baseSettings, fileSpecificSettings);
-
-  // Validate the merged settings
-  const parseResult = v.safeParse(LanguageSettingsSchema, finalSettings);
+  // Validate against RunSettingsSchema
+  const parseResult = v.safeParse(RunSettingsSchema, resolved);
   if (!parseResult.success) {
-    logger.error(
-      `Invalid or missing run setting for file extension "${extension}": ${parseResult.issues}`
-    );
-    vscode.window.showErrorMessage(
-      `Invalid or missing run setting for file extension "${extension}"`
-    );
+    logger.error(`Invalid runSettings.json for file ${file}: ${parseResult.issues}`);
+    vscode.window.showErrorMessage(`Invalid run settings for ${file}`);
     return null;
   }
 

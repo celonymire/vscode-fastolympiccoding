@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
+import * as path from "path";
 
 import { StatusSchema, type Status } from "../../shared/enums";
+import { type LanguageSettings } from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
 import {
   compile,
@@ -11,7 +13,7 @@ import {
 } from "../utils/runtime";
 import {
   getFileCommandArguments,
-  getLanguageSettings,
+  getFileRunSettings,
   openInNewEditor,
   resolveVariables,
   TextHandler,
@@ -283,8 +285,35 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
 
-    const languageSettings = getLanguageSettings(this._currentFile);
+    const settings = getFileRunSettings(this._currentFile);
+    if (!settings) {
+      return;
+    }
+    if (!settings.generatorFile) {
+      const logger = getLogger("stress");
+      logger.error(`No generator file specified in run settings`);
+      vscode.window.showErrorMessage(`No generator file specified in run settings`);
+      return;
+    }
+    if (!settings.goodSolutionFile) {
+      const logger = getLogger("stress");
+      logger.error(`No good solution file specified in run settings`);
+      vscode.window.showErrorMessage(`No good solution file specified in run settings`);
+      return;
+    }
+    if (!settings.interactorFile && this._interactiveMode) {
+      const logger = getLogger("stress");
+      logger.error(`No interactor file specified in run settings`);
+      vscode.window.showErrorMessage(`No interactor file specified in run settings`);
+      return;
+    }
+
+    const extension = path.extname(this._currentFile);
+    const languageSettings = settings[extension] as LanguageSettings | undefined;
     if (!languageSettings) {
+      const logger = getLogger("stress");
+      logger.error(`No run settings found for file extension "${extension}"`);
+      vscode.window.showErrorMessage(`No run settings found for file extension "${extension}"`);
       return;
     }
 
@@ -297,10 +326,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     };
     const compilePromises = [];
 
-    const generatorCompilePromise = compile(
-      resolveVariables(config.get("generatorFile")!),
-      this._context
-    );
+    const generatorCompilePromise = compile(settings.generatorFile, this._context);
     if (generatorCompilePromise) {
       super._postMessage({
         type: "STATUS",
@@ -322,15 +348,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     let judgeCompilePromise: Promise<number> | null;
     if (this._interactiveMode) {
-      judgeCompilePromise = compile(
-        resolveVariables(config.get<string>("interactorFile")!),
-        this._context
-      );
+      judgeCompilePromise = compile(settings.interactorFile!, this._context);
     } else {
-      judgeCompilePromise = compile(
-        resolveVariables(config.get("goodSolutionFile")!),
-        this._context
-      );
+      judgeCompilePromise = compile(settings.goodSolutionFile, this._context);
     }
     if (judgeCompilePromise) {
       super._postMessage({
@@ -370,10 +390,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const timeLimit = config.get<number>("stressTimeLimit")!;
     const start = Date.now();
 
-    const generatorRunArguments = getFileCommandArguments(
-      resolveVariables(config.get("generatorFile")!),
-      "runCommand"
-    );
+    const generatorRunArguments = getFileCommandArguments(settings.generatorFile, "runCommand");
     if (!generatorRunArguments) {
       return;
     }
@@ -385,15 +402,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     let judgeRunArguments: string[] | null;
     if (this._interactiveMode) {
-      judgeRunArguments = getFileCommandArguments(
-        resolveVariables(config.get("interactorFile")!),
-        "runCommand"
-      );
+      judgeRunArguments = getFileCommandArguments(settings.interactorFile!, "runCommand");
     } else {
-      judgeRunArguments = getFileCommandArguments(
-        resolveVariables(config.get("goodSolutionFile")!),
-        "runCommand"
-      );
+      judgeRunArguments = getFileCommandArguments(settings.goodSolutionFile, "runCommand");
     }
     if (!judgeRunArguments) {
       return;
@@ -421,13 +432,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._interactorSecretResolver = resolve;
       });
 
-      this._judgeState.process.run(
-        judgeRunArguments[0],
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
-        cwd,
-        ...judgeRunArguments.slice(1)
-      );
+      this._judgeState.process.run(judgeRunArguments, testcaseTimeLimit, testcaseMemoryLimit, cwd);
       this._judgeState.process
         .on("error", this._judgeState.errorHandler)
         .on("stdout:data", this._judgeState.stdoutDataHandler)
@@ -436,13 +441,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:end", this._judgeState.stderrEndHandler)
         .on("close", this._judgeState.closeHandler);
 
-      this._generatorState.process.run(
-        generatorRunArguments[0],
-        0,
-        0,
-        cwd,
-        ...generatorRunArguments.slice(1)
-      );
+      this._generatorState.process.run(generatorRunArguments, 0, 0, cwd);
       this._generatorState.process
         .on("spawn", () => {
           this._generatorState.process.process?.stdin.write(`${seed}\n`);
@@ -455,11 +454,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("close", this._generatorState.closeHandler);
 
       this._solutionState.process.run(
-        solutionRunArguments[0],
+        solutionRunArguments,
         testcaseTimeLimit,
         testcaseMemoryLimit,
-        cwd,
-        ...solutionRunArguments.slice(1)
+        cwd
       );
       this._solutionState.process
         .on("error", this._solutionState.errorHandler)
@@ -589,22 +587,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _add({ id }: v.InferOutput<typeof AddMessageSchema>) {
-    const file = this._currentFile;
-    if (!file) {
+    if (!this._currentFile) {
       return;
     }
 
-    let resolvedFile: string;
+    const settings = getFileRunSettings(this._currentFile);
+    if (!settings) {
+      return;
+    }
+
+    let resolvedFile: string | undefined;
     if (id === "Generator") {
-      resolvedFile = resolveVariables(
-        vscode.workspace.getConfiguration("fastolympiccoding").get("generatorFile")!
-      );
+      resolvedFile = settings.generatorFile;
     } else if (id === "Solution") {
-      resolvedFile = file;
-    } else {
-      resolvedFile = resolveVariables(
-        vscode.workspace.getConfiguration("fastolympiccoding").get("goodSolutionFile")!
-      );
+      resolvedFile = this._currentFile;
+    } else if (id === "Judge") {
+      resolvedFile = this._interactiveMode ? settings.interactorFile : settings.goodSolutionFile;
+    }
+    if (!resolvedFile) {
+      return;
     }
 
     if (this._interactiveMode) {

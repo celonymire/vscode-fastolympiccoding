@@ -3,17 +3,40 @@
   "title": "Fast Olympic Coding - Run Settings",
   "description": "Folder-specific run settings for Fast Olympic Coding extension",
   "type": "object",
+  "properties": {
+    "interactorFile": {
+      "type": "string",
+      "default": "${fileDirname}/${fileBasenameNoExtension}__Interactor${fileExtname}",
+      "description": "The full path to the interactor file"
+    },
+    "goodSolutionFile": {
+      "type": "string",
+      "default": "${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}",
+      "description": "The full path to the good solution file"
+    },
+    "generatorFile": {
+      "type": "string",
+      "default": "${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}",
+      "description": "The full path to the generator file"
+    }
+  },
   "patternProperties": {
     "^\\.[a-zA-Z0-9]+$": {
       "type": "object",
       "description": "Language settings for a specific file extension",
       "properties": {
         "compileCommand": {
-          "type": "string",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "Command to compile the solution (omit to skip compilation)"
         },
         "runCommand": {
-          "type": "string",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "Command to run the solution"
         },
         "currentWorkingDirectory": {
@@ -21,7 +44,10 @@
           "description": "Current working directory for runCommand"
         },
         "debugCommand": {
-          "type": "string",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "Command to start the solution under a debug server"
         },
         "debugAttachConfig": {
