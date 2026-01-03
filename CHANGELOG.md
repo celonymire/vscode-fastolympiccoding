@@ -9,9 +9,14 @@
 ### Changed
 
 - Moved `goodSolutionFile`, `generatorFile`, and `interactorFile` to `runSettings.json` for greater customizability
+- Made `runCommand` optional to better match folder-specific `runSettings.json` ergonomics
 - Allow mixed languages of different files for interactive problems and Stress Tester
+
+### Fixed
+
+- Hanging compiling status in some cases
 
 ### Removed
 
-- `${path:...}` variable since it's not needed anymore
+- `${path:...}` variable since `runSettings.json` has structure to know when values need to normalize the path
 - `${exeExtname}` because that falls under compiler's responsibility to know they're in Windows
