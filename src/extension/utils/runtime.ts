@@ -13,6 +13,14 @@ import { getLogger } from "./logging";
 import type { Status } from "../../shared/enums";
 import type { LanguageSettings } from "../../shared/schemas";
 
+function arrayEquals<T>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((value, index) => value === b[index]);
+}
+
 type Win32MemoryAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
 };
@@ -498,8 +506,8 @@ async function doCompile(
   context: vscode.ExtensionContext
 ): Promise<number> {
   const currentChecksum = await getFileChecksum(file);
-  const [cachedChecksum, cachedCommand] = lastCompiled.get(file) ?? [-1, ""];
-  if (currentChecksum === cachedChecksum && compileCommand === cachedCommand) {
+  const [cachedChecksum, cachedCommand] = lastCompiled.get(file) ?? [-1, []];
+  if (currentChecksum === cachedChecksum && arrayEquals(compileCommand, cachedCommand)) {
     return 0; // avoid unnecessary recompilation
   }
 
