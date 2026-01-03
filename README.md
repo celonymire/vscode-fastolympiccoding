@@ -31,50 +31,32 @@
 
 ### </> Setting Up
 
-Provide run settings for the languages you use in `settings.json`. Here are some examples for C++, Python, and Java:
+Provide run settings for the languages you use in `runSettings.json` at the root folder. Here is an example configuration for C++, Python, and Java:
 
 ```json
 {
-  "fastolympiccoding.runSettings": {
-    ".cpp": {
-      "compileCommand": "g++ ${path:${file}} -o ${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
-      "runCommand": "${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}"
-    },
-    ".py": {
-      "runCommand": "python ${path:${file}}"
-    },
-    ".java": {
-      "compileCommand": "javac ${path:${file}}",
-      "runCommand": "java -cp ${fileDirname} ${fileBasenameNoExtension}"
-    }
+  ".cpp": {
+    "compileCommand": [
+      "g++",
+      "${file}",
+      "-o",
+      "${fileDirname}/${fileBasenameNoExtension}${exeExtname}"
+    ],
+    "runCommand": ["${fileDirname}/${fileBasenameNoExtension}${exeExtname}"]
+  },
+  ".py": {
+    "runCommand": ["python", "${file}"]
+  },
+  ".java": {
+    "compileCommand": ["javac", "${file}"],
+    "runCommand": ["java", "-cp", "${fileDirname}", "${fileBasenameNoExtension}"]
   }
 }
 ```
 
-We can use the following variables in the syntax of `${...}`
+We can use [VSCode's built-in variables](https://code.visualstudio.com/docs/editor/variables-reference) which has the syntax of `${...}` and will get resolved by the extension. **`${defaultBuildTask}` is not supported because it requires resolving the entire build configuration which is super slow!**
 
-- Most of [VSCode's built-in variables](https://code.visualstudio.com/docs/editor/variables-reference)
-- `${exeExtname}` returns `.exe` for Windows and an empty string for other platforms
-- `${path:*value*}` normalizes \*value\* into a valid path string for the current platform
-
-<details>
-  <summary>Settings per language</summary>
-
-- `compileCommand` (optional): Command to run before `runCommand` when the file content changed
-- `runCommand`: Command to run the solution
-- `currentWorkingDirectory` (optional): sets the current working directory for `runCommand`
-</details>
-
-<details>
-  <summary>Folder-specific settings</summary>
-
-You can create specialized `runSettings.json` files to override settings for files within specific directories. The extension traverses from the workspace root directory up to the file folder, merging the settings along the way in that order.
-
-**How it works:**
-
-1. Settings are loaded from the workspace root down to your file's directory
-2. Each folder's settings override the previous ones (closer to your file = higher priority)
-3. VS Code's global `fastolympiccoding.runSettings` serve as the base settings
+💡 Since `runSettings.json` applies recursively to subdirectories, you can specialize parts of the configuration within specific directories. The extension traverses from the workspace root directory up to the file folder, merging the settings along the way in that order.
 
 **Example structure:**
 
@@ -88,13 +70,12 @@ workspace/
 │       └── solution.cpp      # Uses merged settings from all 3 files
 ```
 
-❗You **DO NOT** have to fill in every key for folder-specific settings. `runCommand` is **OPTIONAL** because they are expected to be at least in the base settings.
+<details>
+  <summary>Settings per language</summary>
 
-**🎯 EXAMPLE**: Create different folders and settings for different online judges! This provides the following benefits:
-
-- Enforce different set of supported languages
-- Different set of requirements within the same language. For example, USACO only supports C++17 while CodeForces generally update to newer standards.
-
+- `compileCommand` (optional): Command to run before `runCommand` when the file content changed
+- `runCommand`: Command to run the solution
+- `currentWorkingDirectory` (optional): sets the current working directory for `runCommand`
 </details>
 
 ---
@@ -156,12 +137,14 @@ Here are the steps for **Native Debug**, which should be very similar with **Mic
 
 ```json
 {
-  "fastolympiccoding.runSettings": {
-    ".cpp": {
-      // compile and run configurations from above...
-      "debugCommand": "gdbserver :${debugPort} ${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
-      "debugAttachConfig": "GDB: Attach"
-    }
+  ".cpp": {
+    // compile and run configurations from above...
+    "debugCommand": [
+      "gdbserver",
+      ":${debugPort}",
+      "${fileDirname}/${fileBasenameNoExtension}${exeExtname}"
+    ],
+    "debugAttachConfig": "GDB: Attach"
   }
 }
 ```
@@ -175,7 +158,7 @@ Here are the steps for **Native Debug**, which should be very similar with **Mic
       "name": "GDB: Attach",
       "type": "gdb",
       "request": "attach",
-      "executable": "${path:${fileDirname}/${fileBasenameNoExtension}${exeExtname}}",
+      "executable": "${fileDirname}/${fileBasenameNoExtension}${exeExtname}",
       "target": ":${debugPort}",
       "remote": true,
       "cwd": "${workspaceRoot}",
@@ -200,12 +183,18 @@ Here are the steps for **Python Debugger**:
 
 ```json
 {
-  "fastolympiccoding.runSettings": {
-    ".py": {
-      // compile and run configurations from above...
-      "debugCommand": "python -m debugpy --listen ${debugPort} --wait-for-client ${path:${file}}",
-      "debugAttachConfig": "Python: Attach"
-    }
+  ".py": {
+    // compile and run configurations from above...
+    "debugCommand": [
+      "python",
+      "-m",
+      "debugpy",
+      "--listen",
+      "${debugPort}",
+      "--wait-for-client",
+      "${file}"
+    ],
+    "debugAttachConfig": "Python: Attach"
   }
 }
 ```
@@ -245,12 +234,16 @@ Here are the steps for **Debugger for Java**:
 
 ```json
 {
-  "fastolympiccoding.runSettings": {
-    ".java": {
-      // compile and run configurations from above...
-      "debugCommand": "java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort} -cp ${path:${fileDirname}} ${fileBasenameNoExtension}",
-      "debugAttachConfig": "Java: Attach"
-    }
+  ".java": {
+    // compile and run configurations from above...
+    "debugCommand": [
+      "java",
+      "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}",
+      "-cp",
+      "${fileDirname}",
+      "${fileBasenameNoExtension}"
+    ],
+    "debugAttachConfig": "Java: Attach"
   }
 }
 ```
@@ -277,14 +270,18 @@ Here are the steps for **Debugger for Java**:
 
 ### 🐞 Stress Tester
 
-Required files (naming scheme can be configured in settings):
+We need both a file that outputs the correct solution and another that outputs a random input to both the current and correct solution. Additional information needs to be added to `runSettings.json` to tell the Stress Tester the names of these files. Here is an example one:
 
-- `<name>.[ext]`: the solution to bruteforce against
-- `<name>__Good.[ext]`: the solution that outputs the correct answer
-- `<name>__Generator.[ext]`: to generate inputs for the other 2 files
-  - **The extension provides a 64-bit integer seed input for random number generators!**
+```json
+{
+  "generatorFile": "${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}",
+  "goodSolutionFile": "${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}"
+}
+```
 
-- **💡TIP**: To stress test for **Runtime Error** instead of **Wrong Answer**, have the good solution be the same as the one to bruteforce against!
+**✨ The extension provides a 64-bit integer seed input for random number generators!**
+
+**💡TIP**: To stress test for **Runtime Error** instead of **Wrong Answer**, have the good solution be the same as the one to bruteforce against!
 
 | ![Stress Tester Gif](media/stress_tester.gif) |
 | :-------------------------------------------: |
@@ -293,26 +290,25 @@ Required files (naming scheme can be configured in settings):
 <details>
   <summary>Settings for Stress Tester</summary>
 
-- `goodSolutionFile`: Full path for good solution file (supports `${...}`)
-- `generatorFile`: Full path for generator file (supports `${...}`)
-- `delayBetweenTestcases`: Amount of delay between generated testcases in milliseconds **(minimum: `5`)**
-- `stressTestcaseTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to spend on one testcase **(`0` for no limit)**
-- `stressTestcaseMemoryLimit`: Maximum time in megabytes the Stress Tester is allowed to use on one testcase **(`0` for no limit)**
-- `stressTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to run **(`0` for no limit)**
+- `delayBetweenTestcases`: Amount of delay between generated testcases in milliseconds
+- `stressTestcaseTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to spend on one testcase
+- `stressTestcaseMemoryLimit`: Maximum time in megabytes the Stress Tester is allowed to use on one testcase
+- `stressTimeLimit`: Maximum time in milliseconds the Stress Tester is allowed to run
 </details>
 
 ---
 
 ### 🗨️ Interactive Mode
 
-Required files (naming scheme can be configured in settings):
+We need to tell the Stress Tester the name of our interactor file. Here is an example:
 
-- `<name>.[ext]`: the solution
-- `<name>__Interactor.[ext]`: the interactor
+```json
+{
+  "interactorFile": "${fileDirname}/${fileBasenameNoExtension}__Interactor${fileExtname}"
+}
+```
 
-If you're using the stress tester, then you'll also need:
-
-- `<name>__Generator.[ext]`: the generator to give the interactor the secret answer
+**✨ The interactor becomes the judge during stress test in interactive mode!**
 
 ‼️**FLUSH YOUR OUTPUTS!** Even though this requirement has been stated in every interactive problem, it is still worth mentioning in case the files are interacting weirdly. **FLUSHING SHOULD BE THE FIRST THING TO DOUBLE CHECK**.
 

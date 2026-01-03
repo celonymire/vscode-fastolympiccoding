@@ -8,9 +8,18 @@ import * as vscode from "vscode";
 
 import pidusage from "pidusage";
 
-import { getFileCommandArguments, getLanguageSettings, ReadonlyTerminal } from "./vscode";
+import { getFileRunSettings, ReadonlyTerminal } from "./vscode";
 import { getLogger } from "./logging";
 import type { Status } from "../../shared/enums";
+import type { LanguageSettings } from "../../shared/schemas";
+
+function arrayEquals<T>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((value, index) => value === b[index]);
+}
 
 type Win32MemoryAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
@@ -288,7 +297,11 @@ export class Runnable {
     }
   }
 
-  run(command: string, timeout: number, memoryLimit: number, cwd?: string, ...args: string[]) {
+  run(command: string[], timeout: number, memoryLimit: number, cwd?: string) {
+    if (command.length === 0) {
+      throw new Error("Runnable.run requires at least one command element");
+    }
+    const [commandName, ...commandArgs] = command;
     // FIXME: Simplify TL to check a flag once https://github.com/nodejs/node/pull/51608 lands
 
     // Reset metrics for a fresh run. All other state is set by event handlers or reassigned below.
@@ -305,7 +318,7 @@ export class Runnable {
       signals.push(timeoutSignal);
     }
     this._combinedAbortSignal = AbortSignal.any(signals);
-    this._process = childProcess.spawn(command, args, {
+    this._process = childProcess.spawn(commandName, commandArgs, {
       cwd,
       signal: this._combinedAbortSignal,
     });
@@ -337,7 +350,7 @@ export class Runnable {
         this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
         const logger = getLogger("runtime");
         logger.error(
-          `Process spawn failed (command=${command}, args=${args.join(" ")}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
+          `Process spawn failed (command=${commandName}, args=${commandArgs}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
         );
 
         // We have to set error state here because of platform-dependent behavior
@@ -487,12 +500,14 @@ export async function getFileChecksum(file: string): Promise<string> {
   });
 }
 
-async function doCompile(file: string, context: vscode.ExtensionContext): Promise<number> {
-  const compileArguments = getFileCommandArguments(file, "compileCommand")!;
-  const compileCommand = compileArguments.join(" ");
+async function doCompile(
+  file: string,
+  compileCommand: string[],
+  context: vscode.ExtensionContext
+): Promise<number> {
   const currentChecksum = await getFileChecksum(file);
-  const [cachedChecksum, cachedCommand] = lastCompiled.get(file) ?? [-1, ""];
-  if (currentChecksum === cachedChecksum && compileCommand === cachedCommand) {
+  const [cachedChecksum, cachedCommand] = lastCompiled.get(file) ?? [-1, []];
+  if (currentChecksum === cachedChecksum && arrayEquals(compileCommand, cachedCommand)) {
     return 0; // avoid unnecessary recompilation
   }
 
@@ -515,7 +530,7 @@ async function doCompile(file: string, context: vscode.ExtensionContext): Promis
       context.subscriptions.push(compilationStatusItem);
 
       const runnable = new Runnable();
-      runnable.run(compileArguments[0], 0, 0, undefined, ...compileArguments.slice(1));
+      runnable.run(compileCommand, 0, 0);
 
       let err = "";
       runnable
@@ -566,8 +581,9 @@ async function doCompile(file: string, context: vscode.ExtensionContext): Promis
 }
 
 const errorTerminal: Map<string, vscode.Terminal> = new Map();
-const lastCompiled: Map<string, [string, string]> = new Map(); // [file checksum, compile command]
+const lastCompiled: Map<string, [string, string[]]> = new Map(); // [file checksum, compile command]
 const compilePromise: Map<string, Promise<number>> = new Map();
+
 export function compile(file: string, context: vscode.ExtensionContext): Promise<number> | null {
   errorTerminal.get(file)?.dispose();
 
@@ -576,15 +592,18 @@ export function compile(file: string, context: vscode.ExtensionContext): Promise
     return Promise.resolve(1);
   }
 
-  const languageSettings = getLanguageSettings(file);
-  if (!languageSettings) {
+  const settings = getFileRunSettings(file);
+  if (!settings) {
+    vscode.window.showErrorMessage(`No run settings found for ${file}`);
     return Promise.resolve(1);
   }
+
+  const extension = path.extname(file);
+  const languageSettings = settings[extension] as LanguageSettings;
   if (!languageSettings.compileCommand) {
     return null;
   }
-
-  return doCompile(file, context);
+  return doCompile(file, languageSettings.compileCommand, context);
 }
 
 export function clearCompileCache(): void {

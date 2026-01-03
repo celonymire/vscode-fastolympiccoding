@@ -136,28 +136,8 @@
         }
       },
       {
-        "title": "Interactive",
-        "properties": {
-          "fastolympiccoding.interactorFile": {
-            "type": "string",
-            "default": "${path:${fileDirname}/${fileBasenameNoExtension}__Interactor${fileExtname}}",
-            "description": "The full path to the interactor file."
-          }
-        }
-      },
-      {
         "title": "Stress Tester",
         "properties": {
-          "fastolympiccoding.goodSolutionFile": {
-            "type": "string",
-            "default": "${path:${fileDirname}/${fileBasenameNoExtension}__Good${fileExtname}}",
-            "description": "The full path to the good solution file."
-          },
-          "fastolympiccoding.generatorFile": {
-            "type": "string",
-            "default": "${path:${fileDirname}/${fileBasenameNoExtension}__Generator${fileExtname}}",
-            "description": "The full path to the generator file."
-          },
           "fastolympiccoding.delayBetweenTestcases": {
             "type": "integer",
             "default": 5,
@@ -181,45 +161,6 @@
             "default": 60000,
             "description": "Maximum time (in milliseconds) to let the stress tester run. Use 0 to let it run infinitely.",
             "minimum": 0
-          }
-        }
-      },
-      {
-        "title": "Compile and Run",
-        "properties": {
-          "fastolympiccoding.runSettings": {
-            "type": "object",
-            "patternProperties": {
-              "\\.[a-zA-Z]+": {
-                "type": "object",
-                "properties": {
-                  "compileCommand": {
-                    "type": "string",
-                    "description": "Command to compile the solution (empty to avoid compilation)."
-                  },
-                  "runCommand": {
-                    "type": "string",
-                    "description": "Command to run the solution."
-                  },
-                  "debugCommand": {
-                    "type": "string",
-                    "description": "Command to start the solution under a debug server/wrapper (the extension will pipe testcase stdin to this process)."
-                  },
-                  "debugAttachConfig": {
-                    "type": "string",
-                    "description": "Name of a launch.json configuration to attach to the debug server started by debugCommand."
-                  },
-                  "currentWorkingDirectory": {
-                    "type": "string",
-                    "description": "Current working directory to set for the solution."
-                  }
-                },
-                "required": [
-                  "runCommand"
-                ]
-              }
-            },
-            "additionalProperties": false
           }
         }
       },
