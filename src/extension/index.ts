@@ -120,7 +120,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("fastolympiccoding.clearCompileCache", () => {
       clearCompileCache();
-      vscode.window.showInformationMessage("Compile cache cleared.");
     })
   );
 
