@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { compile } from "./utils/runtime";
+import { compile, clearCompileCache } from "./utils/runtime";
 import {
   createStatusBarItem,
   createListener,
@@ -120,6 +120,13 @@ function registerCommands(context: vscode.ExtensionContext): void {
           void compile(file, context); // we don't care about exit code of compilation
         }
       })();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.clearCompileCache", () => {
+      clearCompileCache();
+      vscode.window.showInformationMessage("Compile cache cleared.");
     })
   );
 

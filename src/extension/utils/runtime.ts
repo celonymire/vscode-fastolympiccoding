@@ -587,6 +587,10 @@ export function compile(file: string, context: vscode.ExtensionContext): Promise
   return doCompile(file, context);
 }
 
+export function clearCompileCache(): void {
+  lastCompiled.clear();
+}
+
 /**
  * Finds an available TCP port by binding to port 0 and letting the OS assign one.
  * Returns the assigned port number.

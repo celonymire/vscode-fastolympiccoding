@@ -290,6 +290,11 @@
         "category": "Fast Olympic Coding"
       },
       {
+        "command": "fastolympiccoding.clearCompileCache",
+        "title": "Clear Compile Cache",
+        "category": "Fast Olympic Coding"
+      },
+      {
         "command": "fastolympiccoding.runAll",
         "title": "Run All Testcases",
         "category": "Fast Olympic Coding",
