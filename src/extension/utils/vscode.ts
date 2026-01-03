@@ -470,7 +470,8 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
 export function getFileRunSettings(file: string): FileRunSettings | null {
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
   if (!workspaceFolder) {
-    logger.warn(`No workspace folder found for file ${file}`);
+    logger.error(`No workspace folder found for file ${file}`);
+    vscode.window.showErrorMessage(`No workspace folder found for file ${file}`);
     return null;
   }
 
@@ -500,6 +501,11 @@ export function getFileRunSettings(file: string): FileRunSettings | null {
     const settings = settingsStack.pop() ?? {};
     mergedSettings = deepMerge(mergedSettings, settings);
   }
+  if (Object.keys(mergedSettings).length === 0) {
+    logger.error(`No run settings found for ${file}`);
+    vscode.window.showErrorMessage(`No run settings found for ${file}`);
+    return null;
+  }
 
   // Resolve all variables in the merged settings
   const resolved = resolveVariables(mergedSettings, file) as Record<string, unknown>;
@@ -507,15 +513,16 @@ export function getFileRunSettings(file: string): FileRunSettings | null {
   // Validate against RunSettingsSchema
   const parseResult = v.safeParse(RunSettingsSchema, resolved);
   if (!parseResult.success) {
-    logger.error(`Invalid runSettings.json for file ${file}: ${parseResult.issues}`);
-    vscode.window.showErrorMessage(`Invalid run settings for ${file}`);
+    logger.error(`Invalid runSettings.json for ${file}: ${parseResult.issues}`);
+    vscode.window.showErrorMessage(`Invalid run settings ${file}`);
     return null;
   }
 
   const extension = path.extname(file);
   const languageSettings = parseResult.output[extension] as LanguageSettings | undefined;
   if (!languageSettings) {
-    logger.error(`No language settings found for extension ${extension}`);
+    logger.error(`No language settings found for extension "${extension}"`);
+    vscode.window.showErrorMessage(`No language settings found for extension "${extension}"`);
     return null;
   }
 
