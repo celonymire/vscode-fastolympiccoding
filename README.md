@@ -7,20 +7,25 @@
 <img src="https://vsmarketplacebadges.dev/installs-short/sam20908.vscode-fastolympiccoding.svg">
 <img src="https://vsmarketplacebadges.dev/rating-short/sam20908.vscode-fastolympiccoding.svg">
 </p>
+<p align="center">
+<img src="https://img.shields.io/open-vsx/v/sam20908/vscode-fastolympiccoding">
+<img src="https://img.shields.io/open-vsx/dt/sam20908/vscode-fastolympiccoding?style=flat">
+<img src="https://img.shields.io/open-vsx/rating/sam20908/vscode-fastolympiccoding">
+</p>
 
 <p align="center"><i>Once a mighty Competitive Programming plugin... Reborn with the powers of VSCode!</i></p>
 
 ## ⚡ Overview
 
-- [📜](#-judge) Minimal and _adaptive_ UI for maximized functionality and view utilization
+- [📜](#-judge) Minimal and **adaptive** UI for maximized functionality and view utilization
 - [🪲](#-debugging) Extension agnostic configuration for VSCode debugging UX with real-time inputs
-- [🐞](#-stress-tester) Built-in stress tester to aid your debugging
-- [🗨️](#️-interactive-mode) First-class support for interactive problems for **both** [Judge](#-judge) and [Stress Tester](#-stress-tester)!
+- [🐞](#-stress-tester) Built-in stress tester as a first-class feature
+- [🗨️](#️-interactive-mode) First-class support for interactive problems within **both** [Judge](#-judge) and [Stress Tester](#-stress-tester)!
+- [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) to gather problem inputs easily
 - [👜](#-inserting-prewritten-code) Insert file templates without leaving your code
-- [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) for efficient problem gathering
 - ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
 
-### 📥 Install within Visual Studio Code or at [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sam20908.vscode-fastolympiccoding)
+#### 📥 Fast Olympic Coding is available on [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sam20908.vscode-fastolympiccoding) and [Open VSX Registry](https://open-vsx.org/extension/sam20908/vscode-fastolympiccoding)
 
 ---
 
@@ -90,18 +95,17 @@ workspace/
 - Enforce different set of supported languages
 - Different set of requirements within the same language. For example, USACO only supports C++17 while CodeForces generally update to newer standards.
 
-**⚡ Note**: Changes to `runSettings.json` files are automatically detected and cached for performance.
-
 </details>
 
 ---
 
 ### 📜 Judge
 
-The UI adapts to VSCode's theme, font family and font size. Minimalism from the old plugin has been improved with [VSCode Codicons](https://microsoft.github.io/vscode-codicons/dist/codicon.html) and the native look of VSCode. The new UI experience is integrated into both Judge and Stress Tester windows.
+Minimalistic UI from the old plugin have been reimagined to integrate VSCode's capabilities while maintaining the principle of maximum functionality within minimized space. The new UI experience is integrated into both Judge and Stress Tester views.
 
 - Run, edit, hide, skip testcases, you name it!
 - Hidden optimizations such as batched IO, truncating huge IO, and cached compilations.
+- Icons and tooltips to save space while being self-explanatory
 - Dedicated popup for compiler errors with color support
 - ... and so much more!
 
@@ -122,7 +126,7 @@ The extension typically attaches the debugger to an existing process, which allo
 
 **🚨Please use `${debugPort}` as the port for your debugging servers!** The hand-picked port provides the following benefits:
 
-1. The operating system allocated the port to ensure it is available
+1. The port is free
 2. Detects when the debugging server fails to launch at the chosen port within a timeframe
 3. Frees the port when error occurs
 
@@ -138,13 +142,13 @@ The extension typically attaches the debugger to an existing process, which allo
 </details>
 
 <details>
-  <summary>Example C++ configuration</summary>
+  <summary>©️ Example C++ configuration</summary>
 
 I recommend either Microsoft's official [**C/C++**](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) or [**Native Debug**](https://marketplace.visualstudio.com/items?itemName=webfreak.debug). CodeLLDB does not work because `lldb-server` cannot send real-time inputs.
 
-**C++ (and other compiled languages) requires debug symbols to be compiled in!** Easiest way is to add `-g` flag to your compile command.
+**‼️C++ (and other compiled languages) requires debug symbols to be compiled in!** Easiest way is to add `-g` flag to your compile command.
 
-Since both of them work with `gdbserver`, ensure that is installed, which is also what I tested with.
+🔔 Since both of them work with `gdbserver`, ensure that is installed, which is also what I tested with.
 
 Here are the steps for **Native Debug**, which should be very similar with **Microsoft C/C++**:
 
@@ -184,11 +188,11 @@ Here are the steps for **Native Debug**, which should be very similar with **Mic
 </details>
 
 <details>
-  <summary>Example Python configuration</summary>
+  <summary>🐍 Example Python configuration</summary>
 
 I recommend Microsoft's official [**Python Debugger**](https://marketplace.visualstudio.com/items?itemName=ms-python.debugpy) for the best experience. The extension has built-in support for `debugpy`, which is the de-facto Python debugging server.
 
-Ensure you have `debugpy` installed via `pip`.
+🔔 Ensure you have `debugpy` installed via `pip`.
 
 Here are the steps for **Python Debugger**:
 
@@ -227,13 +231,13 @@ Here are the steps for **Python Debugger**:
 </details>
 
 <details>
-  <summary>Example Java configuration</summary>
+  <summary>♨️ Example Java configuration</summary>
 
 I recommend Microsoft's official [**Debugger for Java**](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-debug) for the best experience. For some reason, Oracle's **Java** extension ignores breakpoints.
 
-**Compile your Java files with debug symbols!** Add `-g` flag to your compile command.
+**‼️Compile your Java files with debug symbols!** Add `-g` flag to your compile command.
 
-Ensure you have **Java Development Kit** version 1.8+ installed.
+🔔 Ensure you have **Java Development Kit** version 1.8+ installed.
 
 Here are the steps for **Debugger for Java**:
 
@@ -303,8 +307,8 @@ Required files (naming scheme can be configured in settings):
 
 Required files (naming scheme can be configured in settings):
 
-- `<name>.[ext]`: the solution to bruteforce against
-- `<name>__Interactor.[ext]`: the interactor to communicate with
+- `<name>.[ext]`: the solution
+- `<name>__Interactor.[ext]`: the interactor
 
 If you're using the stress tester, then you'll also need:
 
@@ -334,26 +338,6 @@ Interactive testcases have a special badge to make them distinguishable. If ther
 
 ---
 
-### 👜 Inserting Prewritten Code
-
-- Add the root directory of the templates to the settings
-- **NOTE**: Remove trailing newlines for fold to work (folding is optional via settings)
-  - Folding depends on VSCode support, which may require other extensions depending on the language.
-
-| ![Insert File Template Gif](media/insert_file_template.gif) |
-| :---------------------------------------------------------: |
-| _Adding a tree reroot DP template without switching files_  |
-
-<details>
-  <summary>Possible settings</summary>
-
-- `fileTemplatesBaseDirectory`: Full path to the base directory of all prewritten files (supports `${...}`)
-- `fileTemplatesDependencies` (optional): Maps a template path relative to base directory to a list of other relative template paths that this one depends on
-- `foldFileTemplate` (default: `false`): Whether to fold the newly inserted prewritten code
-</details>
-
----
-
 ### 🛜 Competitive Companion
 
 [Competitive Companion](https://github.com/jmerle/competitive-companion) is a widely recognized browser plugin to conveniently fetch problem inputs. The plugin works with wide range of online judges and is actively maintained. Native support has been integrated directly into the extension for optimal workflow.
@@ -375,6 +359,26 @@ Interactive testcases have a special badge to make them distinguishable. If ther
 - `includePattern` (default: `**/*`): Glob pattern to filter in the included files for asking prompt
 - `excludePattern` (default: _empty_): Glob pattern to filter out the included files for asking prompt
 - `port` (default: _1327_): Port number to listen from Competitive Companion
+</details>
+
+---
+
+### 👜 Inserting Prewritten Code
+
+- Add the root directory of the templates to the settings
+- **NOTE**: Remove trailing newlines for fold to work (folding is optional via settings)
+  - Folding depends on VSCode support, which may require other extensions depending on the language.
+
+| ![Insert File Template Gif](media/insert_file_template.gif) |
+| :---------------------------------------------------------: |
+| _Adding a tree reroot DP template without switching files_  |
+
+<details>
+  <summary>Possible settings</summary>
+
+- `fileTemplatesBaseDirectory`: Full path to the base directory of all prewritten files (supports `${...}`)
+- `fileTemplatesDependencies` (optional): Maps a template path relative to base directory to a list of other relative template paths that this one depends on
+- `foldFileTemplate` (default: `false`): Whether to fold the newly inserted prewritten code
 </details>
 
 ---
