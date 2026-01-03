@@ -10,7 +10,7 @@
     "Testing"
   ],
   "engines": {
-    "vscode": "^1.107.0"
+    "vscode": "^1.74.0"
   },
   "publisher": "sam20908",
   "repository": {
@@ -434,7 +434,7 @@
     "@rspack/cli": "^1.6.7",
     "@types/node": "^22.19.2",
     "@types/pidusage": "^2.0.5",
-    "@types/vscode": "^1.107.0",
+    "@types/vscode": "1.74.0",
     "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
