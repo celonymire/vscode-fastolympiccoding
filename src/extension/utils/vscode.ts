@@ -281,7 +281,6 @@ function resolveStringVariables(
     "${execPath}": process.execPath,
     "${pathSeparator}": path.sep,
     "${/}": path.sep,
-    "${exeExtname}": os.platform() === "win32" ? ".exe" : "",
   };
 
   // Merge extraVariables into substitutions

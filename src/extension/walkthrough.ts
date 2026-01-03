@@ -5,13 +5,8 @@ import * as vscode from "vscode";
 const languageTemplates: Record<string, object> = {
   "C++": {
     ".cpp": {
-      compileCommand: [
-        "g++",
-        "${file}",
-        "-o",
-        "${fileDirname}/${fileBasenameNoExtension}${exeExtname}",
-      ],
-      runCommand: ["${fileDirname}/${fileBasenameNoExtension}${exeExtname}"],
+      compileCommand: ["g++", "${file}", "-o", "${fileDirname}/${fileBasenameNoExtension}"],
+      runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
     },
   },
   Python: {

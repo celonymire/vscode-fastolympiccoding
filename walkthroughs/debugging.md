@@ -21,11 +21,7 @@ Here are the steps for **Native Debug**, which should be very similar with **Mic
 {
   ".cpp": {
     // compile and run configurations from above...
-    "debugCommand": [
-      "gdbserver",
-      ":${debugPort}",
-      "${fileDirname}/${fileBasenameNoExtension}${exeExtname}"
-    ],
+    "debugCommand": ["gdbserver", ":${debugPort}", "${fileDirname}/${fileBasenameNoExtension}"],
     "debugAttachConfig": "GDB: Attach"
   }
 }
@@ -40,7 +36,7 @@ Here are the steps for **Native Debug**, which should be very similar with **Mic
       "name": "GDB: Attach",
       "type": "gdb",
       "request": "attach",
-      "executable": "${fileDirname}/${fileBasenameNoExtension}${exeExtname}",
+      "executable": "${fileDirname}/${fileBasenameNoExtension}",
       "target": ":${debugPort}",
       "remote": true,
       "cwd": "${workspaceRoot}",
