@@ -21,6 +21,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Display npm logs on failure
+        if: failure()
+        run: |
+          if [ -d ~/.npm/_logs ]; then
+            echo "=== NPM Debug Logs ==="
+            find ~/.npm/_logs -name "*.log" -exec tail -n 100 {} \;
+          fi
+        shell: bash
+
       - name: Check and lint formatting
         run: npm run check
 
@@ -67,6 +76,15 @@ jobs:
       - name: Package VSIX (targeted)
         if: matrix.vsceTarget != ''
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
+
+      - name: Display npm logs on failure
+        if: failure()
+        run: |
+          if [ -d ~/.npm/_logs ]; then
+            echo "=== NPM Debug Logs ==="
+            find ~/.npm/_logs -name "*.log" -exec tail -n 100 {} \;
+          fi
+        shell: bash
 
       - name: Detect VSIX filename
         id: vsix-file
