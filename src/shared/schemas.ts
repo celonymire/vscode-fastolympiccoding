@@ -6,7 +6,7 @@ export type Mode = (typeof MODES)[number];
 
 export const LanguageSettingsSchema = v.object({
   compileCommand: v.optional(v.array(v.string())),
-  runCommand: v.array(v.string()),
+  runCommand: v.optional(v.array(v.string())),
   currentWorkingDirectory: v.optional(v.string()),
   debugCommand: v.optional(v.array(v.string())),
   debugAttachConfig: v.optional(v.string()),
@@ -21,20 +21,22 @@ export const RunSettingsSchema = v.pipe(
   }),
   v.check((value) => {
     // Validate that any additional properties have keys starting with '.' (file extension)
-    // and values matching LanguageSettingsSchema
-    for (const [key, val] of Object.entries(value)) {
+    return Object.keys(value).every((key) => {
       if (key !== "interactorFile" && key !== "goodSolutionFile" && key !== "generatorFile") {
-        if (!key.startsWith(".")) {
-          return false;
-        }
-        const parseResult = v.safeParse(LanguageSettingsSchema, val);
-        if (!parseResult.success) {
-          return false;
-        }
+        return key.startsWith(".");
       }
-    }
-    return true;
-  }, "Additional properties must be file extensions (starting with '.') with language settings as values")
+      return true; // Skip known properties
+    });
+  }, "Additional properties must be file extensions (starting with '.')"),
+  v.check((value) => {
+    // Validate the values of additional properties match LanguageSettingsSchema
+    return Object.entries(value).every(([key, val]) => {
+      if (key !== "interactorFile" && key !== "goodSolutionFile" && key !== "generatorFile") {
+        return v.safeParse(LanguageSettingsSchema, val).success;
+      }
+      return true; // Skip known properties
+    });
+  }, "Additional property values must match language settings schema")
 );
 export type RunSettings = v.InferOutput<typeof RunSettingsSchema>;
 
