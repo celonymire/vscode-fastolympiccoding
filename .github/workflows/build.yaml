@@ -21,6 +21,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Display npm logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== NPM Debug Logs ==="
+          if (Test-Path "$env:APPDATA\npm-cache\_logs") {
+            Get-ChildItem -Path "$env:APPDATA\npm-cache\_logs" -Filter "*-debug-0.log" | ForEach-Object {
+              Write-Host "\n--- $($_.Name) ---"
+              Get-Content $_ -Tail 100
+            }
+          } elseif (Test-Path "~/.npm/_logs") {
+            Get-ChildItem -Path "~/.npm/_logs" -Filter "*.log" | ForEach-Object {
+              Write-Host "\n--- $($_.Name) ---"
+              Get-Content $_ -Tail 100
+            }
+          }
+
       - name: Check and lint formatting
         run: npm run check
 
@@ -59,6 +76,23 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Display npm logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== NPM Debug Logs ==="
+          if (Test-Path "$env:APPDATA\npm-cache\_logs") {
+            Get-ChildItem -Path "$env:APPDATA\npm-cache\_logs" -Filter "*-debug-0.log" | ForEach-Object {
+              Write-Host "\n--- $($_.Name) ---"
+              Get-Content $_ -Tail 100
+            }
+          } elseif (Test-Path "~/.npm/_logs") {
+            Get-ChildItem -Path "~/.npm/_logs" -Filter "*.log" | ForEach-Object {
+              Write-Host "\n--- $($_.Name) ---"
+              Get-Content $_ -Tail 100
+            }
+          }
 
       - name: Package VSIX (universal)
         if: matrix.vsceTarget == ''
