@@ -512,7 +512,7 @@ export function getFileRunSettings(file: string): FileRunSettings | null {
   // Validate against RunSettingsSchema
   const parseResult = v.safeParse(RunSettingsSchema, resolved);
   if (!parseResult.success) {
-    logger.error(`Invalid runSettings.json for ${file}: ${parseResult.issues}`);
+    logger.error(`Invalid runSettings.json for ${file}: ${parseResult.issues[0].message}`);
     vscode.window.showErrorMessage(`Invalid run settings ${file}`);
     return null;
   }
