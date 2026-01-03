@@ -13,6 +13,24 @@ export type WriteMode = "batch" | "force" | "final";
 
 export type FileRunSettings = RunSettings & { languageSettings: LanguageSettings };
 
+/**
+ * Properties that are string file paths and should be normalized.
+ * Based on runSettings.schema.json.
+ */
+const STRING_PATH_PROPERTIES = new Set([
+  "interactorFile",
+  "goodSolutionFile",
+  "generatorFile",
+  "currentWorkingDirectory",
+]);
+
+/**
+ * Properties that are command arrays whose items may contain paths.
+ * All items will be normalized (path.normalize is safe on any string).
+ * Based on runSettings.schema.json.
+ */
+const COMMAND_ARRAY_PROPERTIES = new Set(["compileCommand", "runCommand", "debugCommand"]);
+
 export class ReadonlyTerminal implements vscode.Pseudoterminal {
   private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
   private _closeEmitter: vscode.EventEmitter<number> = new vscode.EventEmitter();
@@ -240,7 +258,8 @@ function getSelectedText(activeEditor: vscode.TextEditor | undefined): string {
 function resolveStringVariables(
   string: string,
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyName?: string
 ): string {
   const workspaces = vscode.workspace.workspaceFolders;
   const workspace = vscode.workspace.workspaceFolders?.at(0);
@@ -297,25 +316,50 @@ function resolveStringVariables(
       .join("|"),
     "g"
   );
-  return string.replace(variableRegex, (variable) => substitutions[variable]);
+  const resolved = string.replace(variableRegex, (variable) => substitutions[variable]);
+
+  // Normalize paths for known string path properties
+  if (propertyName && STRING_PATH_PROPERTIES.has(propertyName)) {
+    return path.normalize(resolved);
+  }
+
+  return resolved;
 }
 
 function resolveArrayVariables(
   array: unknown[],
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyName?: string
 ): unknown[] {
-  return array.map((item) => resolveVariables(item as never, inContextOfFile, extraVariables));
+  // For command arrays, normalize all string items after variable resolution.
+  // path.normalize() is safe to call on any string (flags, executables, paths).
+  // This ensures consistent path separators for paths while leaving other strings unchanged.
+  // Note: Node.js spawn() handles spaces in arguments correctly, so no quoting is needed.
+  const isCommandArray = propertyName && COMMAND_ARRAY_PROPERTIES.has(propertyName);
+
+  return array.map((item) => {
+    const resolved = resolveVariables(item as never, inContextOfFile, extraVariables);
+
+    // Normalize all string items in command arrays
+    if (isCommandArray && typeof resolved === "string") {
+      return path.normalize(resolved);
+    }
+
+    return resolved;
+  });
 }
 
 function resolveObjectVariables(
   obj: Record<string, unknown>,
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyPath?: string
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
-    result[key] = resolveVariables(val as never, inContextOfFile, extraVariables);
+    // Pass the current key as propertyName to child resolution
+    result[key] = resolveVariables(val as never, inContextOfFile, extraVariables, key);
   }
   return result;
 }
@@ -323,35 +367,40 @@ function resolveObjectVariables(
 export function resolveVariables(
   value: string,
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyName?: string
 ): string;
 export function resolveVariables(
   value: unknown[],
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyName?: string
 ): unknown[];
 export function resolveVariables(
   value: Record<string, unknown>,
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyName?: string
 ): Record<string, unknown>;
 export function resolveVariables(
   value: unknown,
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>
+  extraVariables?: Record<string, string>,
+  propertyName?: string
 ): unknown {
   if (Array.isArray(value)) {
-    return resolveArrayVariables(value, inContextOfFile, extraVariables);
+    return resolveArrayVariables(value, inContextOfFile, extraVariables, propertyName);
   }
   if (typeof value === "object" && value !== null) {
     return resolveObjectVariables(
       value as Record<string, unknown>,
       inContextOfFile,
-      extraVariables
+      extraVariables,
+      propertyName
     );
   }
   if (typeof value === "string") {
-    return resolveStringVariables(value, inContextOfFile, extraVariables);
+    return resolveStringVariables(value, inContextOfFile, extraVariables, propertyName);
   }
   return value;
 }
