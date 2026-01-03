@@ -81,6 +81,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Package VSIX (universal)
+        if: matrix.vsceTarget == ''
+        run: npx --yes @vscode/vsce package
+
+      - name: Package VSIX (targeted)
+        if: matrix.vsceTarget != ''
+        run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
+
       - name: Display npm logs on failure
         if: failure()
         shell: pwsh
@@ -97,14 +105,6 @@ jobs:
               Get-Content $_ -Tail 100
             }
           }
-
-      - name: Package VSIX (universal)
-        if: matrix.vsceTarget == ''
-        run: npx --yes @vscode/vsce package
-
-      - name: Package VSIX (targeted)
-        if: matrix.vsceTarget != ''
-        run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
       - name: Detect VSIX filename
         id: vsix-file
