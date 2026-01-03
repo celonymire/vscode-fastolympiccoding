@@ -322,6 +322,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
+    if (!solutionSettings.languageSettings.runCommand) {
+      const logger = getLogger("stress");
+      logger.error(`No run command for ${this._currentFile}`);
+      vscode.window.showErrorMessage(`No run command for ${this._currentFile}`);
+      return;
+    }
+    if (!generatorSettings.languageSettings.runCommand) {
+      const logger = getLogger("stress");
+      logger.error(`No run command for ${solutionSettings.generatorFile}`);
+      vscode.window.showErrorMessage(`No run command for ${solutionSettings.generatorFile}`);
+      return;
+    }
+    if (!judgeSettings.languageSettings.runCommand) {
+      const logger = getLogger("stress");
+      const judgeFile = this._interactiveMode
+        ? solutionSettings.interactorFile!
+        : solutionSettings.goodSolutionFile!;
+      logger.error(`No run command for ${judgeFile}`);
+      vscode.window.showErrorMessage(`No run command for ${judgeFile}`);
+      return;
+    }
+
     const callback = (state: State, code: number) => {
       const status = code ? "CE" : "NA";
       state.status = status;

@@ -172,7 +172,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (!interactorSettings) {
         return null;
       }
-      interactorArgs = interactorSettings.languageSettings.runCommand;
+      const interactorRunCommand = interactorSettings.languageSettings.runCommand;
+      if (!interactorRunCommand) {
+        const logger = getLogger("judge");
+        logger.error(`No run command for ${this._currentFile}`);
+        vscode.window.showErrorMessage(`No run command for ${this._currentFile}`);
+        return null;
+      }
+      interactorArgs = interactorRunCommand;
     }
 
     if (token.isCancellationRequested) {
@@ -217,6 +224,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
       this._saveFileData();
       return true;
+    } else {
+      testcase.status = "NA";
+      super._postMessage({
+        type: "SET",
+        id,
+        property: "status",
+        value: "NA",
+      });
     }
 
     return token.isCancellationRequested;
@@ -258,8 +273,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _launchTestcase(ctx: ExecutionContext, newTestcase: boolean) {
     const { token, testcase, languageSettings, cwd } = ctx;
     if (!languageSettings.runCommand) {
+      const logger = getLogger("judge");
+      logger.error(`No run command for file ${this._currentFile}`);
+      vscode.window.showErrorMessage(`No run command for file ${this._currentFile}`);
       return;
     }
+    this._prepareRunningState(testcase.id, testcase);
 
     testcase.process.run(
       languageSettings.runCommand,
@@ -331,9 +350,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private async _launchInteractiveTestcase(ctx: ExecutionContext, bypassLimits: boolean) {
     const { token, testcase, languageSettings, interactorArgs, cwd } = ctx;
-    if (!languageSettings.runCommand || !interactorArgs) {
+    if (!languageSettings.runCommand) {
+      const logger = getLogger("judge");
+      logger.error(`No run command for file ${this._currentFile}`);
+      vscode.window.showErrorMessage(`No run command for file ${this._currentFile}`);
       return;
     }
+    this._prepareRunningState(testcase.id, testcase);
 
     testcase.process.run(
       languageSettings.runCommand,
@@ -342,7 +365,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       cwd
     );
     // Don't restrict the interactor's time and memory limit
-    testcase.interactorProcess.run(interactorArgs, 0, 0, cwd);
+    testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
 
     const proc = testcase.process.process;
     const interactorProc = testcase.interactorProcess.process;
@@ -966,7 +989,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    this._prepareRunningState(id, ctx.testcase);
     if (ctx.testcase.mode === "interactive") {
       this._launchInteractiveTestcase(ctx, newTestcase);
     } else {
