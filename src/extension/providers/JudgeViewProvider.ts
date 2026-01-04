@@ -126,7 +126,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _activeDebugTestcaseId?: number;
 
   // If the testcase is interactive, ensure interactive settings are also valid and resolved
-  private async _getExecutionContext(id: number): Promise<ExecutionContext | null> {
+  private async _getExecutionContext(
+    id: number,
+    extraVariables?: Record<string, string>
+  ): Promise<ExecutionContext | null> {
     const token = this._fileCancellation?.token;
     if (!token || token.isCancellationRequested || !this._currentFile) {
       return null;
@@ -144,7 +147,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
-    const settings = getFileRunSettings(this._currentFile);
+    const settings = getFileRunSettings(this._currentFile, extraVariables);
     if (!settings) {
       return null;
     }
@@ -270,20 +273,26 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _launchTestcase(ctx: ExecutionContext, newTestcase: boolean) {
+  private _launchTestcase(ctx: ExecutionContext, bypassLimits: boolean, debugMode: boolean) {
     const { token, testcase, languageSettings, cwd } = ctx;
-    if (!languageSettings.runCommand) {
+    if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
       logger.error(`No run command for file ${this._currentFile}`);
       vscode.window.showErrorMessage(`No run command for file ${this._currentFile}`);
       return;
     }
+    // we don't need to check debug command and config because they were checked at the caller
     this._prepareRunningState(testcase.id, testcase);
 
+    const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
+    if (!runCommand) {
+      return;
+    }
+
     testcase.process.run(
-      languageSettings.runCommand,
-      newTestcase ? 0 : this._timeLimit,
-      newTestcase ? 0 : this._memoryLimit,
+      runCommand,
+      bypassLimits ? 0 : this._timeLimit,
+      bypassLimits ? 0 : this._memoryLimit,
       cwd
     );
 
@@ -348,18 +357,28 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
   }
 
-  private async _launchInteractiveTestcase(ctx: ExecutionContext, bypassLimits: boolean) {
+  private async _launchInteractiveTestcase(
+    ctx: ExecutionContext,
+    bypassLimits: boolean,
+    debugMode: boolean
+  ) {
     const { token, testcase, languageSettings, interactorArgs, cwd } = ctx;
-    if (!languageSettings.runCommand) {
+    if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
       logger.error(`No run command for file ${this._currentFile}`);
       vscode.window.showErrorMessage(`No run command for file ${this._currentFile}`);
       return;
     }
+    // we don't need to check debug command and config because they were checked at the caller
     this._prepareRunningState(testcase.id, testcase);
 
+    const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
+    if (!runCommand) {
+      return;
+    }
+
     testcase.process.run(
-      languageSettings.runCommand,
+      runCommand,
       bypassLimits ? 0 : this._timeLimit,
       bypassLimits ? 0 : this._memoryLimit,
       cwd
@@ -990,25 +1009,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     if (ctx.testcase.mode === "interactive") {
-      this._launchInteractiveTestcase(ctx, newTestcase);
+      this._launchInteractiveTestcase(ctx, newTestcase, false);
     } else {
-      this._launchTestcase(ctx, newTestcase);
+      this._launchTestcase(ctx, newTestcase, false);
     }
   }
 
   private async _debug(id: number): Promise<void> {
-    const ctx = await this._getExecutionContext(id);
-    if (!ctx || !this._currentFile) {
-      return;
-    }
-
-    if (!ctx.languageSettings.debugCommand || !ctx.languageSettings.debugAttachConfig) {
-      const logger = getLogger("judge");
-      logger.error(`Debug settings missing for language`);
-      vscode.window.showErrorMessage("Missing debug settings for this language");
-      return;
-    }
-
     let debugPort: number;
     try {
       debugPort = await findAvailablePort();
@@ -1020,6 +1027,24 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
     const extraVariables = { debugPort: String(debugPort) };
+
+    const ctx = await this._getExecutionContext(id, extraVariables);
+    if (!ctx || !this._currentFile) {
+      return;
+    }
+
+    if (!ctx.languageSettings.debugCommand) {
+      const logger = getLogger("judge");
+      logger.error(`No debug command for ${this._currentFile}`);
+      vscode.window.showErrorMessage(`No debug command for ${this._currentFile}`);
+      return;
+    }
+    if (!ctx.languageSettings.debugAttachConfig) {
+      const logger = getLogger("judge");
+      logger.error(`No debug attach configuration for ${this._currentFile}`);
+      vscode.window.showErrorMessage(`No debug attach configuration for ${this._currentFile}`);
+      return;
+    }
 
     // get the attach debug configuration
     const folder =
@@ -1038,12 +1063,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    this._prepareRunningState(id, ctx.testcase);
     // No limits for debugging testcases
     if (ctx.testcase.mode === "interactive") {
-      this._launchInteractiveTestcase(ctx, true);
+      this._launchInteractiveTestcase(ctx, true, true);
     } else {
-      this._launchTestcase(ctx, true);
+      this._launchTestcase(ctx, true, true);
     }
 
     // Wait for the debug process to spawn before attaching

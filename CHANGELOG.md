@@ -1,3 +1,9 @@
+# 3.0.1
+
+### Fixed
+
+- Debugger not working
+
 # 3.0.0
 
 ### Added

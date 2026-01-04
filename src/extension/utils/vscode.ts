@@ -516,7 +516,10 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
  * Also enforces the settings has the corresponding extension entry.
  * Returns the merged settings with all variables resolved and validated.
  */
-export function getFileRunSettings(file: string): FileRunSettings | null {
+export function getFileRunSettings(
+  file: string,
+  extraVariables?: Record<string, string>
+): FileRunSettings | null {
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
   if (!workspaceFolder) {
     logger.error(`No workspace folder found for file ${file}`);
@@ -555,11 +558,8 @@ export function getFileRunSettings(file: string): FileRunSettings | null {
     vscode.window.showErrorMessage(`No run settings found for ${file}`);
     return null;
   }
+  const resolved = resolveVariables(mergedSettings, file, extraVariables);
 
-  // Resolve all variables in the merged settings
-  const resolved = resolveVariables(mergedSettings, file) as Record<string, unknown>;
-
-  // Validate against RunSettingsSchema
   const parseResult = v.safeParse(RunSettingsSchema, resolved);
   if (!parseResult.success) {
     logger.error(`Invalid runSettings.json for ${file}: ${parseResult.issues[0].message}`);
