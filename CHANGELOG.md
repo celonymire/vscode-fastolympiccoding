@@ -3,10 +3,12 @@
 ### Changed
 
 - When creating runSettings.json through the command, it will have additional option to preview the examples
+- Missing run setting related error messages will show the option to create or open run settings depending on the error
 
 ### Fixed
 
 - Debugger not working
+- An error message pointing to current file instead of the interactor file
 
 # 3.0.0
 

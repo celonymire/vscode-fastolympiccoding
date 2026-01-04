@@ -555,7 +555,7 @@ export function getFileRunSettings(
   }
   if (Object.keys(mergedSettings).length === 0) {
     logger.error(`No run settings found for ${file}`);
-    vscode.window.showErrorMessage(`No run settings found for ${file}`);
+    showCreateRunSettingsErrorWindow(`No run settings found for ${file}`);
     return null;
   }
   const resolved = resolveVariables(mergedSettings, file, extraVariables);
@@ -563,17 +563,32 @@ export function getFileRunSettings(
   const parseResult = v.safeParse(RunSettingsSchema, resolved);
   if (!parseResult.success) {
     logger.error(`Invalid runSettings.json for ${file}: ${parseResult.issues[0].message}`);
-    vscode.window.showErrorMessage(`Invalid run settings ${file}`);
+    showOpenRunSettingsErrorWindow(`Invalid run settings for ${file}`);
     return null;
   }
 
   const extension = path.extname(file);
   const languageSettings = parseResult.output[extension] as LanguageSettings | undefined;
   if (!languageSettings) {
-    logger.error(`No language settings found for extension "${extension}"`);
-    vscode.window.showErrorMessage(`No language settings found for extension "${extension}"`);
+    logger.error(`No language settings found for "${extension}"`);
+    showOpenRunSettingsErrorWindow(`No language settings found for "${extension}"`);
     return null;
   }
 
   return { ...parseResult.output, languageSettings };
+}
+export function showCreateRunSettingsErrorWindow(message: string): void {
+  vscode.window.showErrorMessage(message, "Create Run Settings", "Close").then((choice) => {
+    if (choice === "Create Run Settings") {
+      vscode.commands.executeCommand("fastolympiccoding.createRunSettings");
+    }
+  });
+}
+
+export function showOpenRunSettingsErrorWindow(message: string): void {
+  vscode.window.showErrorMessage(message, "Open Run Settings", "Close").then((choice) => {
+    if (choice === "Open Run Settings") {
+      vscode.commands.executeCommand("fastolympiccoding.openRunSettings");
+    }
+  });
 }

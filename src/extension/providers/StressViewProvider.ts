@@ -12,6 +12,7 @@ import {
 import {
   getFileRunSettings,
   openInNewEditor,
+  showOpenRunSettingsErrorWindow,
   TextHandler,
   type FileRunSettings,
   type WriteMode,
@@ -291,19 +292,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!solutionSettings.generatorFile) {
       const logger = getLogger("stress");
       logger.error(`No generator file specified in run settings`);
-      vscode.window.showErrorMessage(`No generator file specified in run settings`);
+      showOpenRunSettingsErrorWindow(`No generator file specified in run settings`);
       return;
     }
     if (!this._interactiveMode && !solutionSettings.goodSolutionFile) {
       const logger = getLogger("stress");
       logger.error(`No good solution file specified in run settings`);
-      vscode.window.showErrorMessage(`No good solution file specified in run settings`);
+      showOpenRunSettingsErrorWindow(`No good solution file specified in run settings`);
       return;
     }
     if (this._interactiveMode && !solutionSettings.interactorFile) {
       const logger = getLogger("stress");
       logger.error(`No interactor file specified in run settings`);
-      vscode.window.showErrorMessage(`No interactor file specified in run settings`);
+      showOpenRunSettingsErrorWindow(`No interactor file specified in run settings`);
       return;
     }
 
@@ -325,13 +326,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!solutionSettings.languageSettings.runCommand) {
       const logger = getLogger("stress");
       logger.error(`No run command for ${this._currentFile}`);
-      vscode.window.showErrorMessage(`No run command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`);
       return;
     }
     if (!generatorSettings.languageSettings.runCommand) {
       const logger = getLogger("stress");
       logger.error(`No run command for ${solutionSettings.generatorFile}`);
-      vscode.window.showErrorMessage(`No run command for ${solutionSettings.generatorFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${solutionSettings.generatorFile}`);
       return;
     }
     if (!judgeSettings.languageSettings.runCommand) {
@@ -340,7 +341,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         ? solutionSettings.interactorFile!
         : solutionSettings.goodSolutionFile!;
       logger.error(`No run command for ${judgeFile}`);
-      vscode.window.showErrorMessage(`No run command for ${judgeFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${judgeFile}`);
       return;
     }
 

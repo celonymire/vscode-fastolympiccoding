@@ -23,6 +23,7 @@ import {
   openInNewEditor,
   ReadonlyStringProvider,
   resolveVariables,
+  showOpenRunSettingsErrorWindow,
   TextHandler,
 } from "../utils/vscode";
 import { getLogger } from "../utils/logging";
@@ -157,7 +158,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (!settings.interactorFile) {
         const logger = getLogger("judge");
         logger.error(`No interactor file specified in run settings`);
-        vscode.window.showErrorMessage(`No interactor file specified in run settings`);
+        showOpenRunSettingsErrorWindow(`No interactor file specified in run settings`);
         return null;
       }
 
@@ -178,8 +179,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const interactorRunCommand = interactorSettings.languageSettings.runCommand;
       if (!interactorRunCommand) {
         const logger = getLogger("judge");
-        logger.error(`No run command for ${this._currentFile}`);
-        vscode.window.showErrorMessage(`No run command for ${this._currentFile}`);
+        logger.error(`No run command for ${settings.interactorFile!}`);
+        showOpenRunSettingsErrorWindow(`No run command for ${settings.interactorFile!}`);
         return null;
       }
       interactorArgs = interactorRunCommand;
@@ -277,8 +278,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const { token, testcase, languageSettings, cwd } = ctx;
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
-      logger.error(`No run command for file ${this._currentFile}`);
-      vscode.window.showErrorMessage(`No run command for file ${this._currentFile}`);
+      logger.error(`No run command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`);
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
@@ -365,8 +366,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const { token, testcase, languageSettings, interactorArgs, cwd } = ctx;
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
-      logger.error(`No run command for file ${this._currentFile}`);
-      vscode.window.showErrorMessage(`No run command for file ${this._currentFile}`);
+      logger.error(`No run command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`);
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
@@ -1036,13 +1037,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!ctx.languageSettings.debugCommand) {
       const logger = getLogger("judge");
       logger.error(`No debug command for ${this._currentFile}`);
-      vscode.window.showErrorMessage(`No debug command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No debug command for ${this._currentFile}`);
       return;
     }
     if (!ctx.languageSettings.debugAttachConfig) {
       const logger = getLogger("judge");
       logger.error(`No debug attach configuration for ${this._currentFile}`);
-      vscode.window.showErrorMessage(`No debug attach configuration for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No debug attach configuration for ${this._currentFile}`);
       return;
     }
 
@@ -1057,9 +1058,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!attachConfig) {
       const logger = getLogger("judge");
       logger.error(
-        `Debug attach configuration not found: ${ctx.languageSettings.debugAttachConfig}`
+        `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`
       );
-      vscode.window.showErrorMessage("Debug attach configuration not found.");
+      showOpenRunSettingsErrorWindow(
+        `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`
+      );
       return;
     }
 
