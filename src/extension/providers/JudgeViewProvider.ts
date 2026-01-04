@@ -737,7 +737,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
     if (file === current) {
-      this._addTestcase("standard", testcase); // FIXME: Properly set interactive parameter when stress tester is updated
+      this._addTestcase(testcase.mode, testcase);
       this._saveFileData();
     } else {
       const storageData = super.readStorage()[file];

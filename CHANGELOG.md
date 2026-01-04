@@ -15,6 +15,7 @@
 ### Fixed
 
 - Hanging compiling status in some cases
+- Interactive testcases aren't being properly added from stress tester
 
 ### Removed
 
