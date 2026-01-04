@@ -300,8 +300,6 @@ export class Runnable {
       throw new Error("Runnable.run requires at least one command element");
     }
     const [commandName, ...commandArgs] = command;
-    // FIXME: Simplify TL to check a flag once https://github.com/nodejs/node/pull/51608 lands
-
     // Reset metrics for a fresh run. All other state is set by event handlers or reassigned below.
     this.cleanup();
     this._timedOut = false;
