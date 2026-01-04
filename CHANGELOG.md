@@ -1,5 +1,9 @@
 # 3.0.1
 
+### Changed
+
+- When creating runSettings.json through the command, it will have additional option to preview the examples
+
 ### Fixed
 
 - Debugger not working

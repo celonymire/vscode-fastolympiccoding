@@ -48,12 +48,21 @@ export function registerWalkthroughCommands(context: vscode.ExtensionContext): v
         const runSettingsPath = path.join(workspaceFolder.uri.fsPath, "runSettings.json");
         try {
           await fs.access(runSettingsPath);
-          const overwrite = await vscode.window.showWarningMessage(
+          const choice = await vscode.window.showWarningMessage(
             "runSettings.json already exists. Do you want to overwrite it?",
             "Yes",
-            "No"
+            "Preview Examples",
+            "Cancel"
           );
-          if (overwrite !== "Yes") {
+          if (choice === "Preview Examples") {
+            const preview = await vscode.workspace.openTextDocument({
+              language: "json",
+              content: JSON.stringify(languageTemplates, undefined, 2),
+            });
+            vscode.window.showTextDocument(preview);
+            return;
+          }
+          if (choice !== "Yes") {
             return;
           }
         } catch {
