@@ -27,33 +27,6 @@
     postProviderMessage({ type: "VIEW", id, stdio });
   }
 
-  function handleNewStdinKeyUp(event: KeyboardEvent) {
-    if (event.key === "Enter") {
-      postProviderMessage({
-        type: "STDIN",
-        id,
-        data: newStdin,
-      });
-      newStdin = "";
-    }
-  }
-
-  function handleStdinChange(value: string) {
-    updateTestcaseData(id, { stdin: value });
-  }
-
-  function handleAcceptedStdoutChange(value: string) {
-    updateTestcaseData(id, { acceptedStdout: value });
-  }
-
-  function handleNewInteractorSecretChange(value: string) {
-    newInteractorSecret = value;
-  }
-
-  function handleNewStdinChange(value: string) {
-    newStdin = value;
-  }
-
   function handleSaveInteractorSecret() {
     const interactorSecret = newInteractorSecret;
     newInteractorSecret = "";
@@ -145,9 +118,8 @@
         />
         {#if testcase.interactorSecret === "" || testcase.interactorSecret === "\n"}
           <AutoresizeTextarea
-            value={newInteractorSecret}
+            bind:value={newInteractorSecret}
             placeholder="New interactor secret..."
-            onchange={handleNewInteractorSecretChange}
             variant="active"
           />
           <button
@@ -169,10 +141,14 @@
           onexpand={() => handleExpandStdio("STDIN")}
         />
         <AutoresizeTextarea
-          value={newStdin}
+          bind:value={newStdin}
           placeholder="New stdin..."
-          onkeyup={handleNewStdinKeyUp}
-          onchange={handleNewStdinChange}
+          onkeyup={(e) => {
+            if (e.key === "Enter") {
+              postProviderMessage({ type: "STDIN", id, data: newStdin });
+              newStdin = "";
+            }
+          }}
           variant="active"
         />
       {/if}
@@ -191,16 +167,14 @@
   <div class="testcase-container">
     <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
     <AutoresizeTextarea
-      value={testcase.stdin}
+      bind:value={testcase.stdin}
       placeholder="Stdin..."
-      onchange={handleStdinChange}
       onexpand={() => handleExpandStdio("STDIN")}
     />
     <AutoresizeTextarea
-      value={testcase.acceptedStdout}
+      bind:value={testcase.acceptedStdout}
       placeholder="Accepted stdout..."
       variant="accepted"
-      onchange={handleAcceptedStdoutChange}
       onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
     />
   </div>

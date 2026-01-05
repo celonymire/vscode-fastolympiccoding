@@ -2,22 +2,20 @@
   type Variant = "default" | "stderr" | "accepted" | "active" | "interactor-secret";
 
   interface Props {
-    value: string;
+    value?: string;
     readonly?: boolean;
     hiddenOnEmpty?: boolean;
     placeholder?: string;
-    onchange?: (value: string) => void;
     onkeyup?: (event: KeyboardEvent) => void;
     onexpand?: () => void;
     variant?: Variant;
   }
 
   let {
-    value = "",
+    value = $bindable(""),
     readonly = false,
     hiddenOnEmpty = false,
     placeholder = "",
-    onchange,
     onkeyup,
     onexpand,
     variant = "default",
@@ -26,11 +24,6 @@
   let textarea: HTMLTextAreaElement | undefined = $state();
   let isHovered = $state();
   let containerElement: HTMLDivElement | undefined = $state();
-
-  function handleInput(event: Event) {
-    const target = event.target as HTMLTextAreaElement;
-    onchange?.(target.value);
-  }
 
   function handleKeyUp(event: KeyboardEvent) {
     onkeyup?.(event);
@@ -76,8 +69,7 @@
         class="content"
         data-variant={variant}
         {placeholder}
-        {value}
-        oninput={handleInput}
+        bind:value
         onkeyup={handleKeyUp}
       ></textarea>
     {/if}
