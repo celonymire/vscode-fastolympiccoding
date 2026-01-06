@@ -276,9 +276,10 @@
   textarea.content {
     field-sizing: content;
     min-height: 1lh;
+    max-height: calc(30 * 1lh);
     height: auto;
     resize: none;
-    overflow-y: hidden;
+    overflow-y: auto;
     outline: none;
     animation: pulse-default 1s infinite ease-in-out;
   }
