@@ -620,8 +620,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           interactorSecret: this._generatorState.stdout.data,
         });
       } else if (currentState?.state === "Judge") {
+        // add as standard testcase easily debug the interactor from reproduced queries
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
-          stdin: this._judgeState.stdin.data,
+          stdin: this._generatorState.stdout.data + this._solutionState.stdout.data,
           stderr: this._solutionState.stderr.data + this._judgeState.stderr.data,
           stdout: this._judgeState.stdout.data,
           acceptedStdout: "",
@@ -631,7 +632,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           shown: true,
           toggled: false,
           skipped: false,
-          mode: "interactive",
+          mode: "standard",
           interactorSecret: this._generatorState.stdout.data,
         });
       }
