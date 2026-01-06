@@ -11,6 +11,7 @@
     type ShowMessageSchema,
     type StdioMessageSchema,
     type WebviewMessage,
+    type FullDataSchema,
   } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
@@ -99,8 +100,14 @@
         postProviderMessage({
           type: "SAVE",
           id,
-          stdin: tc.stdin,
-          acceptedStdout: tc.acceptedStdout,
+          stdio: "STDIN",
+          data: tc.stdin,
+        });
+        postProviderMessage({
+          type: "SAVE",
+          id,
+          stdio: "ACCEPTED_STDOUT",
+          data: tc.acceptedStdout,
         });
       }
     }
@@ -155,11 +162,27 @@
     newMemoryLimit = Number(target.value);
   }
 
-  // Update testcase data from child component
-  function updateTestcaseData(id: number, updates: Partial<ITestcase>) {
+  function handleFullData({ id, stdio, data }: v.InferOutput<typeof FullDataSchema>) {
     const idx = findTestcaseIndex(id);
-    if (idx !== -1) {
-      Object.assign(testcases[idx].data, updates);
+    if (idx === -1) return;
+
+    const tc = testcases[idx].data;
+    switch (stdio) {
+      case "STDIN":
+        tc.stdin = data;
+        break;
+      case "STDERR":
+        tc.stderr = data;
+        break;
+      case "STDOUT":
+        tc.stdout = data;
+        break;
+      case "ACCEPTED_STDOUT":
+        tc.acceptedStdout = data;
+        break;
+      case "INTERACTOR_SECRET":
+        tc.interactorSecret = data;
+        break;
     }
   }
 
@@ -190,6 +213,9 @@
           break;
         case "SETTINGS_TOGGLE":
           handleSettingsToggle();
+          break;
+        case "FULL_DATA":
+          handleFullData(msg.data);
           break;
       }
     };
@@ -251,8 +277,8 @@
     </button>
   {:else}
     <div class="testcase-container">
-      {#each testcases as { id, data } (id)}
-        <Testcase {id} testcase={data} {updateTestcaseData} />
+      {#each testcases as testcase, index (testcase.id)}
+        <Testcase id={testcase.id} bind:testcase={testcases[index].data} />
       {/each}
       <div class="new-button-wrapper">
         <button class="text-button grow-1" type="button" onclick={handleNewTestcase}>

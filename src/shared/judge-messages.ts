@@ -1,18 +1,18 @@
 import * as v from "valibot";
-import { StdioSchema } from "./enums";
+import { StdioSchema, StdioValues } from "./enums";
 import { MODES } from "./schemas";
 
 export const ActionValues = [
   "RUN",
   "STOP",
   "DELETE",
-  "EDIT",
   "ACCEPT",
   "DECLINE",
   "TOGGLE_VISIBILITY",
   "TOGGLE_SKIP",
   "COMPARE",
   "DEBUG",
+  "REQUEST_DATA",
 ] as const;
 
 export type ActionValue = (typeof ActionValues)[number];
@@ -24,7 +24,6 @@ export const ProviderMessageTypeValues = [
   "NEXT",
   "ACTION",
   "SAVE",
-  "SAVE_INTERACTOR_SECRET",
   "VIEW",
   "STDIN",
   "TL",
@@ -53,14 +52,8 @@ export const ActionMessageSchema = v.object({
 export const SaveMessageSchema = v.object({
   type: v.literal("SAVE"),
   id: v.number(),
-  stdin: v.string(),
-  acceptedStdout: v.string(),
-});
-
-export const SaveInteractorSecretMessageSchema = v.object({
-  type: v.literal("SAVE_INTERACTOR_SECRET"),
-  id: v.number(),
-  secret: v.string(),
+  stdio: StdioSchema,
+  data: v.string(),
 });
 
 export const ViewMessageSchema = v.object({
@@ -85,16 +78,22 @@ export const SetMemoryLimitSchema = v.object({
   limit: v.number(),
 });
 
+export const RequestDataMessageSchema = v.object({
+  type: v.literal("REQUEST_DATA"),
+  id: v.number(),
+  stdio: v.picklist(StdioValues),
+});
+
 export const ProviderMessageSchema = v.union([
   LoadedMessageSchema,
   NextMessageSchema,
   ActionMessageSchema,
   SaveMessageSchema,
-  SaveInteractorSecretMessageSchema,
   ViewMessageSchema,
   StdinMessageSchema,
   SetTimeLimitSchema,
   SetMemoryLimitSchema,
+  RequestDataMessageSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;
@@ -170,6 +169,13 @@ export const SettingsToggleSchema = v.object({
   type: v.literal("SETTINGS_TOGGLE"),
 });
 
+export const FullDataSchema = v.object({
+  type: v.literal("FULL_DATA"),
+  id: v.number(),
+  stdio: v.picklist(StdioValues),
+  data: v.string(),
+});
+
 export const WebviewMessageSchema = v.union([
   NewMessageSchema,
   SetMessageSchema,
@@ -179,6 +185,7 @@ export const WebviewMessageSchema = v.union([
   ShowMessageSchema,
   InitialStateSchema,
   SettingsToggleSchema,
+  FullDataSchema,
 ]);
 
 export type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>;

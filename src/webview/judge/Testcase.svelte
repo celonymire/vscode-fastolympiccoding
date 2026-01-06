@@ -12,10 +12,9 @@
   interface Props {
     id: number;
     testcase: ITestcase;
-    updateTestcaseData: (id: number, updates: Partial<ITestcase>) => void;
   }
 
-  let { id, testcase, updateTestcaseData }: Props = $props();
+  let { id, testcase = $bindable() }: Props = $props();
   let newStdin = $state("");
   let newInteractorSecret = $state("");
 
@@ -30,12 +29,11 @@
   function handleSaveInteractorSecret() {
     const interactorSecret = newInteractorSecret;
     newInteractorSecret = "";
-    // Clear the secret locally (extension will send back shortened version)
-    updateTestcaseData(id, { interactorSecret: "" });
     postProviderMessage({
-      type: "SAVE_INTERACTOR_SECRET",
+      type: "SAVE",
       id,
-      secret: interactorSecret,
+      stdio: "INTERACTOR_SECRET",
+      data: interactorSecret,
     });
   }
 
@@ -49,28 +47,38 @@
 
 {#if status === "CE"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {resetStdin} />
   </div>
 {:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {resetStdin} />
     {#if showDetails}
       {#if testcase.mode === "interactive"}
         <AutoresizeTextarea
-          value={testcase.interactorSecret}
-          readonly
-          hiddenOnEmpty
+          bind:value={testcase.interactorSecret}
           placeholder="Interactor secret..."
-          onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
           variant="interactor-secret"
+          onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+          onsave={() => {
+            postProviderMessage({
+              type: "SAVE",
+              id,
+              stdio: "INTERACTOR_SECRET",
+              data: testcase.interactorSecret,
+            });
+          }}
         />
       {/if}
       <AutoresizeTextarea
-        value={testcase.stdin}
-        readonly
-        hiddenOnEmpty
+        bind:value={testcase.stdin}
         placeholder="Stdin..."
         onexpand={() => handleExpandStdio("STDIN")}
+        onpreedit={() => {
+          postProviderMessage({ type: "REQUEST_DATA", id, stdio: "STDIN" });
+        }}
+        onsave={() => {
+          postProviderMessage({ type: "SAVE", id, stdio: "STDIN", data: testcase.stdin });
+        }}
       />
       <AutoresizeTextarea
         value={testcase.stderr}
@@ -89,23 +97,32 @@
       />
       {#if status === "WA"}
         <AutoresizeTextarea
-          value={testcase.acceptedStdout}
-          readonly
-          hiddenOnEmpty
+          bind:value={testcase.acceptedStdout}
           placeholder="Accepted stdout..."
           variant="accepted"
           onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
+          onpreedit={() => {
+            postProviderMessage({ type: "REQUEST_DATA", id, stdio: "ACCEPTED_STDOUT" });
+          }}
+          onsave={() => {
+            postProviderMessage({
+              type: "SAVE",
+              id,
+              stdio: "ACCEPTED_STDOUT",
+              data: testcase.acceptedStdout,
+            });
+          }}
         />
       {/if}
     {/if}
   </div>
 {:else if status === "COMPILING"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {resetStdin} />
   </div>
 {:else if status === "RUNNING"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {resetStdin} />
     {#if visible}
       {#if testcase.mode === "interactive"}
         <AutoresizeTextarea
@@ -162,21 +179,6 @@
       />
       <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Stdout..." />
     {/if}
-  </div>
-{:else if status === "EDITING"}
-  <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {updateTestcaseData} {resetStdin} />
-    <AutoresizeTextarea
-      bind:value={testcase.stdin}
-      placeholder="Stdin..."
-      onexpand={() => handleExpandStdio("STDIN")}
-    />
-    <AutoresizeTextarea
-      bind:value={testcase.acceptedStdout}
-      placeholder="Accepted stdout..."
-      variant="accepted"
-      onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
-    />
   </div>
 {/if}
 
