@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { Stdio } from "../../shared/enums";
+  import type { Testcase } from "../../shared/schemas";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
   import { postProviderMessage } from "./message";
   import TestcaseToolbar from "./TestcaseToolbar.svelte";
 
   interface Props {
     id: number;
-    testcase: ITestcase;
+    testcase: Testcase;
   }
 
   let { id, testcase = $bindable() }: Props = $props();
