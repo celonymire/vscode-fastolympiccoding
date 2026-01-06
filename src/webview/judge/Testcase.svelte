@@ -112,13 +112,34 @@
         variant="stderr"
         onexpand={() => handleExpandStdio("STDERR")}
       />
-      <AutoresizeTextarea
-        value={testcase.stdout}
-        readonly
-        hiddenOnEmpty
-        placeholder="Stdout..."
-        onexpand={() => handleExpandStdio("STDOUT")}
-      />
+      {#if testcase.mode === "interactive" || testcase.status !== "AC"}
+        <AutoresizeTextarea
+          value={testcase.stdout}
+          readonly
+          hiddenOnEmpty
+          placeholder="Stdout..."
+          onexpand={() => handleExpandStdio("STDOUT")}
+        >
+          {#snippet actions()}
+            {#if (status === "NA" || status === "WA") && testcase.mode !== "interactive"}
+              <button
+                class="action-button action-button--always-visible codicon codicon-pass"
+                data-tooltip="Accept Output"
+                aria-label="Accept"
+                onclick={() => postProviderMessage({ type: "ACTION", id, action: "ACCEPT" })}
+              ></button>
+            {/if}
+            {#if status === "WA" && testcase.mode !== "interactive"}
+              <button
+                class="action-button action-button--always-visible codicon codicon-diff-single"
+                data-tooltip="Compare Answers"
+                aria-label="Compare"
+                onclick={() => postProviderMessage({ type: "ACTION", id, action: "COMPARE" })}
+              ></button>
+            {/if}
+          {/snippet}
+        </AutoresizeTextarea>
+      {/if}
       {#if testcase.mode !== "interactive"}
         <AutoresizeTextarea
           bind:value={testcase.acceptedStdout}
@@ -137,7 +158,18 @@
               stdio: "ACCEPTED_STDOUT",
             });
           }}
-        />
+        >
+          {#snippet actions()}
+            {#if status === "AC" && testcase.mode !== "interactive"}
+              <button
+                class="action-button action-button--always-visible codicon codicon-close"
+                data-tooltip="Decline Answer"
+                aria-label="Decline"
+                onclick={() => postProviderMessage({ type: "ACTION", id, action: "DECLINE" })}
+              ></button>
+            {/if}
+          {/snippet}
+        </AutoresizeTextarea>
       {/if}
     {/if}
   </div>
@@ -203,7 +235,9 @@
         variant="stderr"
         onexpand={() => handleExpandStdio("STDERR")}
       />
-      <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Stdout..." />
+      {#if testcase.mode !== "interactive" || (testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n")}
+        <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Stdout..." />
+      {/if}
     {/if}
   </div>
 {/if}

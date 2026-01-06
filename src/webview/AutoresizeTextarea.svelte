@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
+
   type Variant = "default" | "stderr" | "accepted" | "active" | "interactor-secret";
 
   interface Props {
@@ -13,6 +15,7 @@
     onsave?: () => void;
     oncancel?: () => void;
     variant?: Variant;
+    actions?: Snippet;
   }
 
   let {
@@ -27,6 +30,7 @@
     onsave,
     oncancel,
     variant = "default",
+    actions,
   }: Props = $props();
 
   let textarea: HTMLTextAreaElement | undefined = $state();
@@ -140,16 +144,19 @@
         onblur={handleBlur}
       ></textarea>
     {/if}
-    {#if !editing && onexpand}
+    {#if !editing}
       <div class="action-buttons">
-        <button
-          type="button"
-          data-tooltip="Expand"
-          aria-label="Expand"
-          class="action-button codicon codicon-screen-full"
-          class:action-button--visible={isHovered}
-          onclick={handleExpand}
-        ></button>
+        {#if onexpand}
+          <button
+            type="button"
+            data-tooltip="Expand"
+            aria-label="Expand"
+            class="action-button codicon codicon-screen-full"
+            class:action-button--visible={isHovered}
+            onclick={handleExpand}
+          ></button>
+        {/if}
+        {@render actions?.()}
       </div>
     {/if}
     {#if editing}
@@ -247,7 +254,7 @@
     border-color: var(--vscode-inputOption-activeBorder);
   }
 
-  .action-button {
+  .action-buttons :global(.action-button) {
     border: none;
     background: transparent;
     color: var(--vscode-foreground);
@@ -259,9 +266,15 @@
     transition: opacity 120ms ease-in-out;
     opacity: 0;
     pointer-events: none;
+    border-radius: 2px;
   }
 
-  .action-button--visible {
+  .action-buttons :global(.action-button:hover) {
+    background: var(--vscode-button-secondaryBackground);
+  }
+
+  .action-buttons :global(.action-button--visible),
+  .action-buttons :global(.action-button--always-visible) {
     opacity: 1;
     pointer-events: auto;
   }

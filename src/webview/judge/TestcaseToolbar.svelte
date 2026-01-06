@@ -34,14 +34,6 @@
     handleAction("DELETE");
   }
 
-  function handleAccept() {
-    handleAction("ACCEPT");
-  }
-
-  function handleDecline() {
-    handleAction("DECLINE");
-  }
-
   function handleToggleVisibility() {
     handleAction("TOGGLE_VISIBILITY");
   }
@@ -52,10 +44,6 @@
 
   function handleStop() {
     handleAction("STOP");
-  }
-
-  function handleCompare() {
-    handleAction("COMPARE");
   }
 
   // Derived values
@@ -83,51 +71,49 @@
         </div>
       {/if}
     </div>
-    <div class="testcase-actions">
-      <div class="testcase-left-buttons">
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Run Testcase"
-          aria-label="Run"
-          onclick={handleRun}
-        >
-          <div class="codicon codicon-run-below"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Debug Testcase"
-          aria-label="Debug"
-          onclick={handleDebug}
-        >
-          <div class="codicon codicon-debug-alt"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Delete Testcase"
-          aria-label="Delete"
-          onclick={handleDelete}
-        >
-          <div class="codicon codicon-trash"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
-          aria-label={showDetails ? "Hide" : "Show"}
-          onclick={handleToggleVisibility}
-        >
-          <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
-          data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
-          aria-label={skipped ? "Unskip" : "Skip"}
-          onclick={handleToggleSkip}
-        >
-          <div
-            class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
-          ></div>
-        </button>
-      </div>
+    <div class="testcase-buttons">
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip="Run Testcase"
+        aria-label="Run"
+        onclick={handleRun}
+      >
+        <div class="codicon codicon-run-below"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip="Debug Testcase"
+        aria-label="Debug"
+        onclick={handleDebug}
+      >
+        <div class="codicon codicon-debug-alt"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip="Delete Testcase"
+        aria-label="Delete"
+        onclick={handleDelete}
+      >
+        <div class="codicon codicon-trash"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+        aria-label={showDetails ? "Hide" : "Show"}
+        onclick={handleToggleVisibility}
+      >
+        <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+        data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
+        aria-label={skipped ? "Unskip" : "Skip"}
+        onclick={handleToggleSkip}
+      >
+        <div
+          class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
+        ></div>
+      </button>
     </div>
   </div>
 {:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
@@ -181,83 +167,49 @@
         </div>
       {/if}
     </div>
-    <div class="testcase-actions">
-      <div class="testcase-left-buttons">
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Run Testcase"
-          aria-label="Run"
-          onclick={handleRun}
-        >
-          <div class="codicon codicon-run-below"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Debug Testcase"
-          aria-label="Debug"
-          onclick={handleDebug}
-        >
-          <div class="codicon codicon-debug-alt"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Delete Testcase"
-          aria-label="Delete"
-          onclick={handleDelete}
-        >
-          <div class="codicon codicon-trash"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
-          aria-label={showDetails ? "Hide" : "Show"}
-          onclick={handleToggleVisibility}
-        >
-          <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
-          data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
-          aria-label={skipped ? "Unskip" : "Skip"}
-          onclick={handleToggleSkip}
-        >
-          <div
-            class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
-          ></div>
-        </button>
-      </div>
-      <div class="testcase-right-buttons">
-        {#if status === "NA" || (status === "WA" && testcase.mode !== "interactive")}
-          <button
-            class="testcase-toolbar-icon"
-            data-tooltip="Accept Output"
-            aria-label="Accept"
-            onclick={handleAccept}
-          >
-            <div class="codicon codicon-pass"></div>
-          </button>
-        {/if}
-        {#if status === "AC" && testcase.mode !== "interactive"}
-          <button
-            class="testcase-toolbar-icon"
-            data-tooltip="Decline Answer"
-            aria-label="Decline"
-            onclick={handleDecline}
-          >
-            <div class="codicon codicon-close"></div>
-          </button>
-        {/if}
-        {#if status === "WA" && testcase.mode !== "interactive"}
-          <button
-            class="testcase-toolbar-icon"
-            data-tooltip="Compare Answers"
-            aria-label="Compare"
-            onclick={handleCompare}
-          >
-            <div class="codicon codicon-diff-single"></div>
-          </button>
-        {/if}
-      </div>
+    <div class="testcase-buttons">
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip="Run Testcase"
+        aria-label="Run"
+        onclick={handleRun}
+      >
+        <div class="codicon codicon-run-below"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip="Debug Testcase"
+        aria-label="Debug"
+        onclick={handleDebug}
+      >
+        <div class="codicon codicon-debug-alt"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip="Delete Testcase"
+        aria-label="Delete"
+        onclick={handleDelete}
+      >
+        <div class="codicon codicon-trash"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon"
+        data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+        aria-label={showDetails ? "Hide" : "Show"}
+        onclick={handleToggleVisibility}
+      >
+        <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
+      </button>
+      <button
+        class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+        data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
+        aria-label={skipped ? "Unskip" : "Skip"}
+        onclick={handleToggleSkip}
+      >
+        <div
+          class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
+        ></div>
+      </button>
     </div>
   </div>
 {:else if status === "COMPILING"}
@@ -318,14 +270,7 @@
     opacity: 0.5;
   }
 
-  .testcase-toolbar--hidden
-    > .testcase-actions
-    > .testcase-left-buttons
-    > *:not(.testcase-toolbar-icon-exclude-fade) {
-    opacity: 0.5;
-  }
-
-  .testcase-toolbar--hidden > .testcase-actions > .testcase-right-buttons {
+  .testcase-toolbar--hidden > .testcase-buttons > *:not(.testcase-toolbar-icon-exclude-fade) {
     opacity: 0.5;
   }
 
@@ -344,28 +289,12 @@
     flex-wrap: wrap;
   }
 
-  .testcase-actions {
+  .testcase-buttons {
     display: flex;
     align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
     flex-grow: 1;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .testcase-left-buttons {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .testcase-right-buttons {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    margin-left: auto;
-    flex-wrap: wrap;
   }
 
   .testcase-toolbar-icon {
