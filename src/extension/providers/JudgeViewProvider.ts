@@ -32,7 +32,8 @@ import {
   ActionMessageSchema,
   NextMessageSchema,
   ProviderMessageSchema,
-  RequestDataMessageSchema,
+  RequestFullDataMessageSchema,
+  RequestTrimmedDataMessageSchema,
   SaveMessageSchema,
   SetMemoryLimitSchema,
   SetTimeLimitSchema,
@@ -517,8 +518,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "ML":
         this._setMemoryLimit(msg);
         break;
-      case "REQUEST_DATA":
-        this._requestData(msg);
+      case "REQUEST_TRIMMED_DATA":
+        this._requestTrimmedData(msg);
+        break;
+      case "REQUEST_FULL_DATA":
+        this._requestFullData(msg);
         break;
     }
   }
@@ -1363,7 +1367,51 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._saveFileData();
   }
 
-  private _requestData({ id, stdio }: v.InferOutput<typeof RequestDataMessageSchema>) {
+  private _requestTrimmedData({
+    id,
+    stdio,
+  }: v.InferOutput<typeof RequestTrimmedDataMessageSchema>) {
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
+
+    const sendProperty = (property: TestcaseProperty, handler: TextHandler) => {
+      // clear out webview content first
+      super._postMessage({
+        type: "SET",
+        id,
+        property,
+        value: "",
+      });
+
+      // send back the data and let the text handler trim it
+      const data = handler.data;
+      handler.reset();
+      handler.write(data, "final");
+    };
+
+    // Only some of these values will be used in practice but do this for sake of handling them
+    switch (stdio) {
+      case "STDIN":
+        sendProperty("stdin", testcase.stdin);
+        break;
+      case "STDERR":
+        sendProperty("stderr", testcase.stderr);
+        break;
+      case "STDOUT":
+        sendProperty("stdout", testcase.stdout);
+        break;
+      case "ACCEPTED_STDOUT":
+        sendProperty("acceptedStdout", testcase.acceptedStdout);
+        break;
+      case "INTERACTOR_SECRET":
+        sendProperty("interactorSecret", testcase.interactorSecret);
+        break;
+    }
+  }
+
+  private _requestFullData({ id, stdio }: v.InferOutput<typeof RequestFullDataMessageSchema>) {
     const testcase = this._getTestcase(id);
     if (!testcase) {
       return;

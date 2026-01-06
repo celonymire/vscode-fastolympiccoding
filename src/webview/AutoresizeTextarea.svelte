@@ -10,6 +10,7 @@
     onexpand?: () => void;
     onpreedit?: () => void;
     onsave?: () => void;
+    oncancel?: () => void;
     variant?: Variant;
   }
 
@@ -22,6 +23,7 @@
     onexpand,
     onpreedit,
     onsave,
+    oncancel,
     variant = "default",
   }: Props = $props();
 
@@ -124,26 +126,44 @@
       ></textarea>
     {/if}
     {#if !isEditing && onexpand}
-      <button
-        type="button"
-        data-tooltip="Expand"
-        aria-label="Expand"
-        class="action-button codicon codicon-screen-full"
-        class:action-button--visible={isHovered}
-        onclick={handleExpand}
-      ></button>
+      <div class="action-buttons">
+        <button
+          type="button"
+          data-tooltip="Expand"
+          aria-label="Expand"
+          class="action-button codicon codicon-screen-full"
+          class:action-button--visible={isHovered}
+          onclick={handleExpand}
+        ></button>
+      </div>
     {/if}
     {#if isEditing}
-      <button
-        type="button"
-        data-tooltip="Save"
-        aria-label="Save"
-        class="action-button codicon codicon-save action-button--visible"
-        onclick={() => {
-          isEditing = false;
-          onsave?.();
-        }}
-      ></button>
+      <div class="action-buttons">
+        {#if oncancel}
+          <button
+            type="button"
+            data-tooltip="Cancel"
+            aria-label="Cancel"
+            class="action-button codicon codicon-close action-button--visible"
+            onclick={() => {
+              isEditing = false;
+              oncancel?.();
+            }}
+          ></button>
+        {/if}
+        {#if onsave}
+          <button
+            type="button"
+            data-tooltip="Save"
+            aria-label="Save"
+            class="action-button codicon codicon-save action-button--visible"
+            onclick={() => {
+              isEditing = false;
+              onsave?.();
+            }}
+          ></button>
+        {/if}
+      </div>
     {/if}
   </div>
 {/if}
@@ -286,9 +306,6 @@
   }
 
   .action-button {
-    position: absolute;
-    top: 2px;
-    right: 2px;
     border: none;
     background: transparent;
     color: var(--vscode-foreground);
@@ -305,5 +322,13 @@
   .action-button--visible {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .action-buttons {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    gap: 2px;
   }
 </style>

@@ -16,7 +16,6 @@
 
   let { id, testcase = $bindable() }: Props = $props();
   let newStdin = $state("");
-  let newInteractorSecret = $state("");
 
   function resetStdin() {
     newStdin = "";
@@ -59,12 +58,22 @@
           placeholder="Interactor secret..."
           variant="interactor-secret"
           onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+          onpreedit={() => {
+            postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "INTERACTOR_SECRET" });
+          }}
           onsave={() => {
             postProviderMessage({
               type: "SAVE",
               id,
               stdio: "INTERACTOR_SECRET",
               data: testcase.interactorSecret,
+            });
+          }}
+          oncancel={() => {
+            postProviderMessage({
+              type: "REQUEST_TRIMMED_DATA",
+              id,
+              stdio: "INTERACTOR_SECRET",
             });
           }}
         />
@@ -74,10 +83,13 @@
         placeholder="Stdin..."
         onexpand={() => handleExpandStdio("STDIN")}
         onpreedit={() => {
-          postProviderMessage({ type: "REQUEST_DATA", id, stdio: "STDIN" });
+          postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "STDIN" });
         }}
         onsave={() => {
           postProviderMessage({ type: "SAVE", id, stdio: "STDIN", data: testcase.stdin });
+        }}
+        oncancel={() => {
+          postProviderMessage({ type: "REQUEST_TRIMMED_DATA", id, stdio: "STDIN" });
         }}
       />
       <AutoresizeTextarea
@@ -101,7 +113,7 @@
         variant="accepted"
         onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
         onpreedit={() => {
-          postProviderMessage({ type: "REQUEST_DATA", id, stdio: "ACCEPTED_STDOUT" });
+          postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "ACCEPTED_STDOUT" });
         }}
         onsave={() => {
           postProviderMessage({
@@ -109,6 +121,13 @@
             id,
             stdio: "ACCEPTED_STDOUT",
             data: testcase.acceptedStdout,
+          });
+        }}
+        oncancel={() => {
+          postProviderMessage({
+            type: "REQUEST_TRIMMED_DATA",
+            id,
+            stdio: "ACCEPTED_STDOUT",
           });
         }}
       />
@@ -124,28 +143,20 @@
     {#if visible}
       {#if testcase.mode === "interactive"}
         <AutoresizeTextarea
-          value={testcase.interactorSecret}
-          readonly
-          hiddenOnEmpty
+          bind:value={testcase.interactorSecret}
+          readonly={testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n"}
           placeholder="Interactor secret..."
           onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
           variant="interactor-secret"
+          onsave={() => {
+            postProviderMessage({
+              type: "SAVE",
+              id,
+              stdio: "INTERACTOR_SECRET",
+              data: testcase.interactorSecret,
+            });
+          }}
         />
-        {#if testcase.interactorSecret === "" || testcase.interactorSecret === "\n"}
-          <AutoresizeTextarea
-            bind:value={newInteractorSecret}
-            placeholder="New interactor secret..."
-            variant="active"
-          />
-          <button
-            class="interactor-secret-set-button"
-            type="button"
-            onclick={handleSaveInteractorSecret}
-          >
-            <div class="codicon codicon-gist-secret"></div>
-            Save Secret
-          </button>
-        {/if}
       {/if}
       {#if testcase.mode !== "interactive" || (testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n")}
         <AutoresizeTextarea
@@ -183,29 +194,5 @@
 <style>
   .testcase-container {
     margin-bottom: 24px;
-  }
-
-  .interactor-secret-set-button {
-    box-sizing: border-box;
-    display: flex;
-    width: 100%;
-    padding: 4px;
-    border-radius: 2px;
-    text-align: center;
-    cursor: pointer;
-    justify-content: center;
-    align-items: center;
-    border: 1px solid var(--vscode-button-border, transparent);
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    line-height: 18px;
-  }
-
-  .interactor-secret-set-button:hover {
-    background: var(--vscode-button-hoverBackground);
-  }
-
-  .interactor-secret-set-button :global(.codicon) {
-    margin-right: 4px;
   }
 </style>

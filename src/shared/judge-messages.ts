@@ -78,8 +78,14 @@ export const SetMemoryLimitSchema = v.object({
   limit: v.number(),
 });
 
-export const RequestDataMessageSchema = v.object({
-  type: v.literal("REQUEST_DATA"),
+export const RequestTrimmedDataMessageSchema = v.object({
+  type: v.literal("REQUEST_TRIMMED_DATA"),
+  id: v.number(),
+  stdio: v.picklist(StdioValues),
+});
+
+export const RequestFullDataMessageSchema = v.object({
+  type: v.literal("REQUEST_FULL_DATA"),
   id: v.number(),
   stdio: v.picklist(StdioValues),
 });
@@ -93,7 +99,8 @@ export const ProviderMessageSchema = v.union([
   StdinMessageSchema,
   SetTimeLimitSchema,
   SetMemoryLimitSchema,
-  RequestDataMessageSchema,
+  RequestTrimmedDataMessageSchema,
+  RequestFullDataMessageSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;
