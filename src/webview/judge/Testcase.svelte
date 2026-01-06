@@ -93,7 +93,7 @@
       <AutoresizeTextarea
         bind:value={testcase.stdin}
         bind:editing={stdinEditing}
-        placeholder="Stdin..."
+        placeholder="Input..."
         readonly={testcase.mode === "interactive"}
         onexpand={() => handleExpandStdio("STDIN")}
         onpreedit={() => {
@@ -108,7 +108,6 @@
         value={testcase.stderr}
         readonly
         hiddenOnEmpty
-        placeholder="Stderr..."
         variant="stderr"
         onexpand={() => handleExpandStdio("STDERR")}
       />
@@ -117,7 +116,6 @@
           value={testcase.stdout}
           readonly
           hiddenOnEmpty
-          placeholder="Stdout..."
           onexpand={() => handleExpandStdio("STDOUT")}
         >
           {#snippet actions()}
@@ -144,7 +142,7 @@
         <AutoresizeTextarea
           bind:value={testcase.acceptedStdout}
           bind:editing={acceptedStdoutEditing}
-          placeholder="Accepted stdout..."
+          placeholder="Accepted output..."
           variant="accepted"
           onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
           onpreedit={() => {
@@ -212,12 +210,11 @@
           value={testcase.stdin}
           readonly
           hiddenOnEmpty
-          placeholder="Stdin..."
           onexpand={() => handleExpandStdio("STDIN")}
         />
         <AutoresizeTextarea
           bind:value={newStdin}
-          placeholder="New stdin..."
+          placeholder="Online input..."
           onkeyup={(e) => {
             if (e.key === "Enter") {
               postProviderMessage({ type: "STDIN", id, data: newStdin });
@@ -231,12 +228,11 @@
         value={testcase.stderr}
         readonly
         hiddenOnEmpty
-        placeholder="Stderr..."
         variant="stderr"
         onexpand={() => handleExpandStdio("STDERR")}
       />
       {#if testcase.mode !== "interactive" || (testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n")}
-        <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Stdout..." />
+        <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Output..." />
       {/if}
     {/if}
   </div>
