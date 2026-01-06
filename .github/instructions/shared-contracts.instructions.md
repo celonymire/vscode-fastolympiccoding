@@ -11,7 +11,7 @@ When changing files under `src/shared/**`:
 - When you add new message types or enum members, append them to the existing arrays instead of reordering or renaming values. This preserves string identifiers and avoids breaking persisted data (for example, stored `Status` values).
 - Keep message payloads minimal but explicit. Prefer well-typed Valibot schemas over loosely structured objects to make it clear what each side should expect.
 - If you change a shared type, update both the extension providers (under `src/extension/providers/**`) and the corresponding webview handlers (under `src/webview/**`) in the same change to avoid protocol drift.
-- The `Status` type in `enums.ts` models the run lifecycle: COMPILING → RUNNING → (AC | WA | RE | TL | ML | CE | NA | EDITING). Preserve these semantics when adding new statuses and ensure the UI and backend continue to interpret them consistently.
+- The `Status` type in `enums.ts` models the run lifecycle: COMPILING → RUNNING → (AC | WA | RE | TL | ML | CE | NA). Preserve these semantics when adding new statuses and ensure the UI and backend continue to interpret them consistently.
 - Use Valibot (`import * as v from "valibot"`) for all schemas. Define individual message schemas, then combine them into a union schema and export an inferred type (e.g., `type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>`).
 - Because these contracts are central to the extension's behavior, keep changes focused and backwards-compatible wherever possible.
 

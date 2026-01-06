@@ -11,41 +11,23 @@
   interface Props {
     id: number;
     testcase: ITestcase;
-    resetStdin: () => void;
-    updateTestcaseData: (id: number, updates: Partial<ITestcase>) => void;
+    onprerun: () => void;
   }
 
-  let { id, testcase, resetStdin, updateTestcaseData }: Props = $props();
-
-  function handleSave() {
-    const stdin = testcase.stdin;
-    const acceptedStdout = testcase.acceptedStdout;
-    // Clear the values locally (extension will send back shortened version)
-    updateTestcaseData(id, { stdin: "", acceptedStdout: "" });
-    postProviderMessage({
-      type: "SAVE",
-      id,
-      stdin,
-      acceptedStdout,
-    });
-  }
+  let { id, testcase, onprerun }: Props = $props();
 
   function handleAction(action: ActionValue) {
     postProviderMessage({ type: "ACTION", id, action });
   }
 
   function handleRun() {
-    resetStdin();
+    onprerun();
     handleAction("RUN");
   }
 
   function handleDebug() {
-    resetStdin();
+    onprerun();
     handleAction("DEBUG");
-  }
-
-  function handleEdit() {
-    handleAction("EDIT");
   }
 
   function handleDelete() {
@@ -118,14 +100,6 @@
           onclick={handleDebug}
         >
           <div class="codicon codicon-debug-alt"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
-          data-tooltip="Edit Testcase"
-          aria-label="Edit"
-          onclick={handleEdit}
-        >
-          <div class="codicon codicon-edit"></div>
         </button>
         <button
           class="testcase-toolbar-icon"
@@ -227,14 +201,6 @@
         </button>
         <button
           class="testcase-toolbar-icon"
-          data-tooltip="Edit Testcase"
-          aria-label="Edit"
-          onclick={handleEdit}
-        >
-          <div class="codicon codicon-edit"></div>
-        </button>
-        <button
-          class="testcase-toolbar-icon"
           data-tooltip="Delete Testcase"
           aria-label="Delete"
           onclick={handleDelete}
@@ -332,29 +298,6 @@
         onclick={handleStop}
       >
         <div class="codicon codicon-stop-circle"></div>
-      </button>
-    </div>
-  </div>
-{:else if status === "EDITING"}
-  <div class="testcase-toolbar">
-    <div class="testcase-toolbar-left">
-      <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
-        <div class="codicon codicon-sync codicon-modifier-spin"></div>
-      </div>
-      {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
-          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
-      <button
-        class="testcase-toolbar-icon"
-        data-tooltip="Save Testcase"
-        aria-label="Save"
-        onclick={handleSave}
-      >
-        <div class="codicon codicon-save"></div>
       </button>
     </div>
   </div>

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import type { TestcaseSchema } from "../../shared/schemas";
+  import type { Testcase as TestcaseType } from "../../shared/schemas";
   import {
     type DeleteMessageSchema,
     type InitialStateSchema,
@@ -15,12 +15,8 @@
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
 
-  type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
-  type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
-  type ITestcase = v.InferOutput<typeof TestcaseSchema>;
-
   // Reactive state using Svelte 5 runes
-  let testcases = $state<{ id: number; data: ITestcase }[]>([]);
+  let testcases = $state<{ id: number; data: TestcaseType }[]>([]);
   let newTimeLimit = $state(0);
   let newMemoryLimit = $state(0);
   let show = $state(true);
@@ -63,7 +59,7 @@
     }
   }
 
-  function handleStdio({ id, data, stdio }: IStdioMessage) {
+  function handleStdio({ id, data, stdio }: v.InferOutput<typeof StdioMessageSchema>) {
     const idx = findTestcaseIndex(id);
     if (idx === -1) return;
     const tc = testcases[idx].data;
@@ -99,14 +95,20 @@
         postProviderMessage({
           type: "SAVE",
           id,
-          stdin: tc.stdin,
-          acceptedStdout: tc.acceptedStdout,
+          stdio: "STDIN",
+          data: tc.stdin,
+        });
+        postProviderMessage({
+          type: "SAVE",
+          id,
+          stdio: "ACCEPTED_STDOUT",
+          data: tc.acceptedStdout,
         });
       }
     }
   }
 
-  function handleShow({ visible }: IShowMessage) {
+  function handleShow({ visible }: v.InferOutput<typeof ShowMessageSchema>) {
     show = visible;
   }
 
@@ -153,14 +155,6 @@
   function handleMemoryLimitInput(e: Event) {
     const target = e.target as HTMLInputElement;
     newMemoryLimit = Number(target.value);
-  }
-
-  // Update testcase data from child component
-  function updateTestcaseData(id: number, updates: Partial<ITestcase>) {
-    const idx = findTestcaseIndex(id);
-    if (idx !== -1) {
-      Object.assign(testcases[idx].data, updates);
-    }
   }
 
   // Listen for messages from extension
@@ -251,8 +245,8 @@
     </button>
   {:else}
     <div class="testcase-container">
-      {#each testcases as { id, data } (id)}
-        <Testcase {id} testcase={data} {updateTestcaseData} />
+      {#each testcases as testcase, index (testcase.id)}
+        <Testcase id={testcase.id} bind:testcase={testcases[index].data} />
       {/each}
       <div class="new-button-wrapper">
         <button class="text-button grow-1" type="button" onclick={handleNewTestcase}>

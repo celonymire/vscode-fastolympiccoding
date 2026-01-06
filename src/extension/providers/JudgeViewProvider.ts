@@ -7,6 +7,7 @@ import {
   TestcaseSchema,
   type LanguageSettings,
   type Mode,
+  type TestcaseProperty,
 } from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
 import {
@@ -31,7 +32,8 @@ import {
   ActionMessageSchema,
   NextMessageSchema,
   ProviderMessageSchema,
-  SaveInteractorSecretMessageSchema,
+  RequestFullDataMessageSchema,
+  RequestTrimmedDataMessageSchema,
   SaveMessageSchema,
   SetMemoryLimitSchema,
   SetTimeLimitSchema,
@@ -39,6 +41,7 @@ import {
   ViewMessageSchema,
   type WebviewMessage,
 } from "../../shared/judge-messages";
+import type { Stdio } from "../../shared/enums";
 
 type IProblem = v.InferOutput<typeof ProblemSchema>;
 type ITest = v.InferOutput<typeof TestSchema>;
@@ -503,9 +506,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "SAVE":
         this._save(msg);
         break;
-      case "SAVE_INTERACTOR_SECRET":
-        this._saveInteractorSecret(msg);
-        break;
       case "VIEW":
         this._viewStdio(msg);
         break;
@@ -517,6 +517,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "ML":
         this._setMemoryLimit(msg);
+        break;
+      case "REQUEST_TRIMMED_DATA":
+        this._requestTrimmedData(msg);
+        break;
+      case "REQUEST_FULL_DATA":
+        this._requestFullData(msg);
         break;
     }
   }
@@ -826,9 +832,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "DELETE":
         this._delete(id);
-        break;
-      case "EDIT":
-        this._edit(id);
         break;
       case "ACCEPT":
         this._accept(id);
@@ -1148,32 +1151,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._saveFileData();
   }
 
-  private _edit(id: number) {
-    const testcase = this._getTestcase(id);
-    if (!testcase) {
-      return;
-    }
-    testcase.status = "EDITING";
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "status",
-      value: "EDITING",
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "stdin",
-      value: testcase.stdin.data,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "acceptedStdout",
-      value: testcase.acceptedStdout.data,
-    });
-  }
-
   private _accept(id: number) {
     const testcase = this._getTestcase(id);
     if (!testcase) {
@@ -1315,71 +1292,66 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _save({ id, stdin, acceptedStdout }: v.InferOutput<typeof SaveMessageSchema>) {
+  private _save({ id, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
     const testcase = this._getTestcase(id);
     if (!testcase) {
       return;
     }
 
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "stdin",
-      value: "",
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "acceptedStdout",
-      value: "",
-    });
-
-    testcase.stdin.reset();
-    testcase.acceptedStdout.reset();
-    testcase.stdin.write(stdin, "final");
-    testcase.acceptedStdout.write(acceptedStdout, "final");
-
-    // Manual save: determine status from output comparison only
-    if (testcase.acceptedStdout.data === "\n") {
-      testcase.status = "NA";
-    } else if (testcase.stdout.data === testcase.acceptedStdout.data) {
-      testcase.status = "AC";
-    } else {
-      testcase.status = "WA";
+    // Clear the webview's edit field
+    const propertyMap: Record<Stdio, keyof ITestcase | null> = {
+      STDIN: "stdin",
+      ACCEPTED_STDOUT: "acceptedStdout",
+      INTERACTOR_SECRET: "interactorSecret",
+      STDERR: null,
+      STDOUT: null,
+    };
+    const property = propertyMap[stdio];
+    if (property) {
+      super._postMessage({
+        type: "SET",
+        id,
+        property,
+        value: "",
+      });
     }
 
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "status",
-      value: testcase.status,
-    });
-
-    this._saveFileData();
-  }
-
-  private _saveInteractorSecret({
-    id,
-    secret,
-  }: v.InferOutput<typeof SaveInteractorSecretMessageSchema>) {
-    const testcase = this._getTestcase(id);
-    if (!testcase) {
-      return;
-    }
-
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "interactorSecret",
-      value: "",
-    });
-
-    testcase.interactorSecret.reset();
-    testcase.interactorSecret.write(secret, "final");
-
-    if (testcase.interactorSecretResolver) {
-      testcase.interactorSecretResolver();
-      testcase.interactorSecretResolver = undefined;
+    // Update the appropriate stdio handler and field
+    switch (stdio) {
+      case "STDIN":
+        testcase.stdin.reset();
+        testcase.stdin.write(data, "final");
+        break;
+      case "ACCEPTED_STDOUT":
+        testcase.acceptedStdout.reset();
+        testcase.acceptedStdout.write(data, "final");
+        // Manual save: determine status from output comparison only
+        if (testcase.acceptedStdout.data === "\n") {
+          testcase.status = "NA";
+        } else if (testcase.stdout.data === testcase.acceptedStdout.data) {
+          testcase.status = "AC";
+        } else {
+          testcase.status = "WA";
+        }
+        super._postMessage({
+          type: "SET",
+          id,
+          property: "status",
+          value: testcase.status,
+        });
+        break;
+      case "INTERACTOR_SECRET":
+        testcase.interactorSecret.reset();
+        testcase.interactorSecret.write(data, "final");
+        if (testcase.interactorSecretResolver) {
+          testcase.interactorSecretResolver();
+          testcase.interactorSecretResolver = undefined;
+        }
+        break;
+      case "STDERR":
+      case "STDOUT":
+        // Read-only fields, ignore
+        break;
     }
 
     this._saveFileData();
@@ -1393,6 +1365,90 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _setMemoryLimit({ limit }: v.InferOutput<typeof SetMemoryLimitSchema>) {
     this._memoryLimit = limit;
     this._saveFileData();
+  }
+
+  private _requestTrimmedData({
+    id,
+    stdio,
+  }: v.InferOutput<typeof RequestTrimmedDataMessageSchema>) {
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
+
+    const sendProperty = (property: TestcaseProperty, handler: TextHandler) => {
+      // clear out webview content first
+      super._postMessage({
+        type: "SET",
+        id,
+        property,
+        value: "",
+      });
+
+      // send back the data and let the text handler trim it
+      const data = handler.data;
+      handler.reset();
+      handler.write(data, "final");
+    };
+
+    // Only some of these values will be used in practice but do this for sake of handling them
+    switch (stdio) {
+      case "STDIN":
+        sendProperty("stdin", testcase.stdin);
+        break;
+      case "STDERR":
+        sendProperty("stderr", testcase.stderr);
+        break;
+      case "STDOUT":
+        sendProperty("stdout", testcase.stdout);
+        break;
+      case "ACCEPTED_STDOUT":
+        sendProperty("acceptedStdout", testcase.acceptedStdout);
+        break;
+      case "INTERACTOR_SECRET":
+        sendProperty("interactorSecret", testcase.interactorSecret);
+        break;
+    }
+  }
+
+  private _requestFullData({ id, stdio }: v.InferOutput<typeof RequestFullDataMessageSchema>) {
+    const testcase = this._getTestcase(id);
+    if (!testcase) {
+      return;
+    }
+
+    // Only some of these values will be used in practice but do this for sake of handling them
+    let property: TestcaseProperty;
+    let value: string;
+    switch (stdio) {
+      case "STDIN":
+        property = "stdin";
+        value = testcase.stdin.data;
+        break;
+      case "STDERR":
+        property = "stderr";
+        value = testcase.stderr.data;
+        break;
+      case "STDOUT":
+        property = "stdout";
+        value = testcase.stdout.data;
+        break;
+      case "ACCEPTED_STDOUT":
+        property = "acceptedStdout";
+        value = testcase.acceptedStdout.data;
+        break;
+      case "INTERACTOR_SECRET":
+        property = "interactorSecret";
+        value = testcase.interactorSecret.data;
+        break;
+    }
+
+    super._postMessage({
+      type: "SET",
+      id,
+      property,
+      value,
+    });
   }
 
   private _getTestcase(id: number): State | undefined {
