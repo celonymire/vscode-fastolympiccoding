@@ -414,6 +414,53 @@ export async function openInNewEditor(content: string): Promise<void> {
 
 const _runSettingsCache = new Map<string, Record<string, unknown>>();
 let _runSettingsWatcher: vscode.FileSystemWatcher | undefined = undefined;
+let _schemaDefaults: Record<string, string> | undefined = undefined;
+let _extensionContext: vscode.ExtensionContext | undefined = undefined;
+
+/**
+ * Loads default values from the runSettings.json schema file.
+ * Caches the result after first load.
+ */
+function getSchemaDefaults(): Record<string, string> {
+  if (_schemaDefaults) {
+    return _schemaDefaults;
+  }
+
+  if (!_extensionContext) {
+    logger.error("Extension context not initialized");
+    return {};
+  }
+
+  try {
+    const schemaPath = path.join(
+      _extensionContext.extensionPath,
+      "schemas",
+      "runSettings.schema.json"
+    );
+    const schemaContent = fs.readFileSync(schemaPath, "utf8");
+    const schema = JSON.parse(schemaContent);
+
+    _schemaDefaults = {};
+    if (schema.properties && typeof schema.properties === "object") {
+      for (const [key, prop] of Object.entries(schema.properties)) {
+        if (
+          typeof prop === "object" &&
+          prop !== null &&
+          "default" in prop &&
+          typeof (prop as { default: unknown }).default === "string"
+        ) {
+          _schemaDefaults[key] = (prop as { default: string }).default;
+        }
+      }
+    }
+
+    logger.info(`Loaded default runSettings!`);
+    return _schemaDefaults;
+  } catch (error) {
+    logger.error(`Failed to load schema defaults: ${error}`);
+    return {};
+  }
+}
 
 /**
  * Initializes the file watcher for runSettings.json files.
@@ -421,6 +468,7 @@ let _runSettingsWatcher: vscode.FileSystemWatcher | undefined = undefined;
  */
 export function initializeRunSettingsWatcher(context: vscode.ExtensionContext): void {
   logger = getLogger("vscode");
+  _extensionContext = context;
 
   if (_runSettingsWatcher) {
     return;
@@ -515,6 +563,7 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
  * loading and merging runSettings.json files along the way.
  * Also enforces the settings has the corresponding extension entry.
  * Returns the merged settings with all variables resolved and validated.
+ * Automatically fills in default values for missing top-level properties.
  */
 export function getFileRunSettings(
   file: string,
@@ -558,6 +607,11 @@ export function getFileRunSettings(
     showCreateRunSettingsErrorWindow(`No run settings found for ${file}`);
     return null;
   }
+
+  // Fill in default values for missing properties before resolving variables
+  const defaults = getSchemaDefaults();
+  mergedSettings = deepMerge(defaults, mergedSettings);
+
   const resolved = resolveVariables(mergedSettings, file, extraVariables);
 
   const parseResult = v.safeParse(RunSettingsSchema, resolved);
@@ -571,7 +625,7 @@ export function getFileRunSettings(
   const languageSettings = parseResult.output[extension] as LanguageSettings | undefined;
   if (!languageSettings) {
     logger.error(`No language settings found for "${extension}"`);
-    showOpenRunSettingsErrorWindow(`No language settings found for "${extension}"`);
+    showAddLanguageSettingsError(`No language settings found for "${extension}"`, extension, file);
     return null;
   }
 
@@ -589,6 +643,22 @@ export function showOpenRunSettingsErrorWindow(message: string): void {
   vscode.window.showErrorMessage(message, "Open Run Settings", "Close").then((choice) => {
     if (choice === "Open Run Settings") {
       vscode.commands.executeCommand("fastolympiccoding.openRunSettings");
+    }
+  });
+}
+
+export function showAddLanguageSettingsError(
+  message: string,
+  extension: string,
+  file: string
+): void {
+  vscode.window.showErrorMessage(message, "Add Language Settings", "Close").then((choice) => {
+    if (choice === "Add Language Settings") {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
+      vscode.commands.executeCommand("fastolympiccoding.createRunSettings", {
+        extension,
+        workspaceFolder,
+      });
     }
   });
 }

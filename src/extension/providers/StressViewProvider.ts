@@ -289,26 +289,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!solutionSettings) {
       return;
     }
-    if (!solutionSettings.generatorFile) {
-      const logger = getLogger("stress");
-      logger.error(`No generator file specified in run settings`);
-      showOpenRunSettingsErrorWindow(`No generator file specified in run settings`);
-      return;
-    }
-    if (!this._interactiveMode && !solutionSettings.goodSolutionFile) {
-      const logger = getLogger("stress");
-      logger.error(`No good solution file specified in run settings`);
-      showOpenRunSettingsErrorWindow(`No good solution file specified in run settings`);
-      return;
-    }
-    if (this._interactiveMode && !solutionSettings.interactorFile) {
-      const logger = getLogger("stress");
-      logger.error(`No interactor file specified in run settings`);
-      showOpenRunSettingsErrorWindow(`No interactor file specified in run settings`);
-      return;
-    }
 
-    const generatorSettings = getFileRunSettings(solutionSettings.generatorFile);
+    const generatorSettings = getFileRunSettings(solutionSettings.generatorFile!);
     if (!generatorSettings) {
       return;
     }
@@ -364,7 +346,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         compilePromises.push(compilePromise.then(callback.bind(this, state)));
       }
     };
-    addCompilePromise(this._generatorState, solutionSettings.generatorFile);
+    addCompilePromise(this._generatorState, solutionSettings.generatorFile!);
     addCompilePromise(this._solutionState, this._currentFile);
     if (this._interactiveMode) {
       addCompilePromise(this._judgeState, solutionSettings.interactorFile!);

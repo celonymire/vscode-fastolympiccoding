@@ -158,14 +158,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const compilePromises = [this._compileIfNeeded(id, token, this._currentFile, testcase)];
     if (testcase.mode === "interactive") {
-      if (!settings.interactorFile) {
-        const logger = getLogger("judge");
-        logger.error(`No interactor file specified in run settings`);
-        showOpenRunSettingsErrorWindow(`No interactor file specified in run settings`);
-        return null;
-      }
-
-      compilePromises.push(this._compileIfNeeded(id, token, settings.interactorFile, testcase));
+      compilePromises.push(this._compileIfNeeded(id, token, settings.interactorFile!, testcase));
     }
     const errored = await Promise.all(compilePromises);
     const anyErrored = errored.some((hadError) => hadError);
