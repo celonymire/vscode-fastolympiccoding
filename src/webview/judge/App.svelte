@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import type * as v from "valibot";
 
-  import type { TestcaseSchema } from "../../shared/schemas";
+  import type { Testcase as TestcaseType } from "../../shared/schemas";
   import {
     type DeleteMessageSchema,
     type InitialStateSchema,
@@ -15,12 +15,8 @@
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
 
-  type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
-  type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
-  type ITestcase = v.InferOutput<typeof TestcaseSchema>;
-
   // Reactive state using Svelte 5 runes
-  let testcases = $state<{ id: number; data: ITestcase }[]>([]);
+  let testcases = $state<{ id: number; data: TestcaseType }[]>([]);
   let newTimeLimit = $state(0);
   let newMemoryLimit = $state(0);
   let show = $state(true);
@@ -63,7 +59,7 @@
     }
   }
 
-  function handleStdio({ id, data, stdio }: IStdioMessage) {
+  function handleStdio({ id, data, stdio }: v.InferOutput<typeof StdioMessageSchema>) {
     const idx = findTestcaseIndex(id);
     if (idx === -1) return;
     const tc = testcases[idx].data;
@@ -112,7 +108,7 @@
     }
   }
 
-  function handleShow({ visible }: IShowMessage) {
+  function handleShow({ visible }: v.InferOutput<typeof ShowMessageSchema>) {
     show = visible;
   }
 
