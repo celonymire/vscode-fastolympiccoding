@@ -1,13 +1,8 @@
 <script lang="ts">
-  import type * as v from "valibot";
-
-  import type { TestcaseSchema } from "../../shared/schemas";
   import type { Stdio } from "../../shared/enums";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
   import { postProviderMessage } from "./message";
   import TestcaseToolbar from "./TestcaseToolbar.svelte";
-
-  type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
   interface Props {
     id: number;

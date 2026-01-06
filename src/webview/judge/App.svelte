@@ -11,7 +11,6 @@
     type ShowMessageSchema,
     type StdioMessageSchema,
     type WebviewMessage,
-    type FullDataSchema,
   } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
