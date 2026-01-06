@@ -606,7 +606,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       if (currentState?.state === "Solution") {
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
-          stdin: this._solutionState.stdin.data,
+          stdin: this._judgeState.stdout.data,
           stderr: this._solutionState.stderr.data + this._judgeState.stderr.data,
           stdout: this._solutionState.stdout.data,
           acceptedStdout: "",
@@ -735,7 +735,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     } else if (stateId === "Judge") {
       if (this._interactiveMode) {
         this._solutionState.process.process?.stdin.write(data);
-        state?.stdin.write(data, "force");
+        state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
       }
