@@ -31,7 +31,7 @@
 
 ### </> Setting Up
 
-Provide run settings for the languages you use in `runSettings.json` at the root folder. Here is an example configuration for C++, Python, and Java:
+Provide run settings for the languages you use in `runSettings.json` at the root folder. Here is the default example configuration for C++, Python, and Java:
 
 ```json
 {
@@ -78,6 +78,8 @@ workspace/
 ### 📜 Judge
 
 Minimalistic UI from the old plugin have been reimagined to integrate VSCode's capabilities while maintaining the principle of maximum functionality within minimized space. The new UI experience is integrated into both Judge and Stress Tester views.
+
+ℹ️ **You can mix languages!** For example, you can have a C++ solution and a Python interactor. This automatically applies to stress tester as well!
 
 - Run, edit, hide, skip testcases, you name it!
 - Hidden optimizations such as batched IO, truncating huge IO, and cached compilations.
@@ -261,7 +263,7 @@ Here are the steps for **Debugger for Java**:
 
 ### 🐞 Stress Tester
 
-We need both a file that outputs the correct solution and another that outputs a random input to both the current and correct solution. Additional information needs to be added to `runSettings.json` to tell the Stress Tester the names of these files. Here is an example one:
+We need both a file that outputs the correct solution and another that outputs a random input to both the current and correct solution. Additional information needs to be added to `runSettings.json` to tell the Stress Tester the names of these files. Here is the default example provided by the extension:
 
 ```json
 {
@@ -291,7 +293,7 @@ We need both a file that outputs the correct solution and another that outputs a
 
 ### 🗨️ Interactive Mode
 
-We need to tell the Stress Tester the name of our interactor file. Here is an example:
+We need to tell the extension the name of our interactor file. Here is the default example provided by the extension:
 
 ```json
 {
