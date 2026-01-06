@@ -7,6 +7,7 @@ import {
   TestcaseSchema,
   type LanguageSettings,
   type Mode,
+  type TestcaseProperty,
 } from "../../shared/schemas";
 import BaseViewProvider from "./BaseViewProvider";
 import {
@@ -1293,8 +1294,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    console.log("received save message", { id, stdio, data });
-
     // Clear the webview's edit field
     const propertyMap: Record<Stdio, keyof ITestcase | null> = {
       STDIN: "stdin",
@@ -1305,7 +1304,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     };
     const property = propertyMap[stdio];
     if (property) {
-      console.log("clearing edit field");
       super._postMessage({
         type: "SET",
         id,
@@ -1319,7 +1317,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "STDIN":
         testcase.stdin.reset();
         testcase.stdin.write(data, "final");
-        console.log("updated stdin", testcase.stdin.data);
         break;
       case "ACCEPTED_STDOUT":
         testcase.acceptedStdout.reset();
@@ -1373,33 +1370,36 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     // Only some of these values will be used in practice but do this for sake of handling them
-    let data: string;
+    let property: TestcaseProperty;
+    let value: string;
     switch (stdio) {
       case "STDIN":
-        data = testcase.stdin.data;
+        property = "stdin";
+        value = testcase.stdin.data;
         break;
       case "STDERR":
-        data = testcase.stderr.data;
+        property = "stderr";
+        value = testcase.stderr.data;
         break;
       case "STDOUT":
-        data = testcase.stdout.data;
+        property = "stdout";
+        value = testcase.stdout.data;
         break;
       case "ACCEPTED_STDOUT":
-        data = testcase.acceptedStdout.data;
+        property = "acceptedStdout";
+        value = testcase.acceptedStdout.data;
         break;
       case "INTERACTOR_SECRET":
-        data = testcase.interactorSecret.data;
-        break;
-      default:
-        data = "";
+        property = "interactorSecret";
+        value = testcase.interactorSecret.data;
         break;
     }
 
     super._postMessage({
-      type: "FULL_DATA",
+      type: "SET",
       id,
-      stdio,
-      data,
+      property,
+      value,
     });
   }
 

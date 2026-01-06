@@ -60,6 +60,7 @@ export const TestcaseSchema = v.object({
   interactorSecret: v.fallback(v.string(), ""),
 });
 export type Testcase = v.InferOutput<typeof TestcaseSchema>;
+export type TestcaseProperty = keyof Testcase;
 
 export const InputTypeValues = ["stdin", "file", "regex"] as const;
 export type InputType = (typeof InputTypeValues)[number];

@@ -169,13 +169,6 @@ export const SettingsToggleSchema = v.object({
   type: v.literal("SETTINGS_TOGGLE"),
 });
 
-export const FullDataSchema = v.object({
-  type: v.literal("FULL_DATA"),
-  id: v.number(),
-  stdio: v.picklist(StdioValues),
-  data: v.string(),
-});
-
 export const WebviewMessageSchema = v.union([
   NewMessageSchema,
   SetMessageSchema,
@@ -185,7 +178,6 @@ export const WebviewMessageSchema = v.union([
   ShowMessageSchema,
   InitialStateSchema,
   SettingsToggleSchema,
-  FullDataSchema,
 ]);
 
 export type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>;

@@ -162,30 +162,6 @@
     newMemoryLimit = Number(target.value);
   }
 
-  function handleFullData({ id, stdio, data }: v.InferOutput<typeof FullDataSchema>) {
-    const idx = findTestcaseIndex(id);
-    if (idx === -1) return;
-
-    const tc = testcases[idx].data;
-    switch (stdio) {
-      case "STDIN":
-        tc.stdin = data;
-        break;
-      case "STDERR":
-        tc.stderr = data;
-        break;
-      case "STDOUT":
-        tc.stdout = data;
-        break;
-      case "ACCEPTED_STDOUT":
-        tc.acceptedStdout = data;
-        break;
-      case "INTERACTOR_SECRET":
-        tc.interactorSecret = data;
-        break;
-    }
-  }
-
   // Listen for messages from extension
   onMount(() => {
     const handleMessage = (msg: MessageEvent<WebviewMessage>) => {
@@ -213,9 +189,6 @@
           break;
         case "SETTINGS_TOGGLE":
           handleSettingsToggle();
-          break;
-        case "FULL_DATA":
-          handleFullData(msg.data);
           break;
       }
     };
