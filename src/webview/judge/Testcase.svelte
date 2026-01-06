@@ -93,6 +93,7 @@
         bind:value={testcase.stdin}
         bind:editing={stdinEditing}
         placeholder="Stdin..."
+        readonly={testcase.mode === "interactive"}
         onexpand={() => handleExpandStdio("STDIN")}
         onpreedit={() => {
           postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "STDIN" });
