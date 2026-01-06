@@ -161,6 +161,7 @@
     box-sizing: border-box;
     background: var(--vscode-editor-background);
     width: 100%;
+    display: block;
     margin-bottom: 3px;
     font-family: var(--vscode-editor-font-family);
     font-size: var(--vscode-editor-font-size);
