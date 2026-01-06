@@ -42,6 +42,18 @@
     onexpand?.();
   }
 
+  function handleBlur(event: FocusEvent) {
+    const relatedTarget = event.relatedTarget as HTMLElement;
+    if (relatedTarget?.closest(".action-buttons")) {
+      return;
+    }
+
+    if (editing) {
+      editing = false;
+      onsave?.();
+    }
+  }
+
   function handleTextareaTransition(event?: MouseEvent) {
     if (!readonly) {
       if (event instanceof MouseEvent && value) {
@@ -120,10 +132,12 @@
         bind:this={textarea}
         rows={1}
         class="content"
+        class:editing
         data-variant={variant}
         {placeholder}
         bind:value
         onkeyup={handleKeyUp}
+        onblur={handleBlur}
       ></textarea>
     {/if}
     {#if !editing && onexpand}
@@ -194,92 +208,16 @@
     border-color: var(--vscode-terminal-ansiRed);
   }
 
-  textarea.content[data-variant="stderr"] {
-    animation: pulse-stderr 1s infinite ease-in-out;
-  }
-
   .content[data-variant="accepted"] {
     border-color: var(--vscode-terminal-ansiGreen);
-  }
-
-  textarea.content[data-variant="accepted"] {
-    animation: pulse-accepted 1s infinite ease-in-out;
   }
 
   .content[data-variant="active"] {
     border-color: var(--vscode-inputOption-activeBorder);
   }
 
-  textarea.content[data-variant="active"] {
-    animation: pulse-active 1s infinite ease-in-out;
-  }
-
   .content[data-variant="interactor-secret"] {
     border-color: var(--vscode-terminal-ansiMagenta);
-  }
-
-  textarea.content[data-variant="interactor-secret"] {
-    animation: pulse-interactor-secret 1s infinite ease-in-out;
-  }
-
-  @keyframes pulse-stderr {
-    0%,
-    100% {
-      border-color: var(--vscode-terminal-ansiRed);
-      box-shadow: 0 0 0px transparent;
-    }
-    50% {
-      border-color: color-mix(in srgb, var(--vscode-terminal-ansiRed), white 40%);
-      box-shadow: 0 0 4px var(--vscode-terminal-ansiRed);
-    }
-  }
-
-  @keyframes pulse-accepted {
-    0%,
-    100% {
-      border-color: var(--vscode-terminal-ansiGreen);
-      box-shadow: 0 0 0px transparent;
-    }
-    50% {
-      border-color: color-mix(in srgb, var(--vscode-terminal-ansiGreen), white 40%);
-      box-shadow: 0 0 4px var(--vscode-terminal-ansiGreen);
-    }
-  }
-
-  @keyframes pulse-interactor-secret {
-    0%,
-    100% {
-      border-color: var(--vscode-terminal-ansiMagenta);
-      box-shadow: 0 0 0px transparent;
-    }
-    50% {
-      border-color: color-mix(in srgb, var(--vscode-terminal-ansiMagenta), white 40%);
-      box-shadow: 0 0 4px var(--vscode-terminal-ansiMagenta);
-    }
-  }
-
-  @keyframes pulse-active {
-    0%,
-    100% {
-      border-color: var(--vscode-inputOption-activeBorder);
-      box-shadow: 0 0 0px transparent;
-    }
-    50% {
-      border-color: var(--vscode-focusBorder);
-      box-shadow: 0 0 4px var(--vscode-focusBorder);
-    }
-  }
-
-  @keyframes pulse-default {
-    0%,
-    100% {
-      border-color: var(--vscode-editorWidget-border);
-      box-shadow: 0 0 0px transparent;
-    }
-    50% {
-      border-color: var(--vscode-focusBorder);
-      box-shadow: 0 0 4px var(--vscode-focusBorder);
-    }
   }
 
   .content.readonly {
@@ -303,7 +241,10 @@
     resize: none;
     overflow-y: auto;
     outline: none;
-    animation: pulse-default 1s infinite ease-in-out;
+  }
+
+  textarea.content.editing {
+    border-color: var(--vscode-inputOption-activeBorder);
   }
 
   .action-button {
