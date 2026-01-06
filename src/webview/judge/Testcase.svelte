@@ -95,25 +95,23 @@
         placeholder="Stdout..."
         onexpand={() => handleExpandStdio("STDOUT")}
       />
-      {#if status === "WA"}
-        <AutoresizeTextarea
-          bind:value={testcase.acceptedStdout}
-          placeholder="Accepted stdout..."
-          variant="accepted"
-          onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
-          onpreedit={() => {
-            postProviderMessage({ type: "REQUEST_DATA", id, stdio: "ACCEPTED_STDOUT" });
-          }}
-          onsave={() => {
-            postProviderMessage({
-              type: "SAVE",
-              id,
-              stdio: "ACCEPTED_STDOUT",
-              data: testcase.acceptedStdout,
-            });
-          }}
-        />
-      {/if}
+      <AutoresizeTextarea
+        bind:value={testcase.acceptedStdout}
+        placeholder="Accepted stdout..."
+        variant="accepted"
+        onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
+        onpreedit={() => {
+          postProviderMessage({ type: "REQUEST_DATA", id, stdio: "ACCEPTED_STDOUT" });
+        }}
+        onsave={() => {
+          postProviderMessage({
+            type: "SAVE",
+            id,
+            stdio: "ACCEPTED_STDOUT",
+            data: testcase.acceptedStdout,
+          });
+        }}
+      />
     {/if}
   </div>
 {:else if status === "COMPILING"}

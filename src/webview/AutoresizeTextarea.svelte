@@ -88,7 +88,8 @@
     }
   });
 
-  const hidden = $derived(hiddenOnEmpty && (value === "" || value === "\n"));
+  const emptyString = $derived(value === "" || value === "\n");
+  const hidden = $derived(hiddenOnEmpty && emptyString);
   const hasValue = $derived(!!value && value !== "\n");
 </script>
 
@@ -110,7 +111,7 @@
           }
         }}
       >
-        {value || placeholder}
+        {emptyString ? placeholder : value}
       </div>
     {:else}
       <textarea
