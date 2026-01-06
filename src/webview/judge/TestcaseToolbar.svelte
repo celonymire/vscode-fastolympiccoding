@@ -11,22 +11,22 @@
   interface Props {
     id: number;
     testcase: ITestcase;
-    resetStdin: () => void;
+    onprerun: () => void;
   }
 
-  let { id, testcase, resetStdin }: Props = $props();
+  let { id, testcase, onprerun }: Props = $props();
 
   function handleAction(action: ActionValue) {
     postProviderMessage({ type: "ACTION", id, action });
   }
 
   function handleRun() {
-    resetStdin();
+    onprerun();
     handleAction("RUN");
   }
 
   function handleDebug() {
-    resetStdin();
+    onprerun();
     handleAction("DEBUG");
   }
 

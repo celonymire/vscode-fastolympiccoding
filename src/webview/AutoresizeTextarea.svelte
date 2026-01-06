@@ -6,6 +6,7 @@
     readonly?: boolean;
     hiddenOnEmpty?: boolean;
     placeholder?: string;
+    editing?: boolean;
     onkeyup?: (event: KeyboardEvent) => void;
     onexpand?: () => void;
     onpreedit?: () => void;
@@ -19,6 +20,7 @@
     readonly = false,
     hiddenOnEmpty = false,
     placeholder = "",
+    editing = $bindable(false),
     onkeyup,
     onexpand,
     onpreedit,
@@ -30,7 +32,6 @@
   let textarea: HTMLTextAreaElement | undefined = $state();
   let containerElement: HTMLDivElement | undefined = $state();
   let isHovered = $state();
-  let isEditing = $state(false);
   let initialCursorPosition = $state(0);
 
   function handleKeyUp(event: KeyboardEvent) {
@@ -58,13 +59,13 @@
       } else {
         initialCursorPosition = value?.length ?? 0;
       }
-      isEditing = true;
+      editing = true;
       onpreedit?.();
     }
   }
 
   $effect(() => {
-    if (isEditing && textarea && document.activeElement !== textarea) {
+    if (editing && textarea && document.activeElement !== textarea) {
       textarea.focus();
       const pos = Math.min(initialCursorPosition, value?.length ?? 0);
       textarea.setSelectionRange(pos, pos);
@@ -96,7 +97,7 @@
 
 {#if !hidden}
   <div bind:this={containerElement} class="container">
-    {#if readonly || !isEditing}
+    {#if readonly || !editing}
       <div
         class="content readonly"
         class:content--has-value={hasValue}
@@ -125,7 +126,7 @@
         onkeyup={handleKeyUp}
       ></textarea>
     {/if}
-    {#if !isEditing && onexpand}
+    {#if !editing && onexpand}
       <div class="action-buttons">
         <button
           type="button"
@@ -137,7 +138,7 @@
         ></button>
       </div>
     {/if}
-    {#if isEditing}
+    {#if editing}
       <div class="action-buttons">
         {#if oncancel}
           <button
@@ -146,7 +147,7 @@
             aria-label="Cancel"
             class="action-button codicon codicon-close action-button--visible"
             onclick={() => {
-              isEditing = false;
+              editing = false;
               oncancel?.();
             }}
           ></button>
@@ -158,7 +159,7 @@
             aria-label="Save"
             class="action-button codicon codicon-save action-button--visible"
             onclick={() => {
-              isEditing = false;
+              editing = false;
               onsave?.();
             }}
           ></button>

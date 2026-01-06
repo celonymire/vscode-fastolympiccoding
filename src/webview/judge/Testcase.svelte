@@ -17,8 +17,15 @@
   let { id, testcase = $bindable() }: Props = $props();
   let newStdin = $state("");
 
-  function resetStdin() {
+  function onprerun() {
     newStdin = "";
+    newInteractorSecret = "";
+    stdinEditing = false;
+    acceptedStdoutEditing = false;
+    interactorSecretEditing = false;
+    handleSaveStdin();
+    handleSaveAcceptedStdout();
+    handleSaveInteractorSecret();
   }
 
   function handleExpandStdio(stdio: Stdio) {
@@ -26,49 +33,58 @@
   }
 
   function handleSaveInteractorSecret() {
-    const interactorSecret = newInteractorSecret;
-    newInteractorSecret = "";
     postProviderMessage({
       type: "SAVE",
       id,
       stdio: "INTERACTOR_SECRET",
-      data: interactorSecret,
+      data: testcase.interactorSecret,
     });
   }
 
-  // Derived values
+  function handleSaveStdin() {
+    postProviderMessage({ type: "SAVE", id, stdio: "STDIN", data: testcase.stdin });
+  }
+
+  function handleSaveAcceptedStdout() {
+    postProviderMessage({
+      type: "SAVE",
+      id,
+      stdio: "ACCEPTED_STDOUT",
+      data: testcase.acceptedStdout,
+    });
+  }
+
   const status = $derived(testcase.status);
   const visible = $derived(testcase.shown);
   const skipped = $derived(testcase.skipped);
   const toggled = $derived(testcase.toggled);
   const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
+
+  let newInteractorSecret = $state("");
+  let stdinEditing = $state(false);
+  let acceptedStdoutEditing = $state(false);
+  let interactorSecretEditing = $state(false);
 </script>
 
 {#if status === "CE"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {onprerun} />
   </div>
 {:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {onprerun} />
     {#if showDetails}
       {#if testcase.mode === "interactive"}
         <AutoresizeTextarea
           bind:value={testcase.interactorSecret}
+          bind:editing={interactorSecretEditing}
           placeholder="Interactor secret..."
           variant="interactor-secret"
           onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
           onpreedit={() => {
             postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "INTERACTOR_SECRET" });
           }}
-          onsave={() => {
-            postProviderMessage({
-              type: "SAVE",
-              id,
-              stdio: "INTERACTOR_SECRET",
-              data: testcase.interactorSecret,
-            });
-          }}
+          onsave={handleSaveInteractorSecret}
           oncancel={() => {
             postProviderMessage({
               type: "REQUEST_TRIMMED_DATA",
@@ -80,14 +96,13 @@
       {/if}
       <AutoresizeTextarea
         bind:value={testcase.stdin}
+        bind:editing={stdinEditing}
         placeholder="Stdin..."
         onexpand={() => handleExpandStdio("STDIN")}
         onpreedit={() => {
           postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "STDIN" });
         }}
-        onsave={() => {
-          postProviderMessage({ type: "SAVE", id, stdio: "STDIN", data: testcase.stdin });
-        }}
+        onsave={handleSaveStdin}
         oncancel={() => {
           postProviderMessage({ type: "REQUEST_TRIMMED_DATA", id, stdio: "STDIN" });
         }}
@@ -107,56 +122,61 @@
         placeholder="Stdout..."
         onexpand={() => handleExpandStdio("STDOUT")}
       />
-      <AutoresizeTextarea
-        bind:value={testcase.acceptedStdout}
-        placeholder="Accepted stdout..."
-        variant="accepted"
-        onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
-        onpreedit={() => {
-          postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "ACCEPTED_STDOUT" });
-        }}
-        onsave={() => {
-          postProviderMessage({
-            type: "SAVE",
-            id,
-            stdio: "ACCEPTED_STDOUT",
-            data: testcase.acceptedStdout,
-          });
-        }}
-        oncancel={() => {
-          postProviderMessage({
-            type: "REQUEST_TRIMMED_DATA",
-            id,
-            stdio: "ACCEPTED_STDOUT",
-          });
-        }}
-      />
+      {#if testcase.mode !== "interactive"}
+        <AutoresizeTextarea
+          bind:value={testcase.acceptedStdout}
+          bind:editing={acceptedStdoutEditing}
+          placeholder="Accepted stdout..."
+          variant="accepted"
+          onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
+          onpreedit={() => {
+            postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "ACCEPTED_STDOUT" });
+          }}
+          onsave={handleSaveAcceptedStdout}
+          oncancel={() => {
+            postProviderMessage({
+              type: "REQUEST_TRIMMED_DATA",
+              id,
+              stdio: "ACCEPTED_STDOUT",
+            });
+          }}
+        />
+      {/if}
     {/if}
   </div>
 {:else if status === "COMPILING"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {onprerun} />
   </div>
 {:else if status === "RUNNING"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {resetStdin} />
+    <TestcaseToolbar {id} {testcase} {onprerun} />
     {#if visible}
       {#if testcase.mode === "interactive"}
-        <AutoresizeTextarea
-          bind:value={testcase.interactorSecret}
-          readonly={testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n"}
-          placeholder="Interactor secret..."
-          onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
-          variant="interactor-secret"
-          onsave={() => {
-            postProviderMessage({
-              type: "SAVE",
-              id,
-              stdio: "INTERACTOR_SECRET",
-              data: testcase.interactorSecret,
-            });
-          }}
-        />
+        {#if testcase.interactorSecret === "" || testcase.interactorSecret === "\n"}
+          <AutoresizeTextarea
+            bind:value={newInteractorSecret}
+            placeholder="Interactor secret..."
+            variant="interactor-secret"
+            onsave={() => {
+              postProviderMessage({
+                type: "SAVE",
+                id,
+                stdio: "INTERACTOR_SECRET",
+                data: newInteractorSecret,
+              });
+              newInteractorSecret = "";
+            }}
+          />
+        {:else}
+          <AutoresizeTextarea
+            value={testcase.interactorSecret}
+            readonly
+            placeholder="Interactor secret..."
+            onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+            variant="interactor-secret"
+          />
+        {/if}
       {/if}
       {#if testcase.mode !== "interactive" || (testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n")}
         <AutoresizeTextarea
