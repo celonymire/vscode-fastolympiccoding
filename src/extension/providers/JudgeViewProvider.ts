@@ -504,7 +504,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._action(msg);
         break;
       case "SAVE":
-        this._save(msg);
+        void this._save(msg);
         break;
       case "VIEW":
         this._viewStdio(msg);
@@ -1292,7 +1292,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _save({ id, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
+  private async _save({ id, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
     const testcase = this._getTestcase(id);
     if (!testcase) {
       return;
@@ -1325,20 +1325,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "ACCEPTED_STDOUT":
         testcase.acceptedStdout.reset();
         testcase.acceptedStdout.write(data, "final");
-        // Manual save: determine status from output comparison only
-        if (testcase.acceptedStdout.data === "\n") {
-          testcase.status = "NA";
-        } else if (testcase.stdout.data === testcase.acceptedStdout.data) {
-          testcase.status = "AC";
-        } else {
-          testcase.status = "WA";
-        }
-        super._postMessage({
-          type: "SET",
-          id,
-          property: "status",
-          value: testcase.status,
-        });
         break;
       case "INTERACTOR_SECRET":
         testcase.interactorSecret.reset();
@@ -1353,6 +1339,21 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         // Read-only fields, ignore
         break;
     }
+
+    if (testcase.mode === "interactive") {
+      const termination = await testcase.process.done;
+      const interactorTermination = await testcase.interactorProcess.done;
+      updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
+    } else {
+      const termination = await testcase.process.done;
+      updateTestcaseFromTermination(testcase, termination);
+    }
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "status",
+      value: testcase.status,
+    });
 
     this._saveFileData();
   }
