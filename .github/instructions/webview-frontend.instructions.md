@@ -19,6 +19,7 @@ When changing files under `src/webview/**`:
   - Use `{#each items as item (key)}` for list rendering with keyed iterations.
   - Avoid introducing additional state libraries; follow the patterns in the Judge and Stress apps.
 - The shared `AutoresizeTextarea.svelte` and `Tooltip.svelte` components are used by both webviews and live in `src/webview/`.
+  - `AutoresizeTextarea` supports inline editing via the `editing` prop (bound via `bind:editing`). It emits `onpreedit` (before editing starts, e.g., to fetch full data), `onsave` (when saving changes), and `oncancel` events.
 - Keep UI logic decoupled from process execution details. The webview should focus on rendering state and sending/receiving typed messages, not on spawning processes or resolving filesystem paths.
 - Maintain consistency with existing components such as `AutoresizeTextarea.svelte`, `Testcase.svelte`, and `State.svelte` in terms of props, message handling, and minimal DOM manipulation.
 - Keep the file layout lean (e.g., flat component files per view) and avoid introducing extra nested directories unless there's a clear benefit; mirror the existing Judge/Stress structure when adding new pieces.
