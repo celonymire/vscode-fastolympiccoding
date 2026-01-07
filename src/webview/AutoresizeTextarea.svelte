@@ -355,7 +355,7 @@
   .action-buttons.has-buttons {
     opacity: 1;
     pointer-events: auto;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(2px);
   }
 
   .action-buttons.overlapped {
