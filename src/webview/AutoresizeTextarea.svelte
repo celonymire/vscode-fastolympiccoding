@@ -333,9 +333,9 @@
   .action-buttons :global(.action-button) {
     border: none;
     background: transparent;
+    padding: 2px;
     color: var(--vscode-foreground);
     cursor: pointer;
-    padding: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -343,10 +343,11 @@
 
   .action-buttons {
     position: absolute;
+    padding: 2px;
     top: 1px;
     right: 1px;
     display: flex;
-    gap: 0;
+    gap: 2px;
     opacity: 0;
     transition: opacity 200ms ease-in-out;
     pointer-events: none;
