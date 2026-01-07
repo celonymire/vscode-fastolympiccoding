@@ -200,8 +200,7 @@ export class Runnable {
   private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
   private _promise: Promise<void> | undefined = undefined;
   private _spawnPromise: Promise<boolean> | undefined = undefined;
-  private _startTime = 0;
-  private _endTime = 0;
+  private _elapsed = 0;
   private _signal: NodeJS.Signals | null = null;
   private _abortController: AbortController | null = null;
   private _combinedAbortSignal: AbortSignal | null = null;
@@ -328,8 +327,9 @@ export class Runnable {
     });
 
     this._promise = new Promise((resolve) => {
+      let startTime: [number, number];
       this._process?.once("spawn", () => {
-        this._startTime = performance.now();
+        startTime = process.hrtime();
         this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
         setTimeout(() => {
           if (this._process?.pid) {
@@ -343,7 +343,7 @@ export class Runnable {
         resolveSpawn(true);
       });
       this._process?.once("error", (err) => {
-        this._startTime = performance.now(); // necessary since an invalid command can lead to process not spawned
+        startTime = process.hrtime(); // necessary since an invalid command can lead to process not spawned
         const logger = getLogger("runtime");
         logger.error(
           `Process spawn failed (command=${commandName}, args=${commandArgs}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
@@ -351,7 +351,8 @@ export class Runnable {
 
         // We have to set error state here because of platform-dependent behavior
         // For Linux exit isn't fired when process errors
-        this._endTime = performance.now();
+        const elapsed = process.hrtime(startTime);
+        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
         this._signal = null;
         this._exitCode = 1;
         this._timedOut = false;
@@ -359,7 +360,8 @@ export class Runnable {
         resolveSpawn(false);
       });
       this._process?.once("exit", (code, signal) => {
-        this._endTime = performance.now();
+        const elapsed = process.hrtime(startTime);
+        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
         this._signal = signal;
         this._exitCode = code;
         this._timedOut = timeoutSignal?.aborted ?? false;
@@ -384,7 +386,7 @@ export class Runnable {
     return this._process;
   }
   get elapsed(): number {
-    return Math.round(this._endTime - this._startTime);
+    return this._elapsed;
   }
   get signal(): NodeJS.Signals | null {
     return this._signal;
