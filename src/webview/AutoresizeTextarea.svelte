@@ -35,11 +35,63 @@
 
   let textarea: HTMLTextAreaElement | undefined = $state();
   let containerElement: HTMLDivElement | undefined = $state();
+  let actionButtonsElement: HTMLDivElement | undefined = $state();
   let isHovered = $state();
   let initialCursorPosition = $state(0);
+  let cursorOverlapsActions = $state(false);
+  let showExpandButton = $state(false);
+  let showEditButtons = $state(false);
+
+  let canvasContext: CanvasRenderingContext2D | null = null;
+
+  function checkCursorOverlap() {
+    if (!textarea || !actionButtonsElement) return;
+
+    const style = window.getComputedStyle(textarea);
+    const lh = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+
+    // Get cursor position
+    const { selectionStart, value, scrollTop, scrollLeft, clientWidth } = textarea;
+
+    // Current line info
+    const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
+    const lineText = value.substring(lineStart, selectionStart); // Text up to cursor
+    const lineIndex = value.substring(0, lineStart).split("\n").length - 1;
+
+    // Coordinates relative to textarea content area (inside padding)
+    const paddingTop = parseFloat(style.paddingTop);
+    const paddingLeft = parseFloat(style.paddingLeft);
+
+    const cursorY = paddingTop + lineIndex * lh - scrollTop;
+
+    // Measure X
+    if (!canvasContext) {
+      const canvas = document.createElement("canvas");
+      canvasContext = canvas.getContext("2d");
+    }
+    if (canvasContext) {
+      canvasContext.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const textWidth = canvasContext.measureText(lineText).width;
+      const cursorX = paddingLeft + textWidth - scrollLeft;
+
+      // Buttons rect
+      const { offsetWidth: btnW, offsetHeight: btnH } = actionButtonsElement;
+
+      // Icons Left = clientWidth - 2 (right offset) - btnW.
+      // 5px buffer
+      const iconsLeft = clientWidth - 2 - btnW - 5;
+      const iconsBottom = 2 + btnH;
+
+      const isOverlappingX = cursorX > iconsLeft;
+      const isOverlappingY = cursorY < iconsBottom && cursorY + lh > 0;
+
+      cursorOverlapsActions = isOverlappingX && isOverlappingY;
+    }
+  }
 
   function handleKeyUp(event: KeyboardEvent) {
     onkeyup?.(event);
+    checkCursorOverlap();
   }
 
   function handleExpand() {
@@ -94,8 +146,16 @@
     }
 
     if (containerElement) {
-      const handleMouseEnter = () => (isHovered = true);
-      const handleMouseLeave = () => (isHovered = false);
+      const handleMouseEnter = () => {
+        isHovered = true;
+        showExpandButton = !editing && !!onexpand;
+      };
+      const handleMouseLeave = () => {
+        isHovered = false;
+        setTimeout(() => {
+          if (!isHovered) showExpandButton = false;
+        }, 200);
+      };
 
       containerElement.addEventListener("mouseenter", handleMouseEnter);
       containerElement.addEventListener("mouseleave", handleMouseLeave);
@@ -104,6 +164,17 @@
         containerElement?.removeEventListener("mouseenter", handleMouseEnter);
         containerElement?.removeEventListener("mouseleave", handleMouseLeave);
       };
+    }
+  });
+
+  $effect(() => {
+    if (editing) {
+      showEditButtons = true;
+      showExpandButton = false;
+    } else {
+      setTimeout(() => {
+        if (!editing) showEditButtons = false;
+      }, 200);
     }
   });
 
@@ -142,31 +213,36 @@
         bind:value
         onkeyup={handleKeyUp}
         onblur={handleBlur}
+        onpointerup={checkCursorOverlap}
+        onscroll={checkCursorOverlap}
       ></textarea>
     {/if}
     {#if !editing}
-      <div class="action-buttons">
-        {#if onexpand}
+      <div class="action-buttons" class:has-buttons={showExpandButton || actions}>
+        {#if showExpandButton && onexpand}
           <button
             type="button"
             data-tooltip="Expand"
             aria-label="Expand"
             class="action-button codicon codicon-screen-full"
-            class:action-button--visible={isHovered}
             onclick={handleExpand}
           ></button>
         {/if}
         {@render actions?.()}
       </div>
     {/if}
-    {#if editing}
-      <div class="action-buttons">
+    {#if showEditButtons}
+      <div
+        class="action-buttons has-buttons"
+        bind:this={actionButtonsElement}
+        class:overlapped={cursorOverlapsActions}
+      >
         {#if oncancel}
           <button
             type="button"
             data-tooltip="Cancel"
             aria-label="Cancel"
-            class="action-button codicon codicon-close action-button--visible"
+            class="action-button codicon codicon-close"
             onclick={() => {
               editing = false;
               oncancel?.();
@@ -178,7 +254,7 @@
             type="button"
             data-tooltip="Save"
             aria-label="Save"
-            class="action-button codicon codicon-save action-button--visible"
+            class="action-button codicon codicon-save"
             onclick={() => {
               editing = false;
               onsave?.();
@@ -259,31 +335,48 @@
     background: transparent;
     color: var(--vscode-foreground);
     cursor: pointer;
-    padding: 2px;
+    padding: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 120ms ease-in-out;
-    opacity: 0;
-    pointer-events: none;
-    border-radius: 2px;
-  }
-
-  .action-buttons :global(.action-button:hover) {
-    background: var(--vscode-button-secondaryBackground);
-  }
-
-  .action-buttons :global(.action-button--visible),
-  .action-buttons :global(.action-button--always-visible) {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   .action-buttons {
     position: absolute;
-    top: 2px;
-    right: 2px;
+    top: 1px;
+    right: 1px;
     display: flex;
-    gap: 2px;
+    gap: 0;
+    opacity: 0;
+    transition: opacity 200ms ease-in-out;
+    pointer-events: none;
+  }
+
+  .action-buttons.has-buttons {
+    opacity: 1;
+    pointer-events: auto;
+    backdrop-filter: blur(4px);
+  }
+
+  .action-buttons.overlapped {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .action-buttons.overlapped:hover,
+  .action-buttons:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .action-buttons.overlapped {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .action-buttons.overlapped:hover,
+  .action-buttons:focus-within {
+    opacity: 1;
+    pointer-events: auto;
   }
 </style>
