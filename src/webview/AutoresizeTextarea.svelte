@@ -196,7 +196,7 @@
   }
 
   .content {
-    white-space: pre-wrap;
+    white-space: pre;
     padding: 4px;
     border: 1px solid var(--vscode-editorWidget-border);
     border-radius: 2px;
@@ -246,7 +246,7 @@
     max-height: calc(30 * 1lh);
     height: auto;
     resize: none;
-    overflow-y: auto;
+    overflow: auto;
     outline: none;
   }
 
