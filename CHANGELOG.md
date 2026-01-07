@@ -1,3 +1,20 @@
+# 3.0.2
+
+### Changed
+
+- Moved buttons "Accept Answer", "Decline Answer", and "Compare Answers" to their corresponding textarea instead
+- Textareas are directly editable in-place, providing icons to cancel and save the data. Editing status of testcases were removed in favor of this
+- Use `process.hrtime` to check for elapsed time as it's much less influenced by the event loop
+- Textareas no longer wraps text and provides scroll bars instead
+- Updated terminology of placeholders from "stdin" to "input", and so on...
+- The error messages regarding missing information tries to infer context to automatically add either an example configuration or a generic template to fill in.
+- Judge's standard output writes to output textarea instead of input for stress tester
+
+### Fixed
+
+- Correctly compute the testcase status when data is being saved from edits
+- On judge fatal error, correct the testcase being added to the judge file via stress tester to be able to reproduce the error
+
 # 3.0.1
 
 ### Changed
