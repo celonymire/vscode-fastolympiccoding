@@ -29,6 +29,18 @@ type LinuxMemoryAddon = {
   getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
 };
 
+type Win32TimesAddon = {
+  getWin32ProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+};
+
+type LinuxTimesAddon = {
+  getLinuxProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+};
+
+type DarwinTimesAddon = {
+  getDarwinProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+};
+
 // ============================================================================
 // RunSession API Types
 // ============================================================================
@@ -180,6 +192,99 @@ function getLinuxMemoryAddon(): LinuxMemoryAddon | null {
   }
 }
 
+let win32TimesAddon: Win32TimesAddon | null = null;
+
+function getWin32TimesAddon(): Win32TimesAddon | null {
+  if (win32TimesAddon !== null) {
+    return win32TimesAddon;
+  }
+
+  try {
+    const addonPath = path.join(__dirname, "win32-process-times.node");
+    if (!fs.existsSync(addonPath)) {
+      return null;
+    }
+
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "getWin32ProcessTimes" in loaded) {
+      win32TimesAddon = loaded as Win32TimesAddon;
+      return win32TimesAddon;
+    }
+
+    return null;
+  } catch (err) {
+    const logger = getLogger("runtime");
+    logger.warn(
+      `Windows timing addon unavailable, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
+
+let linuxTimesAddon: LinuxTimesAddon | null = null;
+
+function getLinuxTimesAddon(): LinuxTimesAddon | null {
+  if (linuxTimesAddon !== null) {
+    return linuxTimesAddon;
+  }
+
+  try {
+    const addonPath = path.join(__dirname, "linux-process-times.node");
+    if (!fs.existsSync(addonPath)) {
+      return null;
+    }
+
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "getLinuxProcessTimes" in loaded) {
+      linuxTimesAddon = loaded as LinuxTimesAddon;
+      return linuxTimesAddon;
+    }
+
+    return null;
+  } catch (err) {
+    const logger = getLogger("runtime");
+    logger.warn(
+      `Linux timing addon unavailable, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
+
+let darwinTimesAddon: DarwinTimesAddon | null = null;
+
+function getDarwinTimesAddon(): DarwinTimesAddon | null {
+  if (darwinTimesAddon !== null) {
+    return darwinTimesAddon;
+  }
+
+  try {
+    const addonPath = path.join(__dirname, "darwin-process-times.node");
+    if (!fs.existsSync(addonPath)) {
+      return null;
+    }
+
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "getDarwinProcessTimes" in loaded) {
+      darwinTimesAddon = loaded as DarwinTimesAddon;
+      return darwinTimesAddon;
+    }
+
+    return null;
+  } catch (err) {
+    const logger = getLogger("runtime");
+    logger.warn(
+      `macOS timing addon unavailable, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
+
 // ============================================================================
 // Runnable - Process runner with session-based listener API
 // ============================================================================
@@ -211,6 +316,48 @@ export class Runnable {
   private _maxMemoryBytes = 0;
   private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
+  private _fallbackStartTime: [number, number] | null = null;
+
+  /**
+   * Get the elapsed time for a running or completed process.
+   * Uses native addons when available for accurate timing, falls back to hrtime.
+   */
+  private _getElapsedTime(pid: number): number {
+    try {
+      if (process.platform === "win32") {
+        const addon = getWin32TimesAddon();
+        if (addon) {
+          const times = addon.getWin32ProcessTimes(pid);
+          return Math.round(times.elapsedMs);
+        }
+      } else if (process.platform === "linux") {
+        const addon = getLinuxTimesAddon();
+        if (addon) {
+          const times = addon.getLinuxProcessTimes(pid);
+          return Math.round(times.elapsedMs);
+        }
+      } else if (process.platform === "darwin") {
+        const addon = getDarwinTimesAddon();
+        if (addon) {
+          const times = addon.getDarwinProcessTimes(pid);
+          return Math.round(times.elapsedMs);
+        }
+      }
+    } catch (err) {
+      // If addon fails (e.g., process already exited), fall back to hrtime
+      const logger = getLogger("runtime");
+      logger.debug(
+        `Native timing addon failed for pid ${pid}, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    // Fallback to hrtime-based timing
+    if (this._fallbackStartTime) {
+      const elapsed = process.hrtime(this._fallbackStartTime);
+      return Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
+    }
+    return 0;
+  }
 
   private async _sampleMemory(pid: number) {
     try {
@@ -327,9 +474,9 @@ export class Runnable {
     });
 
     this._promise = new Promise((resolve) => {
-      let startTime: [number, number];
       this._process?.once("spawn", () => {
-        startTime = process.hrtime();
+        // Keep fallback hrtime for platforms without native addon
+        this._fallbackStartTime = process.hrtime();
         this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
         setTimeout(() => {
           if (this._process?.pid) {
@@ -343,7 +490,8 @@ export class Runnable {
         resolveSpawn(true);
       });
       this._process?.once("error", (err) => {
-        startTime = process.hrtime(); // necessary since an invalid command can lead to process not spawned
+        // necessary since an invalid command can lead to process not spawned
+        this._fallbackStartTime = process.hrtime();
         const logger = getLogger("runtime");
         logger.error(
           `Process spawn failed (command=${commandName}, args=${commandArgs}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
@@ -351,8 +499,7 @@ export class Runnable {
 
         // We have to set error state here because of platform-dependent behavior
         // For Linux exit isn't fired when process errors
-        const elapsed = process.hrtime(startTime);
-        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
+        this._elapsed = this._process?.pid ? this._getElapsedTime(this._process.pid) : 0;
         this._signal = null;
         this._exitCode = 1;
         this._timedOut = false;
@@ -360,8 +507,8 @@ export class Runnable {
         resolveSpawn(false);
       });
       this._process?.once("exit", (code, signal) => {
-        const elapsed = process.hrtime(startTime);
-        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
+        // Use native addon to get accurate elapsed time, bypassing event loop delays
+        this._elapsed = this._process?.pid ? this._getElapsedTime(this._process.pid) : 0;
         this._signal = signal;
         this._exitCode = code;
         this._timedOut = timeoutSignal?.aborted ?? false;
