@@ -25,7 +25,7 @@ class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
   WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
-        memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), cpuMs_(0.0), peakMemoryBytes_(0),
+        memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
         exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
@@ -124,15 +124,10 @@ protected:
     struct timeval endTime;
     gettimeofday(&endTime, nullptr);
 
-    // Calculate elapsed wall-clock time
-    elapsedUs = (endTime.tv_sec - startTime.tv_sec) * 1000000ULL +
-                (endTime.tv_usec - startTime.tv_usec);
-    elapsedMs_ = static_cast<double>(elapsedUs) / 1000.0;
-
-    // Calculate CPU time from rusage
+    // Calculate elapsed CPU time from rusage (user + system)
     uint64_t cpuUs = (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
                      (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
-    cpuMs_ = static_cast<double>(cpuUs) / 1000.0;
+    elapsedMs_ = static_cast<double>(cpuUs) / 1000.0;
 
     // Get peak memory (in kilobytes on Linux, convert to bytes)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss) * 1024ULL;
@@ -157,7 +152,6 @@ protected:
     
     Napi::Object result = Napi::Object::New(env);
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
-    result.Set("cpuMs", Napi::Number::New(env, cpuMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
     result.Set("exitCode", Napi::Number::New(env, exitCode_));
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
@@ -177,7 +171,6 @@ private:
   uint64_t memoryLimitBytes_;
   Napi::Promise::Deferred deferred_;
   double elapsedMs_;
-  double cpuMs_;
   uint64_t peakMemoryBytes_;
   int exitCode_;
   bool timedOut_;
@@ -302,66 +295,6 @@ bool ReadSystemUptime(double &uptimeSeconds, std::string &err) {
   return true;
 }
 
-// Keep the synchronous version for compatibility
-Napi::Value GetLinuxProcessTimes(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-  if (info.Length() < 1) {
-    Napi::TypeError::New(env, "PID argument is required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  if (!info[0].IsNumber()) {
-    Napi::TypeError::New(env, "PID must be a number")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
-
-  if (pid < 1 || pid > 4194304) {
-    Napi::RangeError::New(env, "PID is out of range")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  uint64_t startTimeJiffies = 0;
-  uint64_t utimeJiffies = 0;
-  uint64_t stimeJiffies = 0;
-  std::string err;
-  if (!ReadProcStat(pid, startTimeJiffies, utimeJiffies, stimeJiffies, err)) {
-    Napi::Error::New(env, err).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  double systemUptimeSeconds = 0.0;
-  if (!ReadSystemUptime(systemUptimeSeconds, err)) {
-    Napi::Error::New(env, err).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  long clockTicksPerSecond = sysconf(_SC_CLK_TCK);
-  if (clockTicksPerSecond <= 0) {
-    Napi::Error::New(env, "Failed to get _SC_CLK_TCK")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  double processStartSeconds =
-      static_cast<double>(startTimeJiffies) / clockTicksPerSecond;
-  double elapsedSeconds = systemUptimeSeconds - processStartSeconds;
-  double elapsedMs = elapsedSeconds * 1000.0;
-
-  double cpuSeconds = static_cast<double>(utimeJiffies + stimeJiffies) /
-                      clockTicksPerSecond;
-  double cpuMs = cpuSeconds * 1000.0;
-
-  Napi::Object result = Napi::Object::New(env);
-  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
-  result.Set("cpuMs", Napi::Number::New(env, cpuMs));
-  return result;
-}
-
 // Helper to parse memory lines from /proc/<pid>/status
 bool ParseKbLineToBytes(const char *line, const char *prefix,
                         uint64_t &outBytes) {
@@ -447,7 +380,8 @@ bool ReadProcStatusMemory(uint32_t pid, uint64_t &rssBytes, uint64_t &peakRssByt
   return true;
 }
 
-Napi::Value GetLinuxMemoryStats(const Napi::CallbackInfo &info) {
+// Combined function to get process stats (elapsed CPU time and memory)
+Napi::Value GetLinuxProcessStats(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (info.Length() < 1) {
@@ -469,15 +403,38 @@ Napi::Value GetLinuxMemoryStats(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
+  // Get CPU times from /proc/<pid>/stat
+  uint64_t startTimeJiffies = 0;
+  uint64_t utimeJiffies = 0;
+  uint64_t stimeJiffies = 0;
+  std::string err;
+  if (!ReadProcStat(pid, startTimeJiffies, utimeJiffies, stimeJiffies, err)) {
+    Napi::Error::New(env, err).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  long clockTicksPerSecond = sysconf(_SC_CLK_TCK);
+  if (clockTicksPerSecond <= 0) {
+    Napi::Error::New(env, "Failed to get _SC_CLK_TCK")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  // Calculate elapsed CPU time (user + system)
+  double cpuSeconds = static_cast<double>(utimeJiffies + stimeJiffies) /
+                      clockTicksPerSecond;
+  double elapsedMs = cpuSeconds * 1000.0;
+
+  // Get memory stats from /proc/<pid>/status
   uint64_t rssBytes = 0;
   uint64_t peakRssBytes = 0;
-  std::string err;
   if (!ReadProcStatusMemory(pid, rssBytes, peakRssBytes, err)) {
     Napi::Error::New(env, err).ThrowAsJavaScriptException();
     return env.Null();
   }
 
   Napi::Object result = Napi::Object::New(env);
+  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
   result.Set("rss", Napi::Number::New(env, static_cast<double>(rssBytes)));
   result.Set("peakRss",
              Napi::Number::New(env, static_cast<double>(peakRssBytes)));
@@ -487,12 +444,9 @@ Napi::Value GetLinuxMemoryStats(const Napi::CallbackInfo &info) {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("waitForProcess",
               Napi::Function::New(env, WaitForProcess, "waitForProcess"));
-  exports.Set("getLinuxProcessTimes",
-              Napi::Function::New(env, GetLinuxProcessTimes,
-                                  "getLinuxProcessTimes"));
-  exports.Set("getLinuxMemoryStats",
-              Napi::Function::New(env, GetLinuxMemoryStats,
-                                  "getLinuxMemoryStats"));
+  exports.Set("getLinuxProcessStats",
+              Napi::Function::New(env, GetLinuxProcessStats,
+                                  "getLinuxProcessStats"));
   return exports;
 }
 

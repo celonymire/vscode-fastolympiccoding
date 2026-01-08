@@ -22,11 +22,9 @@ function arrayEquals<T>(a: T[], b: T[]): boolean {
 }
 
 type Win32ProcessMonitorAddon = {
-  getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
-  getWin32ProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+  getWin32ProcessStats: (pid: number) => { elapsedMs: number; rss: number; peakRss: number };
   waitForProcess: (pid: number, timeoutMs: number, memoryLimitMB: number) => Promise<{
     elapsedMs: number;
-    cpuMs: number;
     peakMemoryBytes: number;
     exitCode: number;
     timedOut: boolean;
@@ -36,11 +34,9 @@ type Win32ProcessMonitorAddon = {
 };
 
 type LinuxProcessMonitorAddon = {
-  getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
-  getLinuxProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+  getLinuxProcessStats: (pid: number) => { elapsedMs: number; rss: number; peakRss: number };
   waitForProcess: (pid: number, timeoutMs: number, memoryLimitMB: number) => Promise<{
     elapsedMs: number;
-    cpuMs: number;
     peakMemoryBytes: number;
     exitCode: number;
     timedOut: boolean;
@@ -50,11 +46,9 @@ type LinuxProcessMonitorAddon = {
 };
 
 type DarwinProcessMonitorAddon = {
-  getDarwinMemoryStats: (pid: number) => { rss: number; peakRss: number };
-  getDarwinProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+  getDarwinProcessStats: (pid: number) => { elapsedMs: number; rss: number; peakRss: number };
   waitForProcess: (pid: number, timeoutMs: number, memoryLimitMB: number) => Promise<{
     elapsedMs: number;
-    cpuMs: number;
     peakMemoryBytes: number;
     exitCode: number;
     timedOut: boolean;
@@ -283,20 +277,20 @@ export class Runnable {
       if (process.platform === "win32") {
         const addon = getWin32ProcessMonitor();
         if (addon) {
-          const times = addon.getWin32ProcessTimes(pid);
-          return Math.round(times.elapsedMs);
+          const stats = addon.getWin32ProcessStats(pid);
+          return Math.round(stats.elapsedMs);
         }
       } else if (process.platform === "linux") {
         const addon = getLinuxProcessMonitor();
         if (addon) {
-          const times = addon.getLinuxProcessTimes(pid);
-          return Math.round(times.elapsedMs);
+          const stats = addon.getLinuxProcessStats(pid);
+          return Math.round(stats.elapsedMs);
         }
       } else if (process.platform === "darwin") {
         const addon = getDarwinProcessMonitor();
         if (addon) {
-          const times = addon.getDarwinProcessTimes(pid);
-          return Math.round(times.elapsedMs);
+          const stats = addon.getDarwinProcessStats(pid);
+          return Math.round(stats.elapsedMs);
         }
       }
     } catch (err) {
@@ -320,8 +314,8 @@ export class Runnable {
       if (process.platform === "win32") {
         const addon = getWin32ProcessMonitor();
         if (addon) {
-          const memStats = addon.getWin32MemoryStats(pid);
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+          const stats = addon.getWin32ProcessStats(pid);
+          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.peakRss);
           return;
         } else {
           // fallback to pidusage if addon not available or the addon failed
@@ -332,9 +326,9 @@ export class Runnable {
       if (process.platform === "linux") {
         const addon = getLinuxProcessMonitor();
         if (addon) {
-          const memStats = addon.getLinuxMemoryStats(pid);
+          const stats = addon.getLinuxProcessStats(pid);
           // Prefer kernel high-water mark when available (monotonic).
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
+          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.peakRss);
           return;
         } else {
           // fallback to pidusage if addon not available or the addon failed

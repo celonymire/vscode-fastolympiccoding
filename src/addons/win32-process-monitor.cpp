@@ -12,7 +12,7 @@ public:
   WaitForProcessWorker(Napi::Env &env, DWORD pid, DWORD timeoutMs, uint64_t memoryLimitBytes)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs), 
         memoryLimitBytes_(memoryLimitBytes), deferred_(env),
-        elapsedMs_(0.0), cpuMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
+        elapsedMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
         timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
@@ -185,15 +185,14 @@ protected:
     creationTime.HighPart = ftCreation.dwHighDateTime;
     exitTime.LowPart = ftExitFinal.dwLowDateTime;
     exitTime.HighPart = ftExitFinal.dwHighDateTime;
-    elapsedMs_ = static_cast<double>(exitTime.QuadPart - creationTime.QuadPart) / 10000.0;
 
-    // Calculate CPU time
+    // Calculate elapsed CPU time (user + kernel)
     ULARGE_INTEGER kernelTime, userTime;
     kernelTime.LowPart = ftKernelFinal.dwLowDateTime;
     kernelTime.HighPart = ftKernelFinal.dwHighDateTime;
     userTime.LowPart = ftUserFinal.dwLowDateTime;
     userTime.HighPart = ftUserFinal.dwHighDateTime;
-    cpuMs_ = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
+    elapsedMs_ = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
   }
 
   void OnOK() override {
@@ -206,7 +205,6 @@ protected:
     }
     
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
-    result.Set("cpuMs", Napi::Number::New(env, cpuMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
     result.Set("exitCode", Napi::Number::New(env, exitCode_));
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
@@ -226,7 +224,6 @@ private:
   uint64_t memoryLimitBytes_;
   Napi::Promise::Deferred deferred_;
   double elapsedMs_;
-  double cpuMs_;
   uint64_t peakMemoryBytes_;
   int exitCode_;
   bool timedOut_;
@@ -260,8 +257,8 @@ Napi::Value WaitForProcess(const Napi::CallbackInfo &info) {
   return worker->GetPromise();
 }
 
-// Keep the synchronous version for compatibility
-Napi::Value GetWin32ProcessTimes(const Napi::CallbackInfo &info) {
+// Combined function to get process stats (elapsed CPU time and memory)
+Napi::Value GetWin32ProcessStats(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (info.Length() < 1) {
@@ -278,7 +275,7 @@ Napi::Value GetWin32ProcessTimes(const Napi::CallbackInfo &info) {
 
   uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
   HANDLE hProcess =
-      OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+      OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 
   if (hProcess == NULL) {
     Napi::Error::New(env, "Failed to open process with given PID")
@@ -286,6 +283,7 @@ Napi::Value GetWin32ProcessTimes(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
+  // Get process times
   FILETIME ftCreation, ftExit, ftKernel, ftUser;
   if (!GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser)) {
     CloseHandle(hProcess);
@@ -294,87 +292,39 @@ Napi::Value GetWin32ProcessTimes(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
-  CloseHandle(hProcess);
-
-  // Get current time
-  FILETIME ftNow;
-  GetSystemTimeAsFileTime(&ftNow);
-
-  // Calculate elapsed wall-clock time
-  ULARGE_INTEGER creationTime, nowTime;
-  creationTime.LowPart = ftCreation.dwLowDateTime;
-  creationTime.HighPart = ftCreation.dwHighDateTime;
-  nowTime.LowPart = ftNow.dwLowDateTime;
-  nowTime.HighPart = ftNow.dwHighDateTime;
-  double elapsedMs = static_cast<double>(nowTime.QuadPart - creationTime.QuadPart) / 10000.0;
-
-  // Calculate total CPU time (user + kernel)
+  // Calculate elapsed CPU time (user + kernel)
   ULARGE_INTEGER kernelTime, userTime;
   kernelTime.LowPart = ftKernel.dwLowDateTime;
   kernelTime.HighPart = ftKernel.dwHighDateTime;
   userTime.LowPart = ftUser.dwLowDateTime;
   userTime.HighPart = ftUser.dwHighDateTime;
-  double cpuMs = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
+  double elapsedMs = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
 
-  Napi::Object result = Napi::Object::New(env);
-  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
-  result.Set("cpuMs", Napi::Number::New(env, cpuMs));
-
-  return result;
-}
-
-Napi::Value GetWin32MemoryStats(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-  if (info.Length() < 1) {
-    Napi::TypeError::New(env, "PID argument is required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  if (!info[0].IsNumber()) {
-    Napi::TypeError::New(env, "PID must be a number")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
-  HANDLE handle =
-      OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-
-  if (handle == NULL) {
-    Napi::Error::New(env, "Failed to open process with given PID")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
+  // Get memory stats
   PROCESS_MEMORY_COUNTERS pmc;
-  Napi::Object result = Napi::Object::New(env);
-  if (GetProcessMemoryInfo(handle, &pmc, sizeof(pmc))) {
-    // Return current and peak resident set size (in bytes)
-    result.Set("rss", Napi::Number::New(env, (double)pmc.WorkingSetSize));
-    result.Set("peakRss",
-               Napi::Number::New(env, (double)pmc.PeakWorkingSetSize));
-  } else {
-    CloseHandle(handle);
+  if (!GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
+    CloseHandle(hProcess);
     Napi::Error::New(env, "Failed to get process memory info")
         .ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  CloseHandle(handle);
+  CloseHandle(hProcess);
+
+  Napi::Object result = Napi::Object::New(env);
+  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
+  result.Set("rss", Napi::Number::New(env, (double)pmc.WorkingSetSize));
+  result.Set("peakRss", Napi::Number::New(env, (double)pmc.PeakWorkingSetSize));
+
   return result;
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("waitForProcess",
               Napi::Function::New(env, WaitForProcess, "waitForProcess"));
-  exports.Set("getWin32ProcessTimes",
-              Napi::Function::New(env, GetWin32ProcessTimes,
-                                  "getWin32ProcessTimes"));
-  exports.Set("getWin32MemoryStats",
-              Napi::Function::New(env, GetWin32MemoryStats,
-                                  "getWin32MemoryStats"));
+  exports.Set("getWin32ProcessStats",
+              Napi::Function::New(env, GetWin32ProcessStats,
+                                  "getWin32ProcessStats"));
   return exports;
 }
 

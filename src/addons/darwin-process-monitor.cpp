@@ -27,7 +27,7 @@ class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
   WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
-        memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), cpuMs_(0.0), peakMemoryBytes_(0),
+        memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
         exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
@@ -112,12 +112,10 @@ protected:
     // Calculate elapsed wall-clock time
     elapsedUs = (endTime.tv_sec - startTime.tv_sec) * 1000000ULL +
                 (endTime.tv_usec - startTime.tv_usec);
-    elapsedMs_ = static_cast<double>(elapsedUs) / 1000.0;
-
-    // Calculate CPU time from rusage
+    // Calculate elapsed CPU time from rusage (user + system)
     uint64_t cpuUs = (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
                      (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
-    cpuMs_ = static_cast<double>(cpuUs) / 1000.0;
+    elapsedMs_ = static_cast<double>(cpuUs) / 1000.0;
 
     // Get peak memory (ru_maxrss is in bytes on macOS)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss);
@@ -142,7 +140,6 @@ protected:
     
     Napi::Object result = Napi::Object::New(env);
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
-    result.Set("cpuMs", Napi::Number::New(env, cpuMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
     result.Set("exitCode", Napi::Number::New(env, exitCode_));
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
@@ -162,7 +159,6 @@ private:
   uint64_t memoryLimitBytes_;
   Napi::Promise::Deferred deferred_;
   double elapsedMs_;
-  double cpuMs_;
   uint64_t peakMemoryBytes_;
   int exitCode_;
   bool timedOut_;
@@ -182,12 +178,14 @@ private:
 private:
   pid_t pid_;
   uint32_t timeoutMs_;
+  uint64_t memoryLimitBytes_;
   Napi::Promise::Deferred deferred_;
   double elapsedMs_;
-  double cpuMs_;
   uint64_t peakMemoryBytes_;
   int exitCode_;
   bool timedOut_;
+  bool memoryLimitExceeded_;
+  bool stopped_;
   std::string errorMsg_;
 };
 
@@ -223,7 +221,8 @@ Napi::Value WaitForProcess(const Napi::CallbackInfo &info) {
 }
 
 // Synchronous function to get current process times
-Napi::Value GetDarwinProcessTimes(const Napi::CallbackInfo &info) {
+// Combined function to get process stats (elapsed CPU time and memory)
+Napi::Value GetDarwinProcessStats(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (info.Length() < 1) {
@@ -255,77 +254,14 @@ Napi::Value GetDarwinProcessTimes(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
-  // Get basic process info for start time
-  struct proc_bsdinfo bsdinfo;
-  ret = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdinfo, sizeof(bsdinfo));
-  
-  if (ret != sizeof(bsdinfo)) {
-    Napi::Error::New(env, "Failed to get process BSD info")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  // Get current time
-  struct timeval now;
-  gettimeofday(&now, nullptr);
-  uint64_t nowMicros = static_cast<uint64_t>(now.tv_sec) * 1000000ULL + 
-                       static_cast<uint64_t>(now.tv_usec);
-
-  // Calculate process start time in microseconds
-  uint64_t startMicros = static_cast<uint64_t>(bsdinfo.pbi_start_tvsec) * 1000000ULL + 
-                         static_cast<uint64_t>(bsdinfo.pbi_start_tvusec);
-
-  // Calculate elapsed wall-clock time
-  uint64_t elapsedMicros = nowMicros - startMicros;
-  double elapsedMs = static_cast<double>(elapsedMicros) / 1000.0;
-
-  // Calculate total CPU time (user + system)
+  // Calculate elapsed CPU time (user + system)
   // taskinfo times are in nanoseconds
   uint64_t userTimeNanos = taskinfo.pti_total_user;
   uint64_t systemTimeNanos = taskinfo.pti_total_system;
   uint64_t cpuNanos = userTimeNanos + systemTimeNanos;
-  double cpuMs = static_cast<double>(cpuNanos) / 1000000.0;
+  double elapsedMs = static_cast<double>(cpuNanos) / 1000000.0;
 
-  Napi::Object result = Napi::Object::New(env);
-  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
-  result.Set("cpuMs", Napi::Number::New(env, cpuMs));
-  return result;
-}
-
-// Synchronous function to get current memory stats
-Napi::Value GetDarwinMemoryStats(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-  if (info.Length() < 1) {
-    Napi::TypeError::New(env, "PID argument is required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  if (!info[0].IsNumber()) {
-    Napi::TypeError::New(env, "PID must be a number")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  int32_t pid = info[0].As<Napi::Number>().Int32Value();
-
-  if (pid < 1) {
-    Napi::RangeError::New(env, "PID must be positive")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  // Get process task info which includes memory stats
-  struct proc_taskinfo taskinfo;
-  int ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskinfo, sizeof(taskinfo));
-  
-  if (ret != sizeof(taskinfo)) {
-    Napi::Error::New(env, "Failed to get process info (process may have exited)")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
+  // Get memory stats
   // pti_resident_size: current resident memory in bytes
   // Note: macOS doesn't provide a direct "peak RSS" in proc_pidinfo like Linux/Windows
   // We would need to track it ourselves or use different APIs
@@ -333,6 +269,7 @@ Napi::Value GetDarwinMemoryStats(const Napi::CallbackInfo &info) {
   uint64_t rssBytes = taskinfo.pti_resident_size;
 
   Napi::Object result = Napi::Object::New(env);
+  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
   result.Set("rss", Napi::Number::New(env, static_cast<double>(rssBytes)));
   result.Set("peakRss", Napi::Number::New(env, static_cast<double>(rssBytes)));
   return result;
@@ -341,13 +278,11 @@ Napi::Value GetDarwinMemoryStats(const Napi::CallbackInfo &info) {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("waitForProcess",
               Napi::Function::New(env, WaitForProcess, "waitForProcess"));
-  exports.Set("getDarwinProcessTimes",
-              Napi::Function::New(env, GetDarwinProcessTimes,
-                                  "getDarwinProcessTimes"));
-  exports.Set("getDarwinMemoryStats",
-              Napi::Function::New(env, GetDarwinMemoryStats,
-                                  "getDarwinMemoryStats"));
+  exports.Set("getDarwinProcessStats",
+              Napi::Function::New(env, GetDarwinProcessStats,
+                                  "getDarwinProcessStats"));
   return exports;
+}
 }
 
 } // namespace
