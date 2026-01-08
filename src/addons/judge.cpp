@@ -11,6 +11,13 @@
 #include <string>
 #include <vector>
 
+#ifdef __linux__
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 namespace {
 
 constexpr size_t PIPE_BUFFER_SIZE = 65536;
@@ -70,6 +77,10 @@ struct ProcessContext {
   Napi::ThreadSafeFunction stdoutCallback;
   Napi::ThreadSafeFunction stderrCallback;
 
+#ifdef __linux__
+  int pidfd = -1; // File descriptor for the process (pidfd_open)
+#endif
+
 #ifdef _WIN32
   HANDLE jobObject = nullptr;
 #endif
@@ -78,57 +89,48 @@ struct ProcessContext {
 uint64_t GetMonotonicTimeMs() { return uv_hrtime() / 1000000ULL; }
 
 #ifdef __linux__
-bool GetLinuxMemoryStats(uint32_t pid, uint64_t &rssBytes,
-                         uint64_t &peakRssBytes) {
-  rssBytes = 0;
-  peakRssBytes = 0;
+// Wrapper for pidfd_open syscall (available since Linux 5.3)
+// Returns a file descriptor that refers to the process
+static int pidfd_open(pid_t pid, unsigned int flags) {
+  return static_cast<int>(syscall(SYS_pidfd_open, pid, flags));
+}
 
+// Read peak memory for a specific process from /proc/{pid}/status
+// This must be called while the PID is still valid (immediately after exit)
+static uint64_t GetProcessPeakMemory(int pid) {
   char path[64];
-  std::snprintf(path, sizeof(path), "/proc/%u/status", pid);
+  std::snprintf(path, sizeof(path), "/proc/%d/status", pid);
 
   std::FILE *f = std::fopen(path, "r");
   if (!f) {
-    return false;
+    fprintf(stderr, "[judge.cpp] Failed to open %s\n", path);
+    return 0;
   }
 
   char buf[512];
-  bool foundRss = false;
-  bool foundPeak = false;
+  uint64_t peakRssBytes = 0;
+  bool found = false;
 
   while (std::fgets(buf, sizeof(buf), f) != nullptr) {
-    if (!foundRss && std::strncmp(buf, "VmRSS:", 6) == 0) {
-      const char *p = buf + 6;
-      while (*p == ' ' || *p == '\t')
-        ++p;
-      unsigned long long kb = std::strtoull(p, nullptr, 10);
-      rssBytes = kb * 1024ULL;
-      foundRss = true;
-    }
-
-    if (!foundPeak && std::strncmp(buf, "VmHWM:", 6) == 0) {
+    if (std::strncmp(buf, "VmHWM:", 6) == 0) {
       const char *p = buf + 6;
       while (*p == ' ' || *p == '\t')
         ++p;
       unsigned long long kb = std::strtoull(p, nullptr, 10);
       peakRssBytes = kb * 1024ULL;
-      foundPeak = true;
-    }
-
-    if (foundRss && foundPeak) {
+      found = true;
+      fprintf(stderr, "[judge.cpp] Found VmHWM for pid %d: %llu KB = %llu bytes\n", 
+              pid, kb, peakRssBytes);
       break;
     }
   }
 
+  if (!found) {
+    fprintf(stderr, "[judge.cpp] VmHWM not found in %s\n", path);
+  }
+
   std::fclose(f);
-
-  if (!foundPeak && foundRss) {
-    peakRssBytes = rssBytes;
-  }
-  if (!foundRss && foundPeak) {
-    rssBytes = peakRssBytes;
-  }
-
-  return foundRss || foundPeak;
+  return peakRssBytes;
 }
 #endif
 
@@ -136,45 +138,6 @@ bool GetLinuxMemoryStats(uint32_t pid, uint64_t &rssBytes,
 #include <psapi.h>
 #include <windows.h>
 #endif
-
-void SampleMemory(ProcessContext *ctx) {
-#ifdef __linux__
-  uint64_t rss = 0;
-  uint64_t peak = 0;
-  if (GetLinuxMemoryStats(ctx->process.pid, rss, peak)) {
-    ctx->result.maxMemoryBytes = std::max(ctx->result.maxMemoryBytes, peak);
-  }
-
-  // Manual enforcement on Linux (only if process is still running)
-  if (!ctx->processExited && ctx->memoryLimitBytes > 0 &&
-      ctx->result.maxMemoryBytes > ctx->memoryLimitBytes) {
-    ctx->result.memoryLimitExceeded = true;
-    uv_timer_stop(&ctx->memoryTimer);
-    uv_process_kill(&ctx->process, SIGKILL);
-  }
-#else
-  // No memory sampling on other platforms (Windows uses job objects)
-#endif
-}
-
-void OnMemoryTimerTick(uv_timer_t *timer) {
-  auto *ctx = static_cast<ProcessContext *>(timer->data);
-  SampleMemory(ctx);
-}
-
-void OnTimeoutTimerFired(uv_timer_t *timer) {
-  auto *ctx = static_cast<ProcessContext *>(timer->data);
-  if (!ctx->processExited) {
-    ctx->result.timedOut = true;
-    if (ctx->timeoutTimerActive) {
-      uv_timer_stop(&ctx->timeoutTimer);
-    }
-    if (ctx->memoryTimerActive) {
-      uv_timer_stop(&ctx->memoryTimer);
-    }
-    uv_process_kill(&ctx->process, SIGKILL);
-  }
-}
 
 void AllocBuffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   buf->base = new char[PIPE_BUFFER_SIZE];
@@ -305,13 +268,6 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   ctx->result.termSignal = term_signal;
   ctx->result.elapsedMs = GetMonotonicTimeMs() - ctx->startTime;
 
-  if (ctx->timeoutTimerActive) {
-    uv_timer_stop(&ctx->timeoutTimer);
-  }
-  if (ctx->memoryTimerActive) {
-    uv_timer_stop(&ctx->memoryTimer);
-  }
-
 #ifdef _WIN32
   // On Windows, get peak memory from job object
   if (ctx->jobObject) {
@@ -325,8 +281,32 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
     }
   }
 #else
-  // On Linux, sample memory one final time
-  SampleMemory(ctx);
+  // On Linux, read peak memory directly from /proc while PID is still valid
+  // The pidfd keeps the PID from being recycled until we close it
+  // Note: getrusage(RUSAGE_CHILDREN) is cumulative across all children,
+  // so we need per-process stats from /proc
+  fprintf(stderr, "[judge.cpp] OnProcessExit: About to read memory for pid %d\n", 
+          ctx->process.pid);
+  ctx->result.maxMemoryBytes = GetProcessPeakMemory(ctx->process.pid);
+  fprintf(stderr, "[judge.cpp] OnProcessExit: Got maxMemoryBytes = %llu\n", 
+          ctx->result.maxMemoryBytes);
+  
+  // Close the pidfd now that we've read the stats
+  if (ctx->pidfd >= 0) {
+    close(ctx->pidfd);
+    ctx->pidfd = -1;
+  }
+  
+  // Check if process was killed by resource limits
+  if (term_signal == SIGKILL && ctx->timeoutMs > 0) {
+    // RLIMIT_CPU sends SIGKILL when CPU time limit is exceeded
+    ctx->result.timedOut = true;
+  }
+  
+  if (term_signal == SIGKILL && ctx->memoryLimitBytes > 0 &&
+      ctx->result.maxMemoryBytes > ctx->memoryLimitBytes) {
+    ctx->result.memoryLimitExceeded = true;
+  }
 #endif
 
 #ifdef _WIN32
@@ -385,18 +365,7 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
     ctx->totalHandles--;
   }
 
-  // Only close timers if they were actually started
-  if (ctx->timeoutTimerActive) {
-    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->timeoutTimer),
-             OnHandleClose);
-  } else {
-    ctx->totalHandles--;
-  }
-  if (ctx->memoryTimerActive) {
-    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->memoryTimer), OnHandleClose);
-  } else {
-    ctx->totalHandles--;
-  }
+  // No timers to close - all limits enforced at OS level!
 
   // Only close stdout/stderr if not already closed by EOF
   if (!ctx->stdoutClosed) {
@@ -542,6 +511,35 @@ public:
       return;
     }
 
+#ifdef __linux__
+    // Open a pidfd to prevent PID reuse and safely access process stats later
+    // The pidfd holds a reference to the process even after it exits
+    ctx_->pidfd = pidfd_open(ctx_->process.pid, 0);
+    
+    // Use prlimit() to set resource limits on the child process
+    // 
+    // Why prlimit() instead of setrlimit()?
+    // - setrlimit() only affects the calling process (this parent process)
+    // - prlimit() can set limits on ANY process by PID
+    // - We spawn the child first, then immediately set its limits from the parent
+    // - This is cleaner than fork+setrlimit+exec pattern
+    //
+    if (ctx_->memoryLimitBytes > 0) {
+      struct rlimit rlim;
+      rlim.rlim_cur = ctx_->memoryLimitBytes;
+      rlim.rlim_max = ctx_->memoryLimitBytes;
+      prlimit(ctx_->process.pid, RLIMIT_AS, &rlim, nullptr);
+    }
+    
+    if (ctx_->timeoutMs > 0) {
+      struct rlimit rlim;
+      // RLIMIT_CPU is in seconds, convert from milliseconds (round up)
+      rlim.rlim_cur = (ctx_->timeoutMs + 999) / 1000;
+      rlim.rlim_max = rlim.rlim_cur;
+      prlimit(ctx_->process.pid, RLIMIT_CPU, &rlim, nullptr);
+    }
+#endif
+
 #ifdef _WIN32
     // Create job object for limit enforcement on Windows
     if (ctx_->memoryLimitBytes > 0 || ctx_->timeoutMs > 0) {
@@ -631,32 +629,13 @@ public:
                OnHandleClose);
     }
 
-    // Update totalHandles to include the async handle
-    ctx_->totalHandles =
-        7; // process, stdinAsync, stdin, stdout, stderr, timeout, memory
+    // Update totalHandles: process, stdinAsync, stdin, stdout, stderr (5 total)
+    ctx_->totalHandles = 5;
 
-    if (ctx_->timeoutMs > 0) {
-      uv_timer_init(ctx_->loop, &ctx_->timeoutTimer);
-      uv_timer_start(&ctx_->timeoutTimer, OnTimeoutTimerFired, ctx_->timeoutMs,
-                     0);
-      ctx_->timeoutTimerActive = true;
-    }
-
-#ifdef _WIN32
-    // On Windows with job objects, skip memory timer since we query peak from
-    // job object But always start timer if no job object to track memory even
-    // without limits
-    if (!ctx_->jobObject) {
-#else
-    // On Linux, always start memory timer to track usage (enforcement is
-    // conditional in SampleMemory)
-    {
-#endif
-      uv_timer_init(ctx_->loop, &ctx_->memoryTimer);
-      uv_timer_start(&ctx_->memoryTimer, OnMemoryTimerTick,
-                     MEMORY_SAMPLE_INTERVAL_MS, MEMORY_SAMPLE_INTERVAL_MS);
-      ctx_->memoryTimerActive = true;
-    }
+    // On Windows and Linux, all limits are enforced at OS level:
+    // - Windows: Job objects (time + memory)
+    // - Linux: prlimit (RLIMIT_CPU + RLIMIT_AS)
+    // No timers needed on either platform!
 
     uv_run(ctx_->loop, UV_RUN_DEFAULT);
 
