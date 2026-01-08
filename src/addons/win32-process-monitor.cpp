@@ -4,8 +4,8 @@
 
 #pragma comment(lib, "psapi.lib")
 
-// Synchronous wait for process completion and get timing/memory stats
-// Enforces time and memory limits, killing the process if exceeded
+// Windows implementation using Job Objects for resource limit enforcement
+// Job Objects allow the OS to enforce time and memory limits directly
 // Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number, exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped: boolean }
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
@@ -25,61 +25,90 @@ public:
 protected:
   void Execute() override {
     HANDLE hProcess =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid_);
+        OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid_);
 
     if (hProcess == NULL) {
       errorMsg_ = "Failed to open process with given PID";
       return;
     }
 
+    // Create a job object to manage resource limits
+    HANDLE hJob = CreateJobObject(NULL, NULL);
+    if (hJob == NULL) {
+      CloseHandle(hProcess);
+      errorMsg_ = "Failed to create job object";
+      return;
+    }
+
+    // Configure job limits
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobLimits = {0};
+    jobLimits.BasicLimitInformation.LimitFlags = 0;
+
+    // Set time limit if specified (in 100-nanosecond intervals)
+    if (timeoutMs_ > 0) {
+      ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
+      jobLimits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = timeLimit100ns;
+      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_TIME;
+    }
+
+    // Set memory limit if specified
+    if (memoryLimitBytes_ > 0) {
+      jobLimits.ProcessMemoryLimit = memoryLimitBytes_;
+      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+    }
+
+    // Set the job limits
+    if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, 
+                                  &jobLimits, sizeof(jobLimits))) {
+      CloseHandle(hJob);
+      CloseHandle(hProcess);
+      errorMsg_ = "Failed to set job object limits";
+      return;
+    }
+
+    // Assign the process to the job
+    if (!AssignProcessToJobObject(hJob, hProcess)) {
+      CloseHandle(hJob);
+      CloseHandle(hProcess);
+      errorMsg_ = "Failed to assign process to job object";
+      return;
+    }
+
     // Get creation time before waiting
     FILETIME ftCreation, ftExit, ftKernel, ftUser;
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser)) {
+      CloseHandle(hJob);
       CloseHandle(hProcess);
       errorMsg_ = "Failed to get initial process times";
       return;
     }
 
-    // Monitor process with time and memory limits
-    const DWORD pollIntervalMs = 50; // Check every 50ms
-    DWORD elapsedMs = 0;
+    // Wait for process to complete or be stopped externally
     bool processExited = false;
+    const DWORD pollIntervalMs = 50;
 
     while (!processExited && !stopped_) {
-      // Wait for process or timeout
       DWORD waitResult = WaitForSingleObject(hProcess, pollIntervalMs);
 
       if (waitResult == WAIT_OBJECT_0) {
-        // Process exited normally
+        // Process exited
         processExited = true;
         break;
       } else if (waitResult == WAIT_TIMEOUT) {
-        // Process still running, check limits
-        elapsedMs += pollIntervalMs;
-
-        // Check time limit
-        if (timeoutMs_ > 0 && elapsedMs >= timeoutMs_) {
-          timedOut_ = true;
-          TerminateProcess(hProcess, 1);
-          WaitForSingleObject(hProcess, INFINITE);
-          processExited = true;
-          break;
-        }
-
-        // Check memory limit
-        if (memoryLimitBytes_ > 0) {
-          PROCESS_MEMORY_COUNTERS pmc;
-          if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
-            if (pmc.WorkingSetSize > memoryLimitBytes_) {
-              memoryLimitExceeded_ = true;
-              TerminateProcess(hProcess, 1);
-              WaitForSingleObject(hProcess, INFINITE);
-              processExited = true;
-              break;
-            }
+        // Check if job limits were exceeded
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accountingInfo;
+        if (QueryInformationJobObject(hJob, JobObjectBasicAccountingInformation,
+                                      &accountingInfo, sizeof(accountingInfo), NULL)) {
+          // Check if time limit was exceeded (job will terminate process automatically)
+          if (accountingInfo.TotalTerminatedProcesses > 0) {
+            // Process was terminated by job object
+            timedOut_ = true;
+            processExited = true;
+            break;
           }
         }
       } else {
+        CloseHandle(hJob);
         CloseHandle(hProcess);
         errorMsg_ = "Failed to wait for process";
         return;
@@ -96,6 +125,7 @@ protected:
     FILETIME ftExitFinal, ftKernelFinal, ftUserFinal;
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExitFinal, &ftKernelFinal,
                          &ftUserFinal)) {
+      CloseHandle(hJob);
       CloseHandle(hProcess);
       errorMsg_ = "Failed to get final process times";
       return;
@@ -104,18 +134,49 @@ protected:
     // Get exit code
     DWORD exitCode = 0;
     if (!GetExitCodeProcess(hProcess, &exitCode)) {
+      CloseHandle(hJob);
       CloseHandle(hProcess);
       errorMsg_ = "Failed to get exit code";
       return;
     }
     exitCode_ = static_cast<int>(exitCode);
 
-    // Get peak memory
-    PROCESS_MEMORY_COUNTERS pmc;
-    if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
-      peakMemoryBytes_ = static_cast<uint64_t>(pmc.PeakWorkingSetSize);
+    // Check if process was killed due to exceeding limits
+    // ERROR_NOT_ENOUGH_QUOTA (0x705) or STATUS_QUOTA_EXCEEDED (0xC0000044) indicates limit exceeded
+    if (exitCode == 0xC0000044 || exitCode == 0x705) {
+      // Could be memory or time limit - check job accounting info
+      JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION accountingInfo;
+      if (QueryInformationJobObject(hJob, JobObjectBasicAndIoAccountingInformation,
+                                    &accountingInfo, sizeof(accountingInfo), NULL)) {
+        // If total user time is near the limit, it was likely a time limit
+        ULONGLONG totalUserTime = accountingInfo.BasicInfo.TotalUserTime.QuadPart;
+        if (timeoutMs_ > 0) {
+          ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
+          if (totalUserTime >= timeLimit100ns * 0.95) { // Within 5% of limit
+            timedOut_ = true;
+          } else {
+            memoryLimitExceeded_ = true;
+          }
+        } else {
+          memoryLimitExceeded_ = true;
+        }
+      }
     }
 
+    // Get peak memory from job accounting
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accountingInfo;
+    if (QueryInformationJobObject(hJob, JobObjectBasicAccountingInformation,
+                                  &accountingInfo, sizeof(accountingInfo), NULL)) {
+      peakMemoryBytes_ = static_cast<uint64_t>(accountingInfo.PeakProcessMemoryUsed);
+    } else {
+      // Fallback to process memory counters
+      PROCESS_MEMORY_COUNTERS pmc;
+      if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
+        peakMemoryBytes_ = static_cast<uint64_t>(pmc.PeakWorkingSetSize);
+      }
+    }
+
+    CloseHandle(hJob);
     CloseHandle(hProcess);
 
     // Calculate elapsed time
