@@ -138,10 +138,6 @@ bool GetLinuxMemoryStats(uint32_t pid, uint64_t &rssBytes,
 #endif
 
 void SampleMemory(ProcessContext *ctx) {
-  if (ctx->processExited) {
-    return;
-  }
-
 #ifdef __linux__
   uint64_t rss = 0;
   uint64_t peak = 0;
@@ -149,8 +145,8 @@ void SampleMemory(ProcessContext *ctx) {
     ctx->result.maxMemoryBytes = std::max(ctx->result.maxMemoryBytes, peak);
   }
 
-  // Manual enforcement on Linux
-  if (ctx->memoryLimitBytes > 0 &&
+  // Manual enforcement on Linux (only if process is still running)
+  if (!ctx->processExited && ctx->memoryLimitBytes > 0 &&
       ctx->result.maxMemoryBytes > ctx->memoryLimitBytes) {
     ctx->result.memoryLimitExceeded = true;
     uv_timer_stop(&ctx->memoryTimer);
@@ -648,10 +644,13 @@ public:
 
 #ifdef _WIN32
     // On Windows with job objects, skip memory timer since we query peak from
-    // job object
-    if (ctx_->memoryLimitBytes > 0 && !ctx_->jobObject) {
+    // job object But always start timer if no job object to track memory even
+    // without limits
+    if (!ctx_->jobObject) {
 #else
-    if (ctx_->memoryLimitBytes > 0) {
+    // On Linux, always start memory timer to track usage (enforcement is
+    // conditional in SampleMemory)
+    {
 #endif
       uv_timer_init(ctx_->loop, &ctx_->memoryTimer);
       uv_timer_start(&ctx_->memoryTimer, OnMemoryTimerTick,
