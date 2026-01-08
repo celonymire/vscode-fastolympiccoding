@@ -9,14 +9,24 @@
 #include <sys/wait.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <poll.h>
+#include <sys/syscall.h>
 
-// Linux implementation using wait4 for accurate timing and memory stats
+// Linux implementation using pidfd_open + poll for efficient process monitoring
+// and wait4 for accurate timing and memory stats
 //
 // Exports:
 //   waitForProcess(pid: number, timeoutMs: number) -> Promise<{ elapsedMs, cpuMs, peakMemoryBytes, exitCode, timedOut }>
-//   getLinuxProcessTimes(pid: number) -> { elapsedMs: number, cpuMs: number }
+//   getLinuxProcessStats(pid: number) -> { elapsedMs: number, rss: number, peakRss: number }
 //
-// The waitForProcess function uses wait4 to get rusage stats directly from the kernel
+// The waitForProcess function uses:
+//  - pidfd_open + poll for efficient waiting (kernel notification instead of polling)
+//  - wait4 to get rusage stats directly from the kernel
+
+// pidfd_open syscall wrapper (available since Linux 5.3)
+static int pidfd_open(pid_t pid, unsigned int flags) {
+  return syscall(SYS_pidfd_open, pid, flags);
+}
 
 namespace {
 
@@ -40,84 +50,185 @@ protected:
     struct timeval startTime;
     gettimeofday(&startTime, nullptr);
 
+    // Try to open pidfd for efficient waiting (requires Linux 5.3+)
+    int pidfd = pidfd_open(pid_, 0);
+    bool usePidfd = (pidfd >= 0);
+
     int status = 0;
     struct rusage rusage;
     bool processExited = false;
     
-    const uint64_t pollIntervalUs = 50000; // 50ms poll interval
-    uint64_t elapsedUs = 0;
-    
-    while (!processExited && !stopped_) {
-      pid_t result = wait4(pid_, &status, WNOHANG, &rusage);
+    if (usePidfd) {
+      // Use pidfd + poll for efficient waiting (no polling overhead)
+      struct pollfd pfd;
+      pfd.fd = pidfd;
+      pfd.events = POLLIN;
       
-      if (result == -1) {
-        errorMsg_ = "wait4 failed: ";
-        errorMsg_ += std::strerror(errno);
-        return;
-      }
-      
-      if (result == pid_) {
-        // Process exited normally
-        processExited = true;
-        break;
-      }
-      
-      // Process still running, check limits
-      struct timeval now;
-      gettimeofday(&now, nullptr);
-      elapsedUs = (now.tv_sec - startTime.tv_sec) * 1000000ULL +
-                  (now.tv_usec - startTime.tv_usec);
-      
-      // Check time limit
-      if (timeoutMs_ > 0 && elapsedUs >= static_cast<uint64_t>(timeoutMs_) * 1000) {
-        timedOut_ = true;
-        kill(pid_, SIGKILL);
-        wait4(pid_, &status, 0, &rusage);
-        processExited = true;
-        break;
-      }
-      
-      // Check memory limit
-      if (memoryLimitBytes_ > 0) {
-        // Read current memory from /proc/<pid>/status
-        char path[64];
-        snprintf(path, sizeof(path), "/proc/%d/status", pid_);
-        FILE *f = fopen(path, "r");
-        if (f) {
-          char line[256];
-          while (fgets(line, sizeof(line), f)) {
-            if (strncmp(line, "VmRSS:", 6) == 0) {
-              unsigned long long rssKB = 0;
-              if (sscanf(line + 6, "%llu", &rssKB) == 1) {
-                uint64_t rssBytes = rssKB * 1024ULL;
-                if (rssBytes > memoryLimitBytes_) {
-                  memoryLimitExceeded_ = true;
-                  fclose(f);
-                  kill(pid_, SIGKILL);
-                  wait4(pid_, &status, 0, &rusage);
-                  processExited = true;
-                  break;
+      while (!processExited && !stopped_) {
+        // Calculate remaining timeout
+        int pollTimeout = -1; // Infinite by default
+        if (timeoutMs_ > 0) {
+          struct timeval now;
+          gettimeofday(&now, nullptr);
+          uint64_t elapsedUs = (now.tv_sec - startTime.tv_sec) * 1000000ULL +
+                               (now.tv_usec - startTime.tv_usec);
+          uint64_t timeoutUs = static_cast<uint64_t>(timeoutMs_) * 1000;
+          
+          if (elapsedUs >= timeoutUs) {
+            // Time limit exceeded
+            timedOut_ = true;
+            close(pidfd);
+            kill(pid_, SIGKILL);
+            wait4(pid_, &status, 0, &rusage);
+            processExited = true;
+            break;
+          }
+          
+          pollTimeout = (timeoutUs - elapsedUs) / 1000; // Convert to milliseconds
+          if (pollTimeout > 100) {
+            pollTimeout = 100; // Check memory limit every 100ms
+          }
+        } else {
+          pollTimeout = 100; // Check memory/stop every 100ms even without timeout
+        }
+        
+        int pollResult = poll(&pfd, 1, pollTimeout);
+        
+        if (pollResult > 0 && (pfd.revents & POLLIN)) {
+          // Process exited
+          close(pidfd);
+          pid_t result = wait4(pid_, &status, WNOHANG, &rusage);
+          if (result == pid_) {
+            processExited = true;
+            break;
+          }
+        } else if (pollResult == -1) {
+          if (errno != EINTR) {
+            close(pidfd);
+            errorMsg_ = "poll failed: ";
+            errorMsg_ += std::strerror(errno);
+            return;
+          }
+          // EINTR is okay, just continue
+        }
+        
+        // Check memory limit if specified
+        if (memoryLimitBytes_ > 0) {
+          char path[64];
+          snprintf(path, sizeof(path), "/proc/%d/status", pid_);
+          FILE *f = fopen(path, "r");
+          if (f) {
+            char line[256];
+            while (fgets(line, sizeof(line), f)) {
+              if (strncmp(line, "VmRSS:", 6) == 0) {
+                unsigned long long rssKB = 0;
+                if (sscanf(line + 6, "%llu", &rssKB) == 1) {
+                  uint64_t rssBytes = rssKB * 1024ULL;
+                  if (rssBytes > memoryLimitBytes_) {
+                    memoryLimitExceeded_ = true;
+                    fclose(f);
+                    close(pidfd);
+                    kill(pid_, SIGKILL);
+                    wait4(pid_, &status, 0, &rusage);
+                    processExited = true;
+                    break;
+                  }
                 }
+                break;
               }
+            }
+            fclose(f);
+            
+            if (memoryLimitExceeded_) {
               break;
             }
-          }
-          fclose(f);
-          
-          if (memoryLimitExceeded_) {
-            break;
           }
         }
       }
       
-      // Sleep before next poll
-      usleep(pollIntervalUs);
-    }
-    
-    // Handle external stop request
-    if (stopped_ && !processExited) {
-      kill(pid_, SIGKILL);
-      wait4(pid_, &status, 0, &rusage);
+      // Handle external stop request
+      if (stopped_ && !processExited) {
+        close(pidfd);
+        kill(pid_, SIGKILL);
+        wait4(pid_, &status, 0, &rusage);
+      }
+    } else {
+      // Fallback to manual polling with wait4 if pidfd_open not available
+      const uint64_t pollIntervalUs = 50000; // 50ms poll interval
+      uint64_t elapsedUs = 0;
+      
+      while (!processExited && !stopped_) {
+        pid_t result = wait4(pid_, &status, WNOHANG, &rusage);
+        
+        if (result == -1) {
+          errorMsg_ = "wait4 failed: ";
+          errorMsg_ += std::strerror(errno);
+          return;
+        }
+        
+        if (result == pid_) {
+          // Process exited normally
+          processExited = true;
+          break;
+        }
+        
+        // Process still running, check limits
+        struct timeval now;
+        gettimeofday(&now, nullptr);
+        elapsedUs = (now.tv_sec - startTime.tv_sec) * 1000000ULL +
+                    (now.tv_usec - startTime.tv_usec);
+        
+        // Check time limit
+        if (timeoutMs_ > 0 && elapsedUs >= static_cast<uint64_t>(timeoutMs_) * 1000) {
+          timedOut_ = true;
+          kill(pid_, SIGKILL);
+          wait4(pid_, &status, 0, &rusage);
+          processExited = true;
+          break;
+        }
+        
+        // Check memory limit
+        if (memoryLimitBytes_ > 0) {
+          // Read current memory from /proc/<pid>/status
+          char path[64];
+          snprintf(path, sizeof(path), "/proc/%d/status", pid_);
+          FILE *f = fopen(path, "r");
+          if (f) {
+            char line[256];
+            while (fgets(line, sizeof(line), f)) {
+              if (strncmp(line, "VmRSS:", 6) == 0) {
+                unsigned long long rssKB = 0;
+                if (sscanf(line + 6, "%llu", &rssKB) == 1) {
+                  uint64_t rssBytes = rssKB * 1024ULL;
+                  if (rssBytes > memoryLimitBytes_) {
+                    memoryLimitExceeded_ = true;
+                    fclose(f);
+                    kill(pid_, SIGKILL);
+                    wait4(pid_, &status, 0, &rusage);
+                    processExited = true;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+            fclose(f);
+            
+            if (memoryLimitExceeded_) {
+              break;
+            }
+          }
+        }
+        
+        // Sleep before next poll
+        usleep(pollIntervalUs);
+      }
+      
+      // Handle external stop request
+      if (stopped_ && !processExited) {
+        kill(pid_, SIGKILL);
+        wait4(pid_, &status, 0, &rusage);
+      }
     }
 
     // Get end time
