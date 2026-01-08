@@ -21,24 +21,46 @@ function arrayEquals<T>(a: T[], b: T[]): boolean {
   return a.every((value, index) => value === b[index]);
 }
 
-type Win32MemoryAddon = {
+type Win32ProcessMonitorAddon = {
   getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
-};
-
-type LinuxMemoryAddon = {
-  getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
-};
-
-type Win32TimesAddon = {
   getWin32ProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+  waitForProcess: (pid: number, timeoutMs: number, memoryLimitMB: number) => Promise<{
+    elapsedMs: number;
+    cpuMs: number;
+    peakMemoryBytes: number;
+    exitCode: number;
+    timedOut: boolean;
+    memoryLimitExceeded: boolean;
+    stopped: boolean;
+  }>;
 };
 
-type LinuxTimesAddon = {
+type LinuxProcessMonitorAddon = {
+  getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
   getLinuxProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+  waitForProcess: (pid: number, timeoutMs: number, memoryLimitMB: number) => Promise<{
+    elapsedMs: number;
+    cpuMs: number;
+    peakMemoryBytes: number;
+    exitCode: number;
+    timedOut: boolean;
+    memoryLimitExceeded: boolean;
+    stopped: boolean;
+  }>;
 };
 
-type DarwinTimesAddon = {
+type DarwinProcessMonitorAddon = {
+  getDarwinMemoryStats: (pid: number) => { rss: number; peakRss: number };
   getDarwinProcessTimes: (pid: number) => { elapsedMs: number; cpuMs: number };
+  waitForProcess: (pid: number, timeoutMs: number, memoryLimitMB: number) => Promise<{
+    elapsedMs: number;
+    cpuMs: number;
+    peakMemoryBytes: number;
+    exitCode: number;
+    timedOut: boolean;
+    memoryLimitExceeded: boolean;
+    stopped: boolean;
+  }>;
 };
 
 // ============================================================================
@@ -126,81 +148,77 @@ export function mapTestcaseTermination(termination: RunTermination): Status {
   }
 }
 
-let win32MemoryAddon: Win32MemoryAddon | null = null;
+let win32ProcessMonitor: Win32ProcessMonitorAddon | null = null;
 
-function getWin32MemoryAddon(): Win32MemoryAddon | null {
-  if (win32MemoryAddon !== null) {
-    return win32MemoryAddon;
+function getWin32ProcessMonitor(): Win32ProcessMonitorAddon | null {
+  if (win32ProcessMonitor !== null) {
+    return win32ProcessMonitor;
   }
 
   try {
-    // Load from the bundled native addon in dist/
-    const addonPath = path.join(__dirname, "win32-memory-stats.node");
+    const addonPath = path.join(__dirname, "win32-process-monitor.node");
     if (!fs.existsSync(addonPath)) {
       return null;
     }
 
-    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
     const nodeRequire = createRequire(__filename);
     const loaded: unknown = nodeRequire(addonPath);
 
-    if (loaded && typeof loaded === "object" && "getWin32MemoryStats" in loaded) {
-      win32MemoryAddon = loaded as Win32MemoryAddon;
-      return win32MemoryAddon;
+    if (loaded && typeof loaded === "object" && "waitForProcess" in loaded) {
+      win32ProcessMonitor = loaded as Win32ProcessMonitorAddon;
+      return win32ProcessMonitor;
     }
 
     return null;
   } catch (err) {
     const logger = getLogger("runtime");
     logger.warn(
-      `Windows memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
+      `Windows process monitor addon unavailable, using fallback: ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
 }
 
-let linuxMemoryAddon: LinuxMemoryAddon | null = null;
+let linuxProcessMonitor: LinuxProcessMonitorAddon | null = null;
 
-function getLinuxMemoryAddon(): LinuxMemoryAddon | null {
-  if (linuxMemoryAddon !== null) {
-    return linuxMemoryAddon;
+function getLinuxProcessMonitor(): LinuxProcessMonitorAddon | null {
+  if (linuxProcessMonitor !== null) {
+    return linuxProcessMonitor;
   }
 
   try {
-    // Load from the bundled native addon in dist/
-    const addonPath = path.join(__dirname, "linux-memory-stats.node");
+    const addonPath = path.join(__dirname, "linux-process-monitor.node");
     if (!fs.existsSync(addonPath)) {
       return null;
     }
 
-    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
     const nodeRequire = createRequire(__filename);
     const loaded: unknown = nodeRequire(addonPath);
 
-    if (loaded && typeof loaded === "object" && "getLinuxMemoryStats" in loaded) {
-      linuxMemoryAddon = loaded as LinuxMemoryAddon;
-      return linuxMemoryAddon;
+    if (loaded && typeof loaded === "object" && "waitForProcess" in loaded) {
+      linuxProcessMonitor = loaded as LinuxProcessMonitorAddon;
+      return linuxProcessMonitor;
     }
 
     return null;
   } catch (err) {
     const logger = getLogger("runtime");
     logger.warn(
-      `Linux memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
+      `Linux process monitor addon unavailable, using fallback: ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
 }
 
-let win32TimesAddon: Win32TimesAddon | null = null;
+let darwinProcessMonitor: DarwinProcessMonitorAddon | null = null;
 
-function getWin32TimesAddon(): Win32TimesAddon | null {
-  if (win32TimesAddon !== null) {
-    return win32TimesAddon;
+function getDarwinProcessMonitor(): DarwinProcessMonitorAddon | null {
+  if (darwinProcessMonitor !== null) {
+    return darwinProcessMonitor;
   }
 
   try {
-    const addonPath = path.join(__dirname, "win32-process-times.node");
+    const addonPath = path.join(__dirname, "darwin-process-monitor.node");
     if (!fs.existsSync(addonPath)) {
       return null;
     }
@@ -208,78 +226,16 @@ function getWin32TimesAddon(): Win32TimesAddon | null {
     const nodeRequire = createRequire(__filename);
     const loaded: unknown = nodeRequire(addonPath);
 
-    if (loaded && typeof loaded === "object" && "getWin32ProcessTimes" in loaded) {
-      win32TimesAddon = loaded as Win32TimesAddon;
-      return win32TimesAddon;
+    if (loaded && typeof loaded === "object" && "waitForProcess" in loaded) {
+      darwinProcessMonitor = loaded as DarwinProcessMonitorAddon;
+      return darwinProcessMonitor;
     }
 
     return null;
   } catch (err) {
     const logger = getLogger("runtime");
     logger.warn(
-      `Windows timing addon unavailable, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
-    );
-    return null;
-  }
-}
-
-let linuxTimesAddon: LinuxTimesAddon | null = null;
-
-function getLinuxTimesAddon(): LinuxTimesAddon | null {
-  if (linuxTimesAddon !== null) {
-    return linuxTimesAddon;
-  }
-
-  try {
-    const addonPath = path.join(__dirname, "linux-process-times.node");
-    if (!fs.existsSync(addonPath)) {
-      return null;
-    }
-
-    const nodeRequire = createRequire(__filename);
-    const loaded: unknown = nodeRequire(addonPath);
-
-    if (loaded && typeof loaded === "object" && "getLinuxProcessTimes" in loaded) {
-      linuxTimesAddon = loaded as LinuxTimesAddon;
-      return linuxTimesAddon;
-    }
-
-    return null;
-  } catch (err) {
-    const logger = getLogger("runtime");
-    logger.warn(
-      `Linux timing addon unavailable, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
-    );
-    return null;
-  }
-}
-
-let darwinTimesAddon: DarwinTimesAddon | null = null;
-
-function getDarwinTimesAddon(): DarwinTimesAddon | null {
-  if (darwinTimesAddon !== null) {
-    return darwinTimesAddon;
-  }
-
-  try {
-    const addonPath = path.join(__dirname, "darwin-process-times.node");
-    if (!fs.existsSync(addonPath)) {
-      return null;
-    }
-
-    const nodeRequire = createRequire(__filename);
-    const loaded: unknown = nodeRequire(addonPath);
-
-    if (loaded && typeof loaded === "object" && "getDarwinProcessTimes" in loaded) {
-      darwinTimesAddon = loaded as DarwinTimesAddon;
-      return darwinTimesAddon;
-    }
-
-    return null;
-  } catch (err) {
-    const logger = getLogger("runtime");
-    logger.warn(
-      `macOS timing addon unavailable, using hrtime fallback: ${err instanceof Error ? err.message : String(err)}`
+      `macOS process monitor addon unavailable, using fallback: ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
@@ -325,19 +281,19 @@ export class Runnable {
   private _getElapsedTime(pid: number): number {
     try {
       if (process.platform === "win32") {
-        const addon = getWin32TimesAddon();
+        const addon = getWin32ProcessMonitor();
         if (addon) {
           const times = addon.getWin32ProcessTimes(pid);
           return Math.round(times.elapsedMs);
         }
       } else if (process.platform === "linux") {
-        const addon = getLinuxTimesAddon();
+        const addon = getLinuxProcessMonitor();
         if (addon) {
           const times = addon.getLinuxProcessTimes(pid);
           return Math.round(times.elapsedMs);
         }
       } else if (process.platform === "darwin") {
-        const addon = getDarwinTimesAddon();
+        const addon = getDarwinProcessMonitor();
         if (addon) {
           const times = addon.getDarwinProcessTimes(pid);
           return Math.round(times.elapsedMs);
@@ -362,7 +318,7 @@ export class Runnable {
   private async _sampleMemory(pid: number) {
     try {
       if (process.platform === "win32") {
-        const addon = getWin32MemoryAddon();
+        const addon = getWin32ProcessMonitor();
         if (addon) {
           const memStats = addon.getWin32MemoryStats(pid);
           this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
@@ -374,7 +330,7 @@ export class Runnable {
       }
 
       if (process.platform === "linux") {
-        const addon = getLinuxMemoryAddon();
+        const addon = getLinuxProcessMonitor();
         if (addon) {
           const memStats = addon.getLinuxMemoryStats(pid);
           // Prefer kernel high-water mark when available (monotonic).

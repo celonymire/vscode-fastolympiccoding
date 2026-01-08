@@ -23,47 +23,37 @@ function addonCopyPlugins(): Configuration["plugins"] {
   const plugins: Configuration["plugins"] = [];
 
   if (process.platform === "win32") {
-    const winMemoryPath = path.join("build", "Release", "win32-memory-stats.node");
-    const winTimesPath = path.join("build", "Release", "win32-process-times.node");
+    const winMonitorPath = path.join("build", "Release", "win32-process-monitor.node");
     plugins.push(
       new CopyRspackPlugin({
         patterns: [
           {
-            from: winMemoryPath,
-            to: "win32-memory-stats.node",
-          },
-          {
-            from: winTimesPath,
-            to: "win32-process-times.node",
+            from: winMonitorPath,
+            to: "win32-process-monitor.node",
           },
         ],
       })
     );
   } else if (process.platform === "linux") {
-    const linuxMemoryPath = path.join("build", "Release", "linux-memory-stats.node");
-    const linuxTimesPath = path.join("build", "Release", "linux-process-times.node");
+    const linuxMonitorPath = path.join("build", "Release", "linux-process-monitor.node");
     plugins.push(
       new CopyRspackPlugin({
         patterns: [
           {
-            from: linuxMemoryPath,
-            to: "linux-memory-stats.node",
-          },
-          {
-            from: linuxTimesPath,
-            to: "linux-process-times.node",
+            from: linuxMonitorPath,
+            to: "linux-process-monitor.node",
           },
         ],
       })
     );
   } else if (process.platform === "darwin") {
-    const darwinTimesPath = path.join("build", "Release", "darwin-process-times.node");
+    const darwinMonitorPath = path.join("build", "Release", "darwin-process-monitor.node");
     plugins.push(
       new CopyRspackPlugin({
         patterns: [
           {
-            from: darwinTimesPath,
-            to: "darwin-process-times.node",
+            from: darwinMonitorPath,
+            to: "darwin-process-monitor.node",
           },
         ],
       })
