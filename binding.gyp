@@ -1,9 +1,9 @@
 {
   "targets": [
     {
-      "target_name": "win32-memory-stats",
+      "target_name": "judge",
       "sources": [
-        "src/addons/win32-memory-stats.cpp"
+        "src/addons/judge.cpp"
       ],
       "include_dirs": [
         "<!(node -p \"require('node-addon-api').include_dir\")"
@@ -15,25 +15,9 @@
       "cflags_cc!": [ "-fno-exceptions" ],
       "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
       "conditions": [
-        ["OS != \"win\"", { "type": "none" }]
-      ]
-    },
-    {
-      "target_name": "linux-memory-stats",
-      "sources": [
-        "src/addons/linux-memory-stats.cpp"
-      ],
-      "include_dirs": [
-        "<!(node -p \"require('node-addon-api').include_dir\")"
-      ],
-      "dependencies": [
-        "<!(node -p \"require('node-addon-api').gyp\")"
-      ],
-      "cflags!": [ "-fno-exceptions" ],
-      "cflags_cc!": [ "-fno-exceptions" ],
-      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
-      "conditions": [
-        ["OS != \"linux\"", { "type": "none" }]
+        ["OS == \"win\"", {
+          "libraries": [ "-lpsapi.lib" ]
+        }]
       ]
     }
   ]

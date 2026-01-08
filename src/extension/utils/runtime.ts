@@ -1,12 +1,9 @@
-import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as net from "node:net";
 import * as path from "node:path";
 import * as vscode from "vscode";
-
-import pidusage from "pidusage";
 
 import { getFileRunSettings, ReadonlyTerminal } from "./vscode";
 import { getLogger } from "./logging";
@@ -21,12 +18,33 @@ function arrayEquals<T>(a: T[], b: T[]): boolean {
   return a.every((value, index) => value === b[index]);
 }
 
-type Win32MemoryAddon = {
-  getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
+type ProcessHandle = {
+  writeStdin(data: string): void;
+  endStdin(): void;
+  kill(): void;
 };
 
-type LinuxMemoryAddon = {
-  getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
+type JudgeAddon = {
+  spawnProcess: (
+    command: string[],
+    cwd: string,
+    timeoutMs: number,
+    memoryLimitMb: number,
+    stdoutCallback: (data: string) => void,
+    stderrCallback: (data: string) => void,
+    completionCallback: (
+      err: Error | null,
+      result?: {
+        exitCode: number;
+        termSignal: number;
+        elapsedMs: number;
+        maxMemoryBytes: number;
+        timedOut: boolean;
+        memoryLimitExceeded: boolean;
+        spawnError: boolean;
+      }
+    ) => void
+  ) => ProcessHandle;
 };
 
 // ============================================================================
@@ -114,67 +132,32 @@ export function mapTestcaseTermination(termination: RunTermination): Status {
   }
 }
 
-let win32MemoryAddon: Win32MemoryAddon | null = null;
+let judgeAddon: JudgeAddon | null = null;
 
-function getWin32MemoryAddon(): Win32MemoryAddon | null {
-  if (win32MemoryAddon !== null) {
-    return win32MemoryAddon;
+function getJudgeAddon(): JudgeAddon | null {
+  if (judgeAddon !== null) {
+    return judgeAddon;
   }
 
   try {
-    // Load from the bundled native addon in dist/
-    const addonPath = path.join(__dirname, "win32-memory-stats.node");
+    const addonPath = path.join(__dirname, "judge.node");
     if (!fs.existsSync(addonPath)) {
       return null;
     }
 
-    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
     const nodeRequire = createRequire(__filename);
     const loaded: unknown = nodeRequire(addonPath);
 
-    if (loaded && typeof loaded === "object" && "getWin32MemoryStats" in loaded) {
-      win32MemoryAddon = loaded as Win32MemoryAddon;
-      return win32MemoryAddon;
+    if (loaded && typeof loaded === "object" && "spawnProcess" in loaded) {
+      judgeAddon = loaded as JudgeAddon;
+      return judgeAddon;
     }
 
     return null;
   } catch (err) {
     const logger = getLogger("runtime");
-    logger.warn(
-      `Windows memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
-    );
-    return null;
-  }
-}
-
-let linuxMemoryAddon: LinuxMemoryAddon | null = null;
-
-function getLinuxMemoryAddon(): LinuxMemoryAddon | null {
-  if (linuxMemoryAddon !== null) {
-    return linuxMemoryAddon;
-  }
-
-  try {
-    // Load from the bundled native addon in dist/
-    const addonPath = path.join(__dirname, "linux-memory-stats.node");
-    if (!fs.existsSync(addonPath)) {
-      return null;
-    }
-
-    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
-    const nodeRequire = createRequire(__filename);
-    const loaded: unknown = nodeRequire(addonPath);
-
-    if (loaded && typeof loaded === "object" && "getLinuxMemoryStats" in loaded) {
-      linuxMemoryAddon = loaded as LinuxMemoryAddon;
-      return linuxMemoryAddon;
-    }
-
-    return null;
-  } catch (err) {
-    const logger = getLogger("runtime");
-    logger.warn(
-      `Linux memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
+    logger.error(
+      `Judge addon is not available: ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
@@ -197,80 +180,20 @@ export class Runnable {
 
   private static readonly BYTES_PER_MEGABYTE = 1024 * 1024;
 
-  private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
   private _promise: Promise<void> | undefined = undefined;
-  private _spawnPromise: Promise<boolean> | undefined = undefined;
   private _elapsed = 0;
   private _signal: NodeJS.Signals | null = null;
-  private _abortController: AbortController | null = null;
-  private _combinedAbortSignal: AbortSignal | null = null;
   private _timedOut = false;
   private _exitCode: number | null = 0;
-  private _memoryCancellationTokenSource: vscode.CancellationTokenSource | null = null;
-  private _memorySampleTimeout: NodeJS.Timeout | null = null;
   private _maxMemoryBytes = 0;
-  private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
 
-  private async _sampleMemory(pid: number) {
-    try {
-      if (process.platform === "win32") {
-        const addon = getWin32MemoryAddon();
-        if (addon) {
-          const memStats = addon.getWin32MemoryStats(pid);
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-          return;
-        } else {
-          // fallback to pidusage if addon not available or the addon failed
-          // to get the memory stats
-        }
-      }
-
-      if (process.platform === "linux") {
-        const addon = getLinuxMemoryAddon();
-        if (addon) {
-          const memStats = addon.getLinuxMemoryStats(pid);
-          // Prefer kernel high-water mark when available (monotonic).
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-          return;
-        } else {
-          // fallback to pidusage if addon not available or the addon failed
-          // to get the memory stats
-        }
-      }
-
-      const stats = await pidusage(pid);
-      this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
-    } catch {
-      // pidusage can throw if the process exits between samples. Treat as terminal.
-      return;
-    }
-  }
-
-  private async _sampleMemoryRepeatedly(pid: number, token: vscode.CancellationToken) {
-    if (token.isCancellationRequested) {
-      return;
-    }
-
-    await this._sampleMemory(pid);
-
-    if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
-      this._memoryLimitExceeded = true;
-      this._memoryCancellationTokenSource?.cancel();
-      const logger = getLogger("runtime");
-      logger.debug(
-        `Memory limit exceeded, killing process (pid=${pid}, maxMemoryMB=${Math.round(this._maxMemoryBytes / Runnable.BYTES_PER_MEGABYTE)}, limitMB=${Math.round(this._memoryLimitBytes / Runnable.BYTES_PER_MEGABYTE)})`
-      );
-      this._process?.kill();
-      return;
-    }
-
-    if (!token.isCancellationRequested) {
-      this._memorySampleTimeout = setTimeout(() => {
-        void this._sampleMemoryRepeatedly(pid, token);
-      }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
-    }
-  }
+  private _processHandle: ProcessHandle | undefined = undefined;
+  private _stdoutListeners: Array<(data: string) => void> = [];
+  private _stderrListeners: Array<(data: string) => void> = [];
+  private _spawnListeners: Array<() => void> = [];
+  private _errorListeners: Array<(err: Error) => void> = [];
+  private _closeListeners: Array<(code: number | null, signal: NodeJS.Signals | null) => void> = [];
 
   /**
    * Clean up listeners and ongoing operations without resetting statistics.
@@ -278,113 +201,115 @@ export class Runnable {
    * Preserves elapsed time, memory stats, and exit information.
    */
   cleanup(): void {
-    this._memoryCancellationTokenSource?.cancel();
-    this._memoryCancellationTokenSource?.dispose();
-    this._memoryCancellationTokenSource = null;
-    if (this._memorySampleTimeout) {
-      clearTimeout(this._memorySampleTimeout);
-      this._memorySampleTimeout = null;
-    }
-
-    // Remove listeners to prevent accumulation when Runnable is reused
-    if (this._process) {
-      this._process.removeAllListeners();
-      this._process.stdout.removeAllListeners();
-      this._process.stderr.removeAllListeners();
-    }
+    this._processHandle = undefined;
+    this._stdoutListeners = [];
+    this._stderrListeners = [];
+    this._spawnListeners = [];
+    this._errorListeners = [];
+    this._closeListeners = [];
   }
 
   run(command: string[], timeout: number, memoryLimit: number, cwd?: string) {
     if (command.length === 0) {
       throw new Error("Runnable.run requires at least one command element");
     }
-    const [commandName, ...commandArgs] = command;
-    // Reset metrics for a fresh run. All other state is set by event handlers or reassigned below.
+
     this.cleanup();
     this._timedOut = false;
     this._maxMemoryBytes = 0;
     this._memoryLimitExceeded = false;
-    this._memoryLimitBytes = memoryLimit * Runnable.BYTES_PER_MEGABYTE;
-    this._abortController = new AbortController();
 
-    const signals = [this._abortController.signal];
-    const timeoutSignal = timeout > 0 ? AbortSignal.timeout(timeout) : null;
-    if (timeoutSignal) {
-      signals.push(timeoutSignal);
+    const addon = getJudgeAddon();
+    if (!addon) {
+      throw new Error("Judge addon is not available. Cannot spawn process.");
     }
-    this._combinedAbortSignal = AbortSignal.any(signals);
-    this._process = childProcess.spawn(commandName, commandArgs, {
-      cwd,
-      signal: this._combinedAbortSignal,
-    });
-    this._process.stdout.setEncoding("utf-8");
-    this._process.stderr.setEncoding("utf-8");
 
-    // Create spawn promise that resolves when process spawns or errors
-    let resolveSpawn: (value: boolean) => void;
-    this._spawnPromise = new Promise((resolve) => {
-      resolveSpawn = resolve;
-    });
-
+    // Create the promise synchronously so `done` can be awaited immediately after `run()`
+    let resolvePromise: () => void;
     this._promise = new Promise((resolve) => {
-      let startTime: [number, number];
-      this._process?.once("spawn", () => {
-        startTime = process.hrtime();
-        this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
-        setTimeout(() => {
-          if (this._process?.pid) {
-            this._sampleMemoryRepeatedly(
-              this._process.pid,
-              this._memoryCancellationTokenSource!.token
-            );
-          }
-        });
+      resolvePromise = resolve;
+    });
 
-        resolveSpawn(true);
-      });
-      this._process?.once("error", (err) => {
-        startTime = process.hrtime(); // necessary since an invalid command can lead to process not spawned
-        const logger = getLogger("runtime");
-        logger.error(
-          `Process spawn failed (command=${commandName}, args=${commandArgs}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
-        );
+    // NOTE: Actual spawning is deferred to next tick to allow listeners to be attached first
+    // This ensures no data is lost with real-time streaming
+    process.nextTick(() => {
+      this._runWithAddon(command, timeout, memoryLimit, cwd, addon, resolvePromise!);
+    });
+  }
 
-        // We have to set error state here because of platform-dependent behavior
-        // For Linux exit isn't fired when process errors
-        const elapsed = process.hrtime(startTime);
-        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
-        this._signal = null;
-        this._exitCode = 1;
-        this._timedOut = false;
+  private _runWithAddon(
+    command: string[],
+    timeout: number,
+    memoryLimit: number,
+    cwd: string | undefined,
+    addon: JudgeAddon,
+    resolvePromise: () => void
+  ) {
+    this._processHandle = addon.spawnProcess(
+      command,
+      cwd ?? "",
+      timeout,
+      memoryLimit,
+      (data: string) => {
+        // Real-time stdout
+        this._stdoutListeners.forEach((listener) => listener(data));
+      },
+      (data: string) => {
+        // Real-time stderr
+        this._stderrListeners.forEach((listener) => listener(data));
+      },
+      (err, result) => {
+        // Completion callback
+        if (err) {
+          this._exitCode = 1;
+          this._signal = null;
+          this._elapsed = 0;
+          this._timedOut = false;
+          this._errorListeners.forEach((listener) => listener(err));
+        } else if (result) {
+          this._exitCode = result.exitCode;
+          this._signal = result.termSignal ? (`SIG${result.termSignal}` as NodeJS.Signals) : null;
+          this._elapsed = result.elapsedMs;
+          this._maxMemoryBytes = result.maxMemoryBytes;
+          this._timedOut = result.timedOut;
+          this._memoryLimitExceeded = result.memoryLimitExceeded;
 
-        resolveSpawn(false);
-      });
-      this._process?.once("exit", (code, signal) => {
-        const elapsed = process.hrtime(startTime);
-        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
-        this._signal = signal;
-        this._exitCode = code;
-        this._timedOut = timeoutSignal?.aborted ?? false;
-      });
-
-      this._process?.once("close", async () => {
-        this._memoryCancellationTokenSource?.cancel();
-        this._memoryCancellationTokenSource?.dispose();
-        if (this._memorySampleTimeout) {
-          clearTimeout(this._memorySampleTimeout);
-          this._memorySampleTimeout = null;
+          this._closeListeners.forEach((listener) => listener(result.exitCode, this._signal));
         }
 
-        this._memoryLimitExceeded =
-          this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
-        resolve();
-      });
-    });
+        resolvePromise();
+      }
+    );
+
+    // Trigger spawn listeners immediately after process handle is created
+    // This allows stdin to be written before the process actually reads it
+    this._spawnListeners.forEach((listener) => listener());
   }
 
+  /**
+   * Get the underlying process handle with stdin access.
+   * Returns an object with stdin methods for writing data to the process.
+   */
   get process() {
-    return this._process;
+    if (!this._processHandle) {
+      return undefined;
+    }
+
+    return {
+      stdin: {
+        write: (data: string) => {
+          this._processHandle?.writeStdin(data);
+        },
+        end: () => {
+          this._processHandle?.endStdin();
+        },
+      },
+      kill: () => {
+        this._processHandle?.kill();
+      },
+    };
   }
+
   get elapsed(): number {
     return this._elapsed;
   }
@@ -403,16 +328,16 @@ export class Runnable {
   get memoryLimitExceeded(): boolean {
     return this._memoryLimitExceeded;
   }
-  get spawned(): Promise<boolean> {
-    return this._spawnPromise ?? Promise.resolve(false);
-  }
   get done(): Thenable<RunTermination> {
     const promise = this._promise ?? Promise.resolve();
     return promise.then(() => this._computeTermination());
   }
 
+  /**
+   * Stop the running process by sending SIGKILL.
+   */
   stop() {
-    this._abortController?.abort();
+    this._processHandle?.kill();
   }
 
   /**
@@ -433,31 +358,21 @@ export class Runnable {
   }
 
   private _attachListener(event: string, listener: ListenerCallback): void {
-    const proc = this._process;
-    if (!proc) return;
-
     switch (event) {
       case "spawn":
-        proc.once("spawn", listener as () => void);
+        this._spawnListeners.push(listener as () => void);
         break;
       case "error":
-        proc.on("error", listener as (err: Error) => void);
+        this._errorListeners.push(listener as (err: Error) => void);
         break;
       case "stderr:data":
-        proc.stderr.on("data", listener as (data: string) => void);
+        this._stderrListeners.push(listener as (data: string) => void);
         break;
       case "stdout:data":
-        proc.stdout.on("data", listener as (data: string) => void);
-        break;
-      case "stderr:end":
-        proc.stderr.once("end", listener as () => void);
-        break;
-      case "stdout:end":
-        proc.stdout.once("end", listener as () => void);
+        this._stdoutListeners.push(listener as (data: string) => void);
         break;
       case "close":
-        proc.once(
-          "close",
+        this._closeListeners.push(
           listener as (code: number | null, signal: NodeJS.Signals | null) => void
         );
         break;
@@ -470,10 +385,6 @@ export class Runnable {
     }
     if (this._memoryLimitExceeded) {
       return "memory";
-    }
-    // Check this after timeout because timeout also sets this signal
-    if (this._combinedAbortSignal?.aborted) {
-      return "stopped";
     }
     if (this._signal) {
       return "signal";

@@ -9,6 +9,7 @@ import {
   Runnable,
   terminationSeverityNumber,
 } from "../utils/runtime";
+import { getLogger } from "../utils/logging";
 import {
   getFileRunSettings,
   openInNewEditor,
@@ -17,7 +18,6 @@ import {
   type FileRunSettings,
   type WriteMode,
 } from "../utils/vscode";
-import { getLogger } from "../utils/logging";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
@@ -419,7 +419,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
       this._generatorState.process
         .on("spawn", () => {
-          this._generatorState.process.process?.stdin.write(`${seed}\n`);
+          // TODO: Add stdin support to judge addon for interactive processes
+          // this._generatorState.process.process?.stdin.write(`${seed}\n`);
+          const logger = getLogger("stress");
+          logger.warn("Generator stdin interaction not yet supported with judge addon");
         })
         .on("error", this._generatorState.errorHandler)
         .on("stdout:data", this._generatorState.stdoutDataHandler)
@@ -697,7 +700,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     for (const stateId of StateIdValue) {
       const state = this._findState(stateId);
-      state?.process.process?.kill();
+      state?.process.stop();
     }
   }
 
@@ -708,29 +711,33 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._generatorState.stdout.write(data, writeMode);
 
       if (this._interactiveMode) {
+        // TODO: Interactive mode not yet supported with judge addon
         // Generator provides the secret for the interactor
-        this._judgeState.process.process?.stdin.write(data);
+        // this._judgeState.process.process?.stdin.write(data);
       } else {
+        // TODO: Pipe support not yet available with judge addon
         // Generator pipes to solution and good solution
-        this._solutionState.process.process?.stdin.write(data);
-        this._judgeState.process.process?.stdin.write(data);
+        // this._solutionState.process.process?.stdin.write(data);
+        // this._judgeState.process.process?.stdin.write(data);
       }
     } else if (stateId === "Judge") {
       if (this._interactiveMode) {
-        this._solutionState.process.process?.stdin.write(data);
+        // TODO: Interactive mode not yet supported with judge addon
+        // this._solutionState.process.process?.stdin.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
       }
     } else {
       if (this._interactiveMode) {
+        // TODO: Interactive mode not yet supported with judge addon
         // Make sure generator sends the secret before sending our queries
         if (this._interactiveSecretPromise) {
           await this._interactiveSecretPromise;
           this._interactiveSecretPromise = null;
         }
 
-        this._judgeState.process.process?.stdin.write(data);
+        // this._judgeState.process.process?.stdin.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
@@ -754,10 +761,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    const proc = state?.process.process;
-    proc?.off("error", state.errorHandler);
-    proc?.stdout.off("data", state.stdoutDataHandler);
-    proc?.stderr.off("data", state.stderrDataHandler);
+    // Listeners are managed internally by Runnable/judge addon
+    // No need to manually remove them
 
     if (code !== 0) {
       for (const siblingId of StateIdValue) {

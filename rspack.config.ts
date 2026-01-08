@@ -1,6 +1,7 @@
 import { defineConfig } from "@rspack/cli";
 import { CopyRspackPlugin, type Configuration } from "@rspack/core";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { sveltePreprocess } from "svelte-preprocess";
 
@@ -20,35 +21,22 @@ function getSharedConfig(isProd: boolean, mode: Configuration["mode"]): Configur
 }
 
 function addonCopyPlugins(): Configuration["plugins"] {
-  const plugins: Configuration["plugins"] = [];
+  const judgePath = path.join("build", "Release", "judge.node");
 
-  if (process.platform === "win32") {
-    const winPath = path.join("build", "Release", "win32-memory-stats.node");
-    plugins.push(
+  if (fs.existsSync(judgePath)) {
+    return [
       new CopyRspackPlugin({
         patterns: [
           {
-            from: winPath,
-            to: "win32-memory-stats.node",
+            from: judgePath,
+            to: "judge.node",
           },
         ],
-      })
-    );
-  } else if (process.platform === "linux") {
-    const linuxPath = path.join("build", "Release", "linux-memory-stats.node");
-    plugins.push(
-      new CopyRspackPlugin({
-        patterns: [
-          {
-            from: linuxPath,
-            to: "linux-memory-stats.node",
-          },
-        ],
-      })
-    );
+      }),
+    ];
   }
 
-  return plugins;
+  return [];
 }
 
 const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configuration => ({
