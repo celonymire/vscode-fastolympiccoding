@@ -84,29 +84,21 @@ protected:
     }
 
     // Wait for process to complete or be stopped externally
+    // Job Objects automatically enforce limits - we just need to wait for the process
+    // We use a polling interval only to check for external stop requests (stopped_ flag)
     bool processExited = false;
-    const DWORD pollIntervalMs = 50;
+    const DWORD pollIntervalMs = 100; // Check for stop request every 100ms
 
     while (!processExited && !stopped_) {
       DWORD waitResult = WaitForSingleObject(hProcess, pollIntervalMs);
 
       if (waitResult == WAIT_OBJECT_0) {
-        // Process exited
+        // Process exited (either normally or killed by Job Object limits)
         processExited = true;
         break;
       } else if (waitResult == WAIT_TIMEOUT) {
-        // Check if job limits were exceeded
-        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accountingInfo;
-        if (QueryInformationJobObject(hJob, JobObjectBasicAccountingInformation,
-                                      &accountingInfo, sizeof(accountingInfo), NULL)) {
-          // Check if time limit was exceeded (job will terminate process automatically)
-          if (accountingInfo.TotalTerminatedProcesses > 0) {
-            // Process was terminated by job object
-            timedOut_ = true;
-            processExited = true;
-            break;
-          }
-        }
+        // Process still running - continue loop to check stopped_ flag
+        continue;
       } else {
         CloseHandle(hJob);
         CloseHandle(hProcess);
