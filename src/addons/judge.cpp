@@ -1,13 +1,13 @@
 #include <napi.h>
 #include <uv.h>
 
-#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <signal.h>
 #include <string>
 #include <vector>
 
@@ -22,7 +22,7 @@
 namespace {
 
 constexpr size_t PIPE_BUFFER_SIZE = 65536;
-constexpr uint64_t MEMORY_SAMPLE_INTERVAL_MS = 100;
+constexpr uint64_t MEMORY_SAMPLE_INTERVAL_MS = 250;
 constexpr uint64_t BYTES_PER_MEGABYTE = 1024 * 1024;
 
 struct ProcessResult {
@@ -33,7 +33,7 @@ struct ProcessResult {
   bool timedOut = false;
   bool memoryLimitExceeded = false;
   bool spawnError = false;
-  std::string debugInfo;  // Diagnostic information for debugging
+  std::string debugInfo; // Diagnostic information for debugging
 };
 
 // Shared state between ProcessHandle and JudgeWorker
@@ -97,9 +97,9 @@ static int pidfd_open(pid_t pid, unsigned int flags) {
   return static_cast<int>(syscall(SYS_pidfd_open, pid, flags));
 }
 
-// Read current RSS from /proc/{pid}/status
-// Returns current resident set size in bytes
-static uint64_t ReadProcessMemory(int pid) {
+// Read peak RSS (high-water mark) from /proc/{pid}/status
+// Returns peak resident set size in bytes
+static uint64_t ReadProcessPeakMemory(int pid) {
   char path[64];
   std::snprintf(path, sizeof(path), "/proc/%d/status", pid);
 
@@ -111,28 +111,29 @@ static uint64_t ReadProcessMemory(int pid) {
   char buffer[4096];
   ssize_t bytesRead = read(fd, buffer, sizeof(buffer) - 1);
   close(fd);
-  
+
   if (bytesRead < 0) {
     return 0;
   }
   buffer[bytesRead] = '\0';
 
-  // Look for VmRSS (current resident set size)
+  // Look for VmHWM (peak resident set size)
   char *line = buffer;
   char *end = buffer + bytesRead;
-  
+
   while (line < end) {
-    char *lineEnd = (char*)memchr(line, '\n', end - line);
-    if (!lineEnd) lineEnd = end;
-    
-    if (lineEnd - line > 6 && strncmp(line, "VmRSS:", 6) == 0) {
+    char *lineEnd = (char *)memchr(line, '\n', end - line);
+    if (!lineEnd)
+      lineEnd = end;
+
+    if (lineEnd - line > 6 && strncmp(line, "VmHWM:", 6) == 0) {
       const char *p = line + 6;
       while (p < lineEnd && (*p == ' ' || *p == '\t'))
         ++p;
       unsigned long long kb = strtoull(p, nullptr, 10);
       return kb * 1024ULL;
     }
-    
+
     line = lineEnd + 1;
   }
 
@@ -143,6 +144,21 @@ static uint64_t ReadProcessMemory(int pid) {
 #ifdef _WIN32
 #include <psapi.h>
 #include <windows.h>
+
+static uint64_t JobTotalCpuTimeMs(HANDLE jobObject) {
+  JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accountingInfo = {};
+  DWORD returnLength = 0;
+  if (!QueryInformationJobObject(jobObject, JobObjectBasicAccountingInformation,
+                                 &accountingInfo, sizeof(accountingInfo),
+                                 &returnLength)) {
+    return 0;
+  }
+
+  const uint64_t total100ns =
+      static_cast<uint64_t>(accountingInfo.TotalUserTime.QuadPart) +
+      static_cast<uint64_t>(accountingInfo.TotalKernelTime.QuadPart);
+  return total100ns / 10000ULL;
+}
 #endif
 
 void AllocBuffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
@@ -210,17 +226,43 @@ void OnTimeoutTimerFired(uv_timer_t *timer) {
   auto *ctx = static_cast<ProcessContext *>(timer->data);
   if (!ctx->processExited) {
     ctx->result.timedOut = true;
+#ifdef _WIN32
+    if (ctx->jobObject) {
+      TerminateJobObject(ctx->jobObject, 1);
+    } else {
+      uv_process_kill(&ctx->process, SIGTERM);
+    }
+#else
     uv_process_kill(&ctx->process, SIGKILL);
+#endif
   }
 }
+
+#ifdef _WIN32
+void OnWindowsCpuTimerTick(uv_timer_t *timer) {
+  auto *ctx = static_cast<ProcessContext *>(timer->data);
+  if (!ctx || ctx->processExited || ctx->timeoutMs == 0) {
+    return;
+  }
+  if (!ctx->jobObject) {
+    return;
+  }
+
+  const uint64_t cpuMs = JobTotalCpuTimeMs(ctx->jobObject);
+  if (cpuMs >= ctx->timeoutMs) {
+    ctx->result.timedOut = true;
+    TerminateJobObject(ctx->jobObject, 1);
+  }
+}
+#endif
 
 void OnMemoryTimerTick(uv_timer_t *timer) {
   auto *ctx = static_cast<ProcessContext *>(timer->data);
   if (ctx->processExited) {
     return;
   }
-  
-  uint64_t currentMem = ReadProcessMemory(ctx->process.pid);
+
+  uint64_t currentMem = ReadProcessPeakMemory(ctx->process.pid);
   if (currentMem > ctx->result.maxMemoryBytes) {
     ctx->result.maxMemoryBytes = currentMem;
   }
@@ -294,8 +336,8 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   ctx->result.termSignal = term_signal;
   ctx->result.elapsedMs = GetMonotonicTimeMs() - ctx->startTime;
 
-  ctx->result.debugInfo = "pid=" + std::to_string(ctx->process.pid) + 
-                          "; exit=" + std::to_string(exit_status) + 
+  ctx->result.debugInfo = "pid=" + std::to_string(ctx->process.pid) +
+                          "; exit=" + std::to_string(exit_status) +
                           "; signal=" + std::to_string(term_signal) + "; ";
 
 #ifdef _WIN32
@@ -313,25 +355,26 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
 #else
   // On Linux, we've been tracking memory via periodic polling
   // Final check: read one more time
-  uint64_t finalMem = ReadProcessMemory(ctx->process.pid);
+  uint64_t finalMem = ReadProcessPeakMemory(ctx->process.pid);
   if (finalMem > ctx->result.maxMemoryBytes) {
     ctx->result.maxMemoryBytes = finalMem;
   }
-  
-  ctx->result.debugInfo += "maxMem: " + std::to_string(ctx->result.maxMemoryBytes / 1024) + " KB; ";
-  
+
+  ctx->result.debugInfo +=
+      "maxMem: " + std::to_string(ctx->result.maxMemoryBytes / 1024) + " KB; ";
+
   // Close the pidfd
   if (ctx->pidfd >= 0) {
     close(ctx->pidfd);
     ctx->pidfd = -1;
   }
-  
+
   // Check if process was killed by resource limits
   if (term_signal == SIGKILL && ctx->timeoutMs > 0) {
     // RLIMIT_CPU sends SIGKILL when CPU time limit is exceeded
     ctx->result.timedOut = true;
   }
-  
+
   if (term_signal == SIGKILL && ctx->memoryLimitBytes > 0 &&
       ctx->result.maxMemoryBytes > ctx->memoryLimitBytes) {
     ctx->result.memoryLimitExceeded = true;
@@ -353,12 +396,7 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
 
       // Check if process time limit was exceeded
       if (ctx->timeoutMs > 0) {
-        ULARGE_INTEGER processTime;
-        processTime.LowPart = accountingInfo.TotalUserTime.LowPart;
-        processTime.HighPart = accountingInfo.TotalUserTime.HighPart;
-
-        // Convert 100-nanosecond intervals to milliseconds
-        uint64_t processMsTime = processTime.QuadPart / 10000ULL;
+        uint64_t processMsTime = JobTotalCpuTimeMs(ctx->jobObject);
 
         // If process time is close to or exceeds the limit, it was time-limited
         if (processMsTime >= ctx->timeoutMs * 95 / 100) {
@@ -396,11 +434,12 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
 
   // Close timers if active
   if (ctx->timeoutTimerActive) {
-    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->timeoutTimer), OnHandleClose);
+    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->timeoutTimer),
+             OnHandleClose);
   } else {
     ctx->totalHandles--;
   }
-  
+
   if (ctx->memoryTimerActive) {
     uv_close(reinterpret_cast<uv_handle_t *>(&ctx->memoryTimer), OnHandleClose);
   } else {
@@ -554,27 +593,34 @@ public:
 #ifdef __linux__
     // Open a pidfd to prevent PID reuse
     ctx_->pidfd = pidfd_open(ctx_->process.pid, 0);
-    
+
     // Start wall clock timeout timer if timeout is specified
     if (ctx_->timeoutMs > 0) {
+      uint64_t wallTimeoutMs = ctx_->timeoutMs;
+      if (wallTimeoutMs <= (UINT64_MAX / 2)) {
+        wallTimeoutMs *= 2;
+      }
       uv_timer_init(ctx_->loop, &ctx_->timeoutTimer);
       ctx_->timeoutTimer.data = ctx_.get();
-      uv_timer_start(&ctx_->timeoutTimer, OnTimeoutTimerFired, ctx_->timeoutMs, 0);
+      uv_timer_start(&ctx_->timeoutTimer, OnTimeoutTimerFired, wallTimeoutMs,
+                     0);
       ctx_->timeoutTimerActive = true;
     }
-    
-    // Start memory polling timer (poll every 50ms)
+
+    // Start memory polling timer
     uv_timer_init(ctx_->loop, &ctx_->memoryTimer);
     ctx_->memoryTimer.data = ctx_.get();
-    uv_timer_start(&ctx_->memoryTimer, OnMemoryTimerTick, 0, 50);
+    uv_timer_start(&ctx_->memoryTimer, OnMemoryTimerTick, 0,
+                   MEMORY_SAMPLE_INTERVAL_MS);
     ctx_->memoryTimerActive = true;
-    
+
     // Use prlimit() to set resource limits on the child process
-    // 
+    //
     // Why prlimit() instead of setrlimit()?
     // - setrlimit() only affects the calling process (this parent process)
     // - prlimit() can set limits on ANY process by PID
-    // - We spawn the child first, then immediately set its limits from the parent
+    // - We spawn the child first, then immediately set its limits from the
+    // parent
     // - This is cleaner than fork+setrlimit+exec pattern
     //
     if (ctx_->memoryLimitBytes > 0) {
@@ -583,7 +629,7 @@ public:
       rlim.rlim_max = ctx_->memoryLimitBytes;
       prlimit(ctx_->process.pid, RLIMIT_AS, &rlim, nullptr);
     }
-    
+
     if (ctx_->timeoutMs > 0) {
       struct rlimit rlim;
       // RLIMIT_CPU is in seconds, convert from milliseconds (round up)
@@ -629,6 +675,16 @@ public:
         if (hProcess) {
           AssignProcessToJobObject(ctx_->jobObject, hProcess);
           CloseHandle(hProcess);
+        }
+
+        // Enforce total CPU time (user + kernel). Job time limit only enforces
+        // user time, so we poll job accounting and terminate when total exceeds
+        // the configured CPU-time limit.
+        if (ctx_->timeoutMs > 0) {
+          uv_timer_init(ctx_->loop, &ctx_->timeoutTimer);
+          ctx_->timeoutTimer.data = ctx_.get();
+          uv_timer_start(&ctx_->timeoutTimer, OnWindowsCpuTimerTick, 0, 100);
+          ctx_->timeoutTimerActive = true;
         }
       }
     }
@@ -683,13 +739,9 @@ public:
     }
 
     // Update totalHandles: process, stdinAsync, stdin, stdout, stderr (5 total)
-    // Count handles: process, stdinAsync, stdin, stdout, stderr, timeoutTimer, memoryTimer
+    // Count handles: process, stdinAsync, stdin, stdout, stderr, timeoutTimer,
+    // memoryTimer
     ctx_->totalHandles = 7;
-
-    // On Windows and Linux, all limits are enforced at OS level:
-    // - Windows: Job objects (time + memory)
-    // - Linux: prlimit (RLIMIT_CPU + RLIMIT_AS)
-    // No timers needed on either platform!
 
     uv_run(ctx_->loop, UV_RUN_DEFAULT);
 
