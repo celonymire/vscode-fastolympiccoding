@@ -26,7 +26,6 @@ function testEcho() {
     console.log("\n=== Test 1: Echo command ===");
 
     let stdout = "";
-    let stderr = "";
 
     const handle = addon.spawnProcess(
       ["echo", "Hello from addon!"],
@@ -39,7 +38,6 @@ function testEcho() {
       },
       (data) => {
         console.log("[stderr]", JSON.stringify(data));
-        stderr += data;
       },
       () => {
         console.log("[spawn] Process spawned");
@@ -50,7 +48,6 @@ function testEcho() {
         } else {
           console.log("Result:", result);
           console.log("Total stdout:", JSON.stringify(stdout));
-          console.log("Total stderr:", JSON.stringify(stderr));
         }
         resolve();
       }
@@ -67,7 +64,6 @@ function testCatWithStdin() {
     console.log("\n=== Test 2: Cat with stdin (pre-spawn) ===");
 
     let stdout = "";
-    let stderr = "";
 
     const handle = addon.spawnProcess(
       ["cat"],
@@ -80,7 +76,6 @@ function testCatWithStdin() {
       },
       (data) => {
         console.log("[stderr]", JSON.stringify(data));
-        stderr += data;
       },
       () => {
         console.log("[spawn] Process spawned");
@@ -172,8 +167,8 @@ function testKill() {
       process.cwd(),
       0, // no timeout
       256,
-      (data) => console.log("[stdout]", data),
-      (data) => console.log("[stderr]", data),
+      () => {},
+      () => {},
       () => console.log("[spawn] Process spawned"),
       (err, result) => {
         const elapsed = Date.now() - startTime;
@@ -205,7 +200,7 @@ function testTimeout() {
   return new Promise((resolve) => {
     console.log("\n=== Test 5: Timeout test (should timeout after 1s) ===");
 
-    const handle = addon.spawnProcess(
+    addon.spawnProcess(
       ["sleep", "10"],
       process.cwd(),
       1000, // 1s timeout
@@ -231,7 +226,7 @@ function testSpawnError() {
   return new Promise((resolve) => {
     console.log("\n=== Test 6: Spawn error (non-existent command) ===");
 
-    const handle = addon.spawnProcess(
+    addon.spawnProcess(
       ["nonexistent_command_12345"],
       process.cwd(),
       5000,
@@ -258,7 +253,6 @@ function testCatNoClose() {
     console.log("\n=== Test 7: Cat with stdin NOT closed (mimics extension) ===");
 
     let stdout = "";
-    let stderr = "";
 
     const handle = addon.spawnProcess(
       ["cat"],
@@ -269,9 +263,8 @@ function testCatNoClose() {
         console.log("[stdout]", JSON.stringify(data));
         stdout += data;
       },
-      (data) => {
-        console.log("[stderr]", JSON.stringify(data));
-        stderr += data;
+      (stderrData) => {
+        console.log("[stderr]", JSON.stringify(stderrData));
       },
       () => {
         console.log("[spawn] Process spawned");
