@@ -57,7 +57,7 @@ jobs:
             vsceTarget: "linux-armhf"
             crossCompile: true
           - name: macOS x64
-            os: macos-13
+            os: macos-15-intel
             vsceTarget: "darwin-x64"
           - name: macOS ARM64
             os: macos-latest
