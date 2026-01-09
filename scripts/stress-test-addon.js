@@ -75,7 +75,7 @@ function logAlways(...args) {
 }
 
 // Load the addon
-const addonPath = path.join(__dirname, "..", "dist", "judge.node");
+const addonPath = path.join(__dirname, "..", "build", "Release", "judge.node");
 logAlways(`${colors.cyan}Loading addon from:${colors.reset}`, addonPath);
 
 let addon;
