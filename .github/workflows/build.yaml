@@ -39,15 +39,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Universal
-            os: macos-latest
-            vsceTarget: ""
-          - name: Linux
-            os: ubuntu-latest
-            vsceTarget: "linux-x64"
-          - name: Windows
+          - name: Windows x64
             os: windows-latest
             vsceTarget: "win32-x64"
+          - name: Windows ARM64
+            os: windows-latest
+            vsceTarget: "win32-arm64"
+          - name: Linux x64
+            os: ubuntu-latest
+            vsceTarget: "linux-x64"
+          - name: Linux ARM64
+            os: ubuntu-latest
+            vsceTarget: "linux-arm64"
+            crossCompile: true
+          - name: Linux ARMhf
+            os: ubuntu-latest
+            vsceTarget: "linux-armhf"
+            crossCompile: true
+          - name: macOS x64
+            os: macos-13
+            vsceTarget: "darwin-x64"
+          - name: macOS ARM64
+            os: macos-latest
+            vsceTarget: "darwin-arm64"
     runs-on: ${{ matrix.os }}
     env:
       npm_config_cache: ${{ github.workspace }}/.npm-cache
@@ -65,15 +79,34 @@ jobs:
           node-version: lts/*
           cache: npm
 
+      - name: Setup ARM cross-compilation (Linux)
+        if: matrix.crossCompile && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.vsceTarget }}" = "linux-arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          elif [ "${{ matrix.vsceTarget }}" = "linux-armhf" ]; then
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+          fi
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Package VSIX (universal)
-        if: matrix.vsceTarget == ''
-        run: npx --yes @vscode/vsce package
+      - name: Configure cross-compilation environment (Linux ARM64)
+        if: matrix.vsceTarget == 'linux-arm64'
+        run: |
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "npm_config_arch=arm64" >> $GITHUB_ENV
 
-      - name: Package VSIX (targeted)
-        if: matrix.vsceTarget != ''
+      - name: Configure cross-compilation environment (Linux ARMhf)
+        if: matrix.vsceTarget == 'linux-armhf'
+        run: |
+          echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
+          echo "CXX=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
+          echo "npm_config_arch=arm" >> $GITHUB_ENV
+
+      - name: Package VSIX
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
       - name: Detect VSIX filename

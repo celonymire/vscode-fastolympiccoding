@@ -19,10 +19,15 @@
 #include <unistd.h>
 #endif
 
+#ifdef __APPLE__
+#include <libproc.h>
+#include <sys/resource.h>
+#endif
+
 namespace {
 
 constexpr size_t PIPE_BUFFER_SIZE = 65536;
-constexpr uint64_t MEMORY_SAMPLE_INTERVAL_MS = 250;
+constexpr uint64_t MEMORY_SAMPLE_INTERVAL_MS = 50;
 constexpr uint64_t BYTES_PER_MEGABYTE = 1024 * 1024;
 
 struct ProcessResult {
@@ -141,6 +146,32 @@ static uint64_t ReadProcessPeakMemory(int pid) {
 }
 #endif
 
+#ifdef __APPLE__
+// Read process resource usage (CPU time and memory) on macOS
+// Returns CPU time in milliseconds and current memory footprint in bytes
+static bool ReadProcessResourceUsage(int pid, uint64_t *cpuTimeMs,
+                                     uint64_t *memoryBytes) {
+  struct rusage_info_v4 ri;
+  int ret = proc_pid_rusage(pid, RUSAGE_INFO_V4, (rusage_info_t *)&ri);
+  if (ret != 0) {
+    return false;
+  }
+
+  if (cpuTimeMs) {
+    // ri_user_time and ri_system_time are in nanoseconds
+    uint64_t totalNs = ri.ri_user_time + ri.ri_system_time;
+    *cpuTimeMs = totalNs / 1000000ULL;
+  }
+
+  if (memoryBytes) {
+    // ri_phys_footprint is current physical memory footprint in bytes
+    *memoryBytes = ri.ri_phys_footprint;
+  }
+
+  return true;
+}
+#endif
+
 #ifdef _WIN32
 #include <psapi.h>
 #include <windows.h>
@@ -256,7 +287,7 @@ void OnWindowsCpuTimerTick(uv_timer_t *timer) {
 }
 #endif
 
-#ifdef __linux__
+#if defined(__linux__)
 void OnMemoryTimerTick(uv_timer_t *timer) {
   auto *ctx = static_cast<ProcessContext *>(timer->data);
   if (ctx->processExited) {
@@ -266,6 +297,39 @@ void OnMemoryTimerTick(uv_timer_t *timer) {
   uint64_t currentMem = ReadProcessPeakMemory(ctx->process.pid);
   if (currentMem > ctx->result.maxMemoryBytes) {
     ctx->result.maxMemoryBytes = currentMem;
+  }
+}
+#elif defined(__APPLE__)
+void OnMacOSResourceTick(uv_timer_t *timer) {
+  auto *ctx = static_cast<ProcessContext *>(timer->data);
+  if (ctx->processExited) {
+    return;
+  }
+
+  uint64_t cpuTimeMs = 0;
+  uint64_t memoryBytes = 0;
+
+  if (!ReadProcessResourceUsage(ctx->process.pid, &cpuTimeMs, &memoryBytes)) {
+    // Process may have just exited, ignore error
+    return;
+  }
+
+  // Track peak memory
+  if (memoryBytes > ctx->result.maxMemoryBytes) {
+    ctx->result.maxMemoryBytes = memoryBytes;
+  }
+
+  // Enforce CPU time limit
+  if (ctx->timeoutMs > 0 && cpuTimeMs >= ctx->timeoutMs) {
+    ctx->result.timedOut = true;
+    uv_process_kill(&ctx->process, SIGKILL);
+    return;
+  }
+
+  // Enforce memory limit
+  if (ctx->memoryLimitBytes > 0 && memoryBytes > ctx->memoryLimitBytes) {
+    ctx->result.memoryLimitExceeded = true;
+    uv_process_kill(&ctx->process, SIGKILL);
   }
 }
 #endif
@@ -350,9 +414,9 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
       ctx->result.maxMemoryBytes = extendedInfo.PeakProcessMemoryUsed;
     }
   }
-#else
+#elif defined(__linux__)
   // On Linux, we've been tracking memory via periodic polling
-  // Final check: read one more time
+  // Best-effort final check (process may already be reaped, read may fail)
   uint64_t finalMem = ReadProcessPeakMemory(ctx->process.pid);
   if (finalMem > ctx->result.maxMemoryBytes) {
     ctx->result.maxMemoryBytes = finalMem;
@@ -373,6 +437,25 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   if (term_signal == SIGKILL && ctx->memoryLimitBytes > 0 &&
       ctx->result.maxMemoryBytes > ctx->memoryLimitBytes) {
     ctx->result.memoryLimitExceeded = true;
+  }
+#elif defined(__APPLE__)
+  // On macOS, we've been tracking memory via periodic polling
+  // Best-effort final check (process may already be reaped, read may fail)
+  uint64_t finalMem = 0;
+  if (ReadProcessResourceUsage(ctx->process.pid, nullptr, &finalMem)) {
+    if (finalMem > ctx->result.maxMemoryBytes) {
+      ctx->result.maxMemoryBytes = finalMem;
+    }
+  }
+
+  // Check if process was killed due to resource limits we enforced
+  if (term_signal == SIGKILL && ctx->timeoutMs > 0 && ctx->result.timedOut) {
+    // We killed it due to CPU time limit
+  }
+
+  if (term_signal == SIGKILL && ctx->memoryLimitBytes > 0 &&
+      ctx->result.memoryLimitExceeded) {
+    // We killed it due to memory limit
   }
 #endif
 
@@ -592,7 +675,7 @@ public:
       return;
     }
 
-#ifdef __linux__
+#if defined(__linux__)
     // Open a pidfd to prevent PID reuse
     ctx_->pidfd = pidfd_open(ctx_->process.pid, 0);
 
@@ -639,6 +722,27 @@ public:
       rlim.rlim_max = rlim.rlim_cur;
       prlimit(ctx_->process.pid, RLIMIT_CPU, &rlim, nullptr);
     }
+#elif defined(__APPLE__)
+    // Start wall clock timeout timer if timeout is specified
+    // This is a safety net in case CPU time polling misses the limit
+    if (ctx_->timeoutMs > 0) {
+      uint64_t wallTimeoutMs = ctx_->timeoutMs;
+      if (wallTimeoutMs <= (UINT64_MAX / 2)) {
+        wallTimeoutMs *= 2;
+      }
+      uv_timer_init(ctx_->loop, &ctx_->timeoutTimer);
+      ctx_->timeoutTimer.data = ctx_.get();
+      uv_timer_start(&ctx_->timeoutTimer, OnTimeoutTimerFired, wallTimeoutMs,
+                     0);
+      ctx_->timeoutTimerActive = true;
+    }
+
+    // Start resource polling timer for both CPU and memory
+    uv_timer_init(ctx_->loop, &ctx_->memoryTimer);
+    ctx_->memoryTimer.data = ctx_.get();
+    uv_timer_start(&ctx_->memoryTimer, OnMacOSResourceTick, 0,
+                   MEMORY_SAMPLE_INTERVAL_MS);
+    ctx_->memoryTimerActive = true;
 #endif
 
 #ifdef _WIN32

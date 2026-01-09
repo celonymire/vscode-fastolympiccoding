@@ -104,7 +104,7 @@ await runnable.done;
 ## Platform Support
 
 - **Linux**:
-  - Peak RSS tracked via `/proc/<pid>/status` (`VmHWM`). Sampled periodically (currently every 250ms) and read once at process exit.
+  - Peak RSS tracked via `/proc/<pid>/status` (`VmHWM`). Sampled periodically (every 50ms) and read once at process exit.
   - Memory limit enforcement uses `prlimit(..., RLIMIT_AS, ...)` (address space), plus best-effort peak RSS reporting.
   - CPU time limit uses `prlimit(..., RLIMIT_CPU, ...)` and a wall-clock timer is used as a safety net.
 - **Windows**:
@@ -112,8 +112,10 @@ await runnable.done;
   - Enforces _total_ CPU time (user + kernel) by polling Job Object accounting and terminating the job when the sum exceeds `timeoutMs`.
   - **Job Object limitation**: built-in job time limits cover user time only, which is why polling is used.
 - **macOS (darwin)**:
-  - Basic support today: process spawn + streaming stdio + interactive stdin.
-  - Planned: implement peak RSS via `proc_pid_rusage` / Mach APIs and enforce limits by terminating the process when limits are exceeded.
+  - Peak RSS tracked via `proc_pid_rusage()` with `RUSAGE_INFO_V4`. Sampled periodically (every 50ms) and read once at process exit.
+  - CPU time tracking uses `proc_pid_rusage()` polling (user + kernel time in nanoseconds).
+  - Both CPU and memory limits enforced by polling and sending `SIGKILL` when limits exceeded.
+  - No OS-level enforcement (macOS lacks `prlimit()` and Job Object equivalents), but polling-based approach provides millisecond-level accuracy.
 
 ## Fallback Behavior
 
