@@ -94,19 +94,19 @@ jobs:
         run: |
           echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "npm_config_arch=arm64" >> $GITHUB_ENV
+          echo "npm_config_target_arch=arm64" >> $GITHUB_ENV
 
       - name: Configure cross-compilation environment (Linux ARMhf)
         if: matrix.vsceTarget == 'linux-armhf'
         run: |
           echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
           echo "CXX=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
-          echo "npm_config_arch=arm" >> $GITHUB_ENV
+          echo "npm_config_target_arch=arm" >> $GITHUB_ENV
 
       - name: Configure cross-compilation environment (Windows ARM64)
         if: matrix.vsceTarget == 'win32-arm64'
         run: |
-          echo "npm_config_arch=arm64" >> $GITHUB_ENV
+          echo "npm_config_target_arch=arm64" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: npm ci
