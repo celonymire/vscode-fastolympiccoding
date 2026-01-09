@@ -43,19 +43,14 @@ jobs:
             os: windows-latest
             vsceTarget: "win32-x64"
           - name: Windows ARM64
-            os: windows-latest
+            os: windows-11-arm
             vsceTarget: "win32-arm64"
           - name: Linux x64
             os: ubuntu-latest
             vsceTarget: "linux-x64"
           - name: Linux ARM64
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             vsceTarget: "linux-arm64"
-            crossCompile: true
-          - name: Linux ARMhf
-            os: ubuntu-latest
-            vsceTarget: "linux-armhf"
-            crossCompile: true
           - name: macOS x64
             os: macos-15-intel
             vsceTarget: "darwin-x64"
@@ -78,35 +73,6 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-
-      - name: Setup ARM cross-compilation (Linux)
-        if: matrix.crossCompile && runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          if [ "${{ matrix.vsceTarget }}" = "linux-arm64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          elif [ "${{ matrix.vsceTarget }}" = "linux-armhf" ]; then
-            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-          fi
-
-      - name: Configure cross-compilation environment (Linux ARM64)
-        if: matrix.vsceTarget == 'linux-arm64'
-        run: |
-          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "npm_package_config_node_gyp_arch=arm64" >> $GITHUB_ENV
-
-      - name: Configure cross-compilation environment (Linux ARMhf)
-        if: matrix.vsceTarget == 'linux-armhf'
-        run: |
-          echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-          echo "CXX=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
-          echo "npm_package_config_node_gyp_arch=arm" >> $GITHUB_ENV
-
-      - name: Configure cross-compilation environment (Windows ARM64)
-        if: matrix.vsceTarget == 'win32-arm64'
-        run: |
-          echo "npm_package_config_node_gyp_arch=arm64" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: npm ci
