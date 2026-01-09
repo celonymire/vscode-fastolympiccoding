@@ -33,7 +33,6 @@ struct ProcessResult {
   bool timedOut = false;
   bool memoryLimitExceeded = false;
   bool spawnError = false;
-  std::string debugInfo; // Diagnostic information for debugging
 };
 
 // Shared state between ProcessHandle and JudgeWorker
@@ -336,10 +335,6 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   ctx->result.termSignal = term_signal;
   ctx->result.elapsedMs = GetMonotonicTimeMs() - ctx->startTime;
 
-  ctx->result.debugInfo = "pid=" + std::to_string(ctx->process.pid) +
-                          "; exit=" + std::to_string(exit_status) +
-                          "; signal=" + std::to_string(term_signal) + "; ";
-
 #ifdef _WIN32
   // On Windows, get peak memory from job object
   if (ctx->jobObject) {
@@ -359,9 +354,6 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   if (finalMem > ctx->result.maxMemoryBytes) {
     ctx->result.maxMemoryBytes = finalMem;
   }
-
-  ctx->result.debugInfo +=
-      "maxMem: " + std::to_string(ctx->result.maxMemoryBytes / 1024) + " KB; ";
 
   // Close the pidfd
   if (ctx->pidfd >= 0) {
@@ -768,7 +760,6 @@ public:
     result.Set("memoryLimitExceeded",
                Napi::Boolean::New(env, ctx_->result.memoryLimitExceeded));
     result.Set("spawnError", Napi::Boolean::New(env, ctx_->result.spawnError));
-    result.Set("debugInfo", Napi::String::New(env, ctx_->result.debugInfo));
 
     Callback().Call({env.Null(), result});
   }
