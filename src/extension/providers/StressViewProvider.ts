@@ -397,12 +397,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._interactorSecretResolver = resolve;
       });
 
-      this._judgeState.process.run(
-        judgeSettings.languageSettings.runCommand,
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
-        solutionSettings.languageSettings.currentWorkingDirectory
-      );
+      // Clear any previous listeners from prior runs
+      this._judgeState.process.cleanup();
+      this._generatorState.process.cleanup();
+      this._solutionState.process.cleanup();
+
       this._judgeState.process
         .on("error", this._judgeState.errorHandler)
         .on("stdout:data", this._judgeState.stdoutDataHandler)
@@ -411,18 +410,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:end", this._judgeState.stderrEndHandler)
         .on("close", this._judgeState.closeHandler);
 
-      this._generatorState.process.run(
-        generatorSettings.languageSettings.runCommand,
-        0,
-        0,
-        solutionSettings.languageSettings.currentWorkingDirectory
-      );
       this._generatorState.process
         .on("spawn", () => {
-          // TODO: Add stdin support to judge addon for interactive processes
-          // this._generatorState.process.process?.stdin.write(`${seed}\n`);
-          const logger = getLogger("stress");
-          logger.warn("Generator stdin interaction not yet supported with judge addon");
+          this._generatorState.process.process?.stdin.write(`${seed}\n`);
         })
         .on("error", this._generatorState.errorHandler)
         .on("stdout:data", this._generatorState.stdoutDataHandler)
@@ -431,12 +421,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:end", this._generatorState.stderrEndHandler)
         .on("close", this._generatorState.closeHandler);
 
-      this._solutionState.process.run(
-        solutionSettings.languageSettings.runCommand,
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
-        solutionSettings.languageSettings.currentWorkingDirectory
-      );
       this._solutionState.process
         .on("error", this._solutionState.errorHandler)
         .on("stdout:data", this._solutionState.stdoutDataHandler)
@@ -444,6 +428,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:data", this._solutionState.stderrDataHandler)
         .on("stderr:end", this._solutionState.stderrEndHandler)
         .on("close", this._solutionState.closeHandler);
+
+      this._judgeState.process.run(
+        judgeSettings.languageSettings.runCommand,
+        testcaseTimeLimit,
+        testcaseMemoryLimit,
+        solutionSettings.languageSettings.currentWorkingDirectory
+      );
+      this._generatorState.process.run(
+        generatorSettings.languageSettings.runCommand,
+        0,
+        0,
+        solutionSettings.languageSettings.currentWorkingDirectory
+      );
+      this._solutionState.process.run(
+        solutionSettings.languageSettings.runCommand,
+        testcaseTimeLimit,
+        testcaseMemoryLimit,
+        solutionSettings.languageSettings.currentWorkingDirectory
+      );
 
       const executionPromise = (state: State) => {
         return new Promise<number>((resolve) => {
@@ -711,33 +714,29 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this._generatorState.stdout.write(data, writeMode);
 
       if (this._interactiveMode) {
-        // TODO: Interactive mode not yet supported with judge addon
         // Generator provides the secret for the interactor
-        // this._judgeState.process.process?.stdin.write(data);
+        this._judgeState.process.process?.stdin.write(data);
       } else {
-        // TODO: Pipe support not yet available with judge addon
         // Generator pipes to solution and good solution
-        // this._solutionState.process.process?.stdin.write(data);
-        // this._judgeState.process.process?.stdin.write(data);
+        this._solutionState.process.process?.stdin.write(data);
+        this._judgeState.process.process?.stdin.write(data);
       }
     } else if (stateId === "Judge") {
       if (this._interactiveMode) {
-        // TODO: Interactive mode not yet supported with judge addon
-        // this._solutionState.process.process?.stdin.write(data);
+        this._solutionState.process.process?.stdin.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
       }
     } else {
       if (this._interactiveMode) {
-        // TODO: Interactive mode not yet supported with judge addon
         // Make sure generator sends the secret before sending our queries
         if (this._interactiveSecretPromise) {
           await this._interactiveSecretPromise;
           this._interactiveSecretPromise = null;
         }
 
-        // this._judgeState.process.process?.stdin.write(data);
+        this._judgeState.process.process?.stdin.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");

@@ -32,6 +32,7 @@ type JudgeAddon = {
     memoryLimitMb: number,
     stdoutCallback: (data: string) => void,
     stderrCallback: (data: string) => void,
+    spawnCallback: () => void,
     completionCallback: (
       err: Error | null,
       result?: {
@@ -191,6 +192,8 @@ export class Runnable {
   private _processHandle: ProcessHandle | undefined = undefined;
   private _stdoutListeners: Array<(data: string) => void> = [];
   private _stderrListeners: Array<(data: string) => void> = [];
+  private _stdoutEndListeners: Array<() => void> = [];
+  private _stderrEndListeners: Array<() => void> = [];
   private _spawnListeners: Array<() => void> = [];
   private _errorListeners: Array<(err: Error) => void> = [];
   private _closeListeners: Array<(code: number | null, signal: NodeJS.Signals | null) => void> = [];
@@ -204,6 +207,8 @@ export class Runnable {
     this._processHandle = undefined;
     this._stdoutListeners = [];
     this._stderrListeners = [];
+    this._stdoutEndListeners = [];
+    this._stderrEndListeners = [];
     this._spawnListeners = [];
     this._errorListeners = [];
     this._closeListeners = [];
@@ -214,7 +219,6 @@ export class Runnable {
       throw new Error("Runnable.run requires at least one command element");
     }
 
-    this.cleanup();
     this._timedOut = false;
     this._maxMemoryBytes = 0;
     this._memoryLimitExceeded = false;
@@ -230,11 +234,7 @@ export class Runnable {
       resolvePromise = resolve;
     });
 
-    // NOTE: Actual spawning is deferred to next tick to allow listeners to be attached first
-    // This ensures no data is lost with real-time streaming
-    process.nextTick(() => {
-      this._runWithAddon(command, timeout, memoryLimit, cwd, addon, resolvePromise!);
-    });
+    this._runWithAddon(command, timeout, memoryLimit, cwd, addon, resolvePromise!);
   }
 
   private _runWithAddon(
@@ -258,6 +258,10 @@ export class Runnable {
         // Real-time stderr
         this._stderrListeners.forEach((listener) => listener(data));
       },
+      () => {
+        // Spawn callback - fired when process actually spawns on worker thread
+        this._spawnListeners.forEach((listener) => listener());
+      },
       (err, result) => {
         // Completion callback
         if (err) {
@@ -274,16 +278,16 @@ export class Runnable {
           this._timedOut = result.timedOut;
           this._memoryLimitExceeded = result.memoryLimitExceeded;
 
+          // Fire end events before close event
+          this._stdoutEndListeners.forEach((listener) => listener());
+          this._stderrEndListeners.forEach((listener) => listener());
+
           this._closeListeners.forEach((listener) => listener(result.exitCode, this._signal));
         }
 
         resolvePromise();
       }
     );
-
-    // Trigger spawn listeners immediately after process handle is created
-    // This allows stdin to be written before the process actually reads it
-    this._spawnListeners.forEach((listener) => listener());
   }
 
   /**
@@ -370,6 +374,12 @@ export class Runnable {
         break;
       case "stdout:data":
         this._stdoutListeners.push(listener as (data: string) => void);
+        break;
+      case "stderr:end":
+        this._stderrEndListeners.push(listener as () => void);
+        break;
+      case "stdout:end":
+        this._stdoutEndListeners.push(listener as () => void);
         break;
       case "close":
         this._closeListeners.push(

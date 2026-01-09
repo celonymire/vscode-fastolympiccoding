@@ -1,20 +1,18 @@
 # Judge Addon Usage
 
-The judge addon is a unified native C++ implementation using libuv that replaces the separate linux-memory-stats and win32-memory-stats addons. It provides process spawning, memory statistics, and stdin interaction in a single addon, moving all operations off the Node.js event loop.
+The judge addon is a unified native C++ implementation (built with node-addon-api + libuv). It spawns processes, streams stdout/stderr in real time, supports interactive stdin, and (where implemented) tracks/enforces resource limits.
 
 ## Features
 
-- **Unified memory statistics**: Cross-platform memory monitoring for Windows and Linux
-- **Off-event-loop execution**: Process spawning, stdio capture, and monitoring happen in a separate libuv event loop
-- **Stdin support**: Write input data to running processes, support for interactive problems
-- **Integrated memory tracking**: Native memory monitoring built into the process execution
-- **Timeout management**: Precise timeout handling via libuv timers
-- **Memory limit enforcement**: Automatic process termination when memory limits are exceeded
-- **Full stdio capture**: Complete stdout/stderr capture
+- **Off-event-loop execution**: process spawning and monitoring run in a dedicated libuv loop on a worker thread
+- **Streaming stdio**: stdout/stderr are delivered via callbacks as data arrives
+- **Interactive stdin**: write/end stdin while the process is running
+- **Resource limits (platform-dependent)**:
+  - peak memory tracking (`maxMemoryBytes`)
+  - time limit enforcement
+  - memory limit enforcement
 
 ## API
-
-The addon is automatically used by the `Runnable` class when available. The implementation transparently falls back to Node.js child_process + pidusage if the addon isn't available.
 
 ### Building the addon
 
@@ -22,34 +20,38 @@ The addon is automatically used by the `Runnable` class when available. The impl
 npm run build:addon
 ```
 
-This builds `build/Release/judge.node`.
+This builds `build/Release/judge.node` (see `binding.gyp`).
 
 ### TypeScript Interface
 
 ```typescript
+type ProcessHandle = {
+  writeStdin(data: string): void;
+  endStdin(): void;
+  kill(): void;
+};
+
 type JudgeAddon = {
-  getMemoryStats: (pid: number) => { rss: number; peakRss: number };
   spawnProcess: (
     command: string[],
     cwd: string,
     timeoutMs: number,
     memoryLimitMb: number,
-    callback: (
+    stdoutCallback: (data: string) => void,
+    stderrCallback: (data: string) => void,
+    completionCallback: (
       err: Error | null,
       result?: {
         exitCode: number;
         termSignal: number;
         elapsedMs: number;
         maxMemoryBytes: number;
-        stdout: string;
-        stderr: string;
         timedOut: boolean;
         memoryLimitExceeded: boolean;
         spawnError: boolean;
-        errorMessage: string;
       }
     ) => void
-  ) => void;
+  ) => ProcessHandle;
 };
 ```
 
@@ -82,87 +84,47 @@ console.log("Max memory:", runnable.maxMemoryBytes / (1024 * 1024), "MB");
 const runnable = new Runnable();
 runnable.run(["./interactive_program"], 5000, 256);
 
-// Write queries and read responses
 runnable.on("spawn", () => {
   runnable.process?.stdin.write("QUERY 1\n");
 });
 
 runnable.on("stdout:data", (data) => {
   console.log("Response:", data);
-  // Send next query based on response
   runnable.process?.stdin.write("QUERY 2\n");
 });
 
 await runnable.done;
 ```
 
-### Memory Statistics (Standalone)
+## Implementation Notes
 
-The addon also exports a standalone memory stats function that works with any process:
+- Memory tracking is **peak memory** (`maxMemoryBytes`), not current RSS.
+- Memory/time enforcement is implemented in the native addon where available; other platforms may currently run without enforcement.
 
-```typescript
-const addon = getJudgeAddon();
-if (addon) {
-  const stats = addon.getMemoryStats(processId);
-  console.log("RSS:", stats.rss / (1024 * 1024), "MB");
-  console.log("Peak RSS:", stats.peakRss / (1024 * 1024), "MB");
-}
-```
+## Platform Support
 
-This function is used internally by the `Runnable` class when falling back to Node.js child_process.
-
-## Implementation Details
-
-### C++ Components
-
-- **JudgeWorker**: N-API AsyncWorker that manages the execution on a worker thread
-- **ProcessContext**: Holds process state, handles, timers, and results
-- **Memory sampling**: Platform-specific implementations for Windows and Linux
-- **libuv integration**: Uses `uv_process_t`, `uv_pipe_t`, and `uv_timer_t` for async operations
-
-### Key Differences from Node.js child_process
-
-1. **Blocking behavior**: The addon runs in a worker thread and blocks on `uv_run()`, preventing interference with the Node.js event loop
-2. **Memory tracking**: Native memory stats are sampled at 100ms intervals using platform APIs
-3. **Complete capture**: Stdout/stderr are fully captured before returning (no streaming)
-4. **Precise timing**: High-resolution timing via `uv_hrtime()`
-
-### Platform Support
-
-- **Linux**: Full support with `/proc/<pid>/status` memory tracking
-- **Windows**: Full support with Windows Job Objects for automatic limit enforcement and peak memory tracking
-  - **Job Object Limitations**: The addon optimistically creates job objects for memory/time limit enforcement. In rare scenarios, job object creation may fail:
-    1. **Nested jobs in CI/CD**: If VS Code runs in a job that disallows breakaway, child processes cannot join new jobs (common in CI/CD: GitHub Actions, Azure Pipelines)
-    2. **Resource exhaustion**: System runs out of job object handles (extremely rare)
-    3. **Permission restrictions**: Restricted security contexts in enterprise environments
-  - **Failure behavior**: If job objects fail, the addon continues without OS-level memory enforcement on Windows. For desktop competitive programming use, these scenarios are unlikely.
-- **Other platforms**: Basic support without native memory tracking
-
-## Performance
-
-The addon provides better performance characteristics for the Judge/Stress testing workflows:
-
-- No Node.js event loop contention during long-running compilations
-- More accurate memory tracking via native APIs
-- Lower overhead for stdio capture
-- Better timeout precision
+- **Linux**:
+  - Peak RSS tracked via `/proc/<pid>/status` (`VmHWM`). Sampled periodically (currently every 250ms) and read once at process exit.
+  - Memory limit enforcement uses `prlimit(..., RLIMIT_AS, ...)` (address space), plus best-effort peak RSS reporting.
+  - CPU time limit uses `prlimit(..., RLIMIT_CPU, ...)` and a wall-clock timer is used as a safety net.
+- **Windows**:
+  - Uses Job Objects for containment + memory limit enforcement.
+  - Enforces _total_ CPU time (user + kernel) by polling Job Object accounting and terminating the job when the sum exceeds `timeoutMs`.
+  - **Job Object limitation**: built-in job time limits cover user time only, which is why polling is used.
+- **macOS (darwin)**:
+  - Basic support today: process spawn + streaming stdio + interactive stdin.
+  - Planned: implement peak RSS via `proc_pid_rusage` / Mach APIs and enforce limits by terminating the process when limits are exceeded.
 
 ## Fallback Behavior
 
-If the addon fails to load or isn't available:
+Currently, `Runnable` expects `judge.node` to be available. If you later add a pure-JS fallback (e.g. `child_process.spawn` + sampling), document it here.
 
-- The `Runnable` class automatically uses Node.js `child_process.spawn()` for process execution
-- Memory sampling attempts to use the addon's `getMemoryStats()` function if available
-- If the addon is completely unavailable, falls back to the `pidusage` npm package
-- Functionality remains identical from the caller's perspective
-- A warning is logged explaining why the addon isn't available
+## VS Code Platform Scope
 
-## Migration from Separate Memory Addons
+For desktop VS Code (non-web), targeting these OSes covers the supported platforms:
 
-This addon replaces the previous `linux-memory-stats.node` and `win32-memory-stats.node` addons:
+- Windows (`win32`)
+- Linux (`linux`)
+- macOS (`darwin`)
 
-- **Before**: Separate addons for Linux and Windows memory stats, plus Node.js child_process
-- **After**: Single unified `judge.node` addon for both process execution and memory stats
-- **Benefits**: Reduced build complexity, unified codebase, better integration, smaller bundle size
-
-The old memory stats addons are deprecated and no longer built. All functionality has been consolidated into the judge addon.
+You’ll still need to consider CPU architectures (e.g. `x64` and `arm64`) if distributing prebuilt binaries.

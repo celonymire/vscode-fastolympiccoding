@@ -286,12 +286,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    testcase.process.run(
-      runCommand,
-      bypassLimits ? 0 : this._timeLimit,
-      bypassLimits ? 0 : this._memoryLimit,
-      cwd
-    );
+    // Clear any previous listeners from prior runs
+    testcase.process.cleanup();
 
     testcase.process
       .on("spawn", () => {
@@ -347,6 +343,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
         this._saveFileData();
       });
+
+    testcase.process.run(
+      runCommand,
+      bypassLimits ? 0 : this._timeLimit,
+      bypassLimits ? 0 : this._memoryLimit,
+      cwd
+    );
   }
 
   private async _launchInteractiveTestcase(
@@ -369,15 +372,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    testcase.process.run(
-      runCommand,
-      bypassLimits ? 0 : this._timeLimit,
-      bypassLimits ? 0 : this._memoryLimit,
-      cwd
-    );
-    // Don't restrict the interactor's time and memory limit
-    testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
-
     // Pass the secret input before the outputs of the solution
     // This is a deliberate design choice to allow minimal changes to adapt
     // to various online judges, where the secret answer can come from various
@@ -386,6 +380,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const secretPromise = new Promise<void>((resolve) => {
       testcase.interactorSecretResolver = resolve;
     });
+
+    // Clear any previous listeners from prior runs
+    testcase.interactorProcess.cleanup();
+    testcase.process.cleanup();
 
     testcase.interactorProcess
       .on("spawn", async () => {
@@ -441,6 +439,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       .on("close", () => {
         testcase.interactorProcess.process?.stdin.end();
       });
+
+    testcase.process.run(
+      runCommand,
+      bypassLimits ? 0 : this._timeLimit,
+      bypassLimits ? 0 : this._memoryLimit,
+      cwd
+    );
+    // Don't restrict the interactor's time and memory limit
+    testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
 
     const [termination, interactorTermination] = await Promise.all([
       testcase.process.done,

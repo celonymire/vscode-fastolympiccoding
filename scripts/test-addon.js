@@ -41,6 +41,9 @@ function testEcho() {
         console.log("[stderr]", JSON.stringify(data));
         stderr += data;
       },
+      () => {
+        console.log("[spawn] Process spawned");
+      },
       (err, result) => {
         if (err) {
           console.error("Error:", err);
@@ -79,6 +82,9 @@ function testCatWithStdin() {
         console.log("[stderr]", JSON.stringify(data));
         stderr += data;
       },
+      () => {
+        console.log("[spawn] Process spawned");
+      },
       (err, result) => {
         if (err) {
           console.error("Error:", err);
@@ -116,6 +122,9 @@ function testInteractiveStdin() {
       },
       (data) => {
         console.log("[stderr]", JSON.stringify(data));
+      },
+      () => {
+        console.log("[spawn] Process spawned");
       },
       (err, result) => {
         if (err) {
@@ -165,6 +174,7 @@ function testKill() {
       256,
       (data) => console.log("[stdout]", data),
       (data) => console.log("[stderr]", data),
+      () => console.log("[spawn] Process spawned"),
       (err, result) => {
         const elapsed = Date.now() - startTime;
         if (err) {
@@ -202,6 +212,7 @@ function testTimeout() {
       256,
       (data) => console.log("[stdout]", data),
       (data) => console.log("[stderr]", data),
+      () => console.log("[spawn] Process spawned"),
       (err, result) => {
         if (err) {
           console.error("Error:", err);
@@ -227,12 +238,58 @@ function testSpawnError() {
       256,
       (data) => console.log("[stdout]", data),
       (data) => console.log("[stderr]", data),
+      () => console.log("[spawn] Process spawned"),
       (err, result) => {
         if (err) {
           console.log("Got expected error:", err.message);
         } else {
           console.log("Result:", result);
           console.log("Spawn error flag:", result.spawnError);
+        }
+        resolve();
+      }
+    );
+  });
+}
+
+// Test 7: Cat with stdin written but NOT closed (like extension does)
+function testCatNoClose() {
+  return new Promise((resolve) => {
+    console.log("\n=== Test 7: Cat with stdin NOT closed (mimics extension) ===");
+
+    let stdout = "";
+    let stderr = "";
+
+    const handle = addon.spawnProcess(
+      ["cat"],
+      process.cwd(),
+      2000, // 2s timeout to prevent hanging forever
+      256,
+      (data) => {
+        console.log("[stdout]", JSON.stringify(data));
+        stdout += data;
+      },
+      (data) => {
+        console.log("[stderr]", JSON.stringify(data));
+        stderr += data;
+      },
+      () => {
+        console.log("[spawn] Process spawned");
+        console.log("Writing to stdin WITHOUT closing...");
+        handle.writeStdin("Test line\n");
+        console.log("Stdin written but not closed");
+      },
+      (err, result) => {
+        if (err) {
+          console.error("Error:", err);
+        } else {
+          console.log("Result:", result);
+          console.log("Total stdout:", JSON.stringify(stdout));
+          if (result.timedOut) {
+            console.log("⚠ Process timed out (expected - cat waits for EOF)");
+          } else {
+            console.log("✓ Process completed without timeout");
+          }
         }
         resolve();
       }
@@ -248,6 +305,7 @@ async function main() {
     await testKill();
     await testTimeout();
     await testSpawnError();
+    await testCatNoClose();
     console.log("\n=== All tests completed ===");
   } catch (err) {
     console.error("Test failed:", err);

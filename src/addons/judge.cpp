@@ -77,6 +77,7 @@ struct ProcessContext {
 
   Napi::ThreadSafeFunction stdoutCallback;
   Napi::ThreadSafeFunction stderrCallback;
+  Napi::ThreadSafeFunction spawnCallback;
 
 #ifdef __linux__
   int pidfd = -1; // File descriptor for the process (pidfd_open)
@@ -460,6 +461,7 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   if (ctx->stderrCallback) {
     ctx->stderrCallback.Release();
   }
+  // spawnCallback is released immediately after use, not here
 }
 
 } // namespace
@@ -478,12 +480,14 @@ public:
               const std::string &cwd, uint64_t timeoutMs,
               uint64_t memoryLimitMb, Napi::ThreadSafeFunction stdoutCallback,
               Napi::ThreadSafeFunction stderrCallback,
+              Napi::ThreadSafeFunction spawnCallback,
               std::shared_ptr<StdinState> stdinState)
       : Napi::AsyncWorker(callback), command_(command), cwd_(cwd),
         timeoutMs_(timeoutMs), memoryLimitMb_(memoryLimitMb),
         ctx_(std::make_unique<ProcessContext>()), stdinState_(stdinState) {
     ctx_->stdoutCallback = stdoutCallback;
     ctx_->stderrCallback = stderrCallback;
+    ctx_->spawnCallback = spawnCallback;
   }
 
   ~JudgeWorker() override {
@@ -563,6 +567,10 @@ public:
       }
       if (ctx_->stdoutCallback) {
         ctx_->stdoutCallback.Release();
+      }
+      // spawnCallback never called in error case, release it here
+      if (ctx_->spawnCallback) {
+        ctx_->spawnCallback.Release();
       }
 
       // Close the pipes we initialized and run until closed
@@ -730,6 +738,16 @@ public:
                OnHandleClose);
     }
 
+    // Fire spawn callback to notify main thread that process is ready
+    if (ctx_->spawnCallback) {
+      ctx_->spawnCallback.NonBlockingCall(
+          [](Napi::Env env, Napi::Function jsCallback) {
+            jsCallback.Call({});
+          });
+      // Release immediately after calling since it's only used once
+      ctx_->spawnCallback.Release();
+    }
+
     // Update totalHandles: process, stdinAsync, stdin, stdout, stderr (5 total)
     // Count handles: process, stdinAsync, stdin, stdout, stderr, timeoutTimer,
     // memoryTimer
@@ -847,10 +865,10 @@ private:
 Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 7) {
-    Napi::TypeError::New(
-        env, "Expected 7 arguments: command, cwd, timeout, "
-             "memoryLimit, stdoutCallback, stderrCallback, completionCallback")
+  if (info.Length() < 8) {
+    Napi::TypeError::New(env, "Expected 8 arguments: command, cwd, timeout, "
+                              "memoryLimit, stdoutCallback, stderrCallback, "
+                              "spawnCallback, completionCallback")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
@@ -892,8 +910,14 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   }
 
   if (!info[6].IsFunction()) {
+    Napi::TypeError::New(env, "Argument 6 (spawnCallback) must be a function")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!info[7].IsFunction()) {
     Napi::TypeError::New(env,
-                         "Argument 6 (completionCallback) must be a function")
+                         "Argument 7 (completionCallback) must be a function")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
@@ -921,7 +945,8 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   uint64_t memoryLimitMb = info[3].As<Napi::Number>().Int64Value();
   Napi::Function stdoutCallback = info[4].As<Napi::Function>();
   Napi::Function stderrCallback = info[5].As<Napi::Function>();
-  Napi::Function completionCallback = info[6].As<Napi::Function>();
+  Napi::Function spawnCallback = info[6].As<Napi::Function>();
+  Napi::Function completionCallback = info[7].As<Napi::Function>();
 
   // Create thread-safe functions for stdout and stderr
   Napi::ThreadSafeFunction stdoutTsfn =
@@ -936,12 +961,18 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
                                     1  // initial thread count
       );
 
+  Napi::ThreadSafeFunction spawnTsfn =
+      Napi::ThreadSafeFunction::New(env, spawnCallback, "SpawnCallback",
+                                    0, // unlimited queue
+                                    1  // initial thread count
+      );
+
   // Create shared stdin state for thread-safe communication
   auto stdinState = std::make_shared<StdinState>();
 
-  auto *worker =
-      new JudgeWorker(completionCallback, command, cwd, timeoutMs,
-                      memoryLimitMb, stdoutTsfn, stderrTsfn, stdinState);
+  auto *worker = new JudgeWorker(completionCallback, command, cwd, timeoutMs,
+                                 memoryLimitMb, stdoutTsfn, stderrTsfn,
+                                 spawnTsfn, stdinState);
 
   // Create and return a ProcessHandle
   Napi::FunctionReference *constructor =
