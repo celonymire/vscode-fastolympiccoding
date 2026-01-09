@@ -42,6 +42,7 @@ type JudgeAddon = {
         timedOut: boolean;
         memoryLimitExceeded: boolean;
         spawnError: boolean;
+        debugInfo: string;
       }
     ) => void
   ) => ProcessHandle;
@@ -272,6 +273,7 @@ export class Runnable {
           this._elapsed = result.elapsedMs;
           this._maxMemoryBytes = result.maxMemoryBytes;
           console.log("[Runnable] maxMemoryBytes from addon:", result.maxMemoryBytes);
+          console.log("[Runnable] Debug info", result.debugInfo);
           this._timedOut = result.timedOut;
           this._memoryLimitExceeded = result.memoryLimitExceeded;
 

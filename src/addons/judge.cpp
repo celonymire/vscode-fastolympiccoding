@@ -12,6 +12,7 @@
 #include <vector>
 
 #ifdef __linux__
+#include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -32,6 +33,7 @@ struct ProcessResult {
   bool timedOut = false;
   bool memoryLimitExceeded = false;
   bool spawnError = false;
+  std::string debugInfo;  // Diagnostic information for debugging
 };
 
 // Shared state between ProcessHandle and JudgeWorker
@@ -95,42 +97,46 @@ static int pidfd_open(pid_t pid, unsigned int flags) {
   return static_cast<int>(syscall(SYS_pidfd_open, pid, flags));
 }
 
-// Read peak memory for a specific process from /proc/{pid}/status
-// This must be called while the PID is still valid (immediately after exit)
-static uint64_t GetProcessPeakMemory(int pid) {
+// Read current RSS from /proc/{pid}/status
+// Returns current resident set size in bytes
+static uint64_t ReadProcessMemory(int pid) {
   char path[64];
   std::snprintf(path, sizeof(path), "/proc/%d/status", pid);
 
-  std::FILE *f = std::fopen(path, "r");
-  if (!f) {
-    fprintf(stderr, "[judge.cpp] Failed to open %s\n", path);
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) {
     return 0;
   }
 
-  char buf[512];
-  uint64_t peakRssBytes = 0;
-  bool found = false;
+  char buffer[4096];
+  ssize_t bytesRead = read(fd, buffer, sizeof(buffer) - 1);
+  close(fd);
+  
+  if (bytesRead < 0) {
+    return 0;
+  }
+  buffer[bytesRead] = '\0';
 
-  while (std::fgets(buf, sizeof(buf), f) != nullptr) {
-    if (std::strncmp(buf, "VmHWM:", 6) == 0) {
-      const char *p = buf + 6;
-      while (*p == ' ' || *p == '\t')
+  // Look for VmRSS (current resident set size)
+  char *line = buffer;
+  char *end = buffer + bytesRead;
+  
+  while (line < end) {
+    char *lineEnd = (char*)memchr(line, '\n', end - line);
+    if (!lineEnd) lineEnd = end;
+    
+    if (lineEnd - line > 6 && strncmp(line, "VmRSS:", 6) == 0) {
+      const char *p = line + 6;
+      while (p < lineEnd && (*p == ' ' || *p == '\t'))
         ++p;
-      unsigned long long kb = std::strtoull(p, nullptr, 10);
-      peakRssBytes = kb * 1024ULL;
-      found = true;
-      fprintf(stderr, "[judge.cpp] Found VmHWM for pid %d: %llu KB = %llu bytes\n", 
-              pid, kb, peakRssBytes);
-      break;
+      unsigned long long kb = strtoull(p, nullptr, 10);
+      return kb * 1024ULL;
     }
+    
+    line = lineEnd + 1;
   }
 
-  if (!found) {
-    fprintf(stderr, "[judge.cpp] VmHWM not found in %s\n", path);
-  }
-
-  std::fclose(f);
-  return peakRssBytes;
+  return 0;
 }
 #endif
 
@@ -198,6 +204,26 @@ void OnStderrRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
 void OnStdinWrite(uv_write_t *req, int status) {
   delete[] static_cast<char *>(req->data);
   delete req;
+}
+
+void OnTimeoutTimerFired(uv_timer_t *timer) {
+  auto *ctx = static_cast<ProcessContext *>(timer->data);
+  if (!ctx->processExited) {
+    ctx->result.timedOut = true;
+    uv_process_kill(&ctx->process, SIGKILL);
+  }
+}
+
+void OnMemoryTimerTick(uv_timer_t *timer) {
+  auto *ctx = static_cast<ProcessContext *>(timer->data);
+  if (ctx->processExited) {
+    return;
+  }
+  
+  uint64_t currentMem = ReadProcessMemory(ctx->process.pid);
+  if (currentMem > ctx->result.maxMemoryBytes) {
+    ctx->result.maxMemoryBytes = currentMem;
+  }
 }
 
 // Called on worker thread when stdin data is available or kill is requested
@@ -268,6 +294,10 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
   ctx->result.termSignal = term_signal;
   ctx->result.elapsedMs = GetMonotonicTimeMs() - ctx->startTime;
 
+  ctx->result.debugInfo = "pid=" + std::to_string(ctx->process.pid) + 
+                          "; exit=" + std::to_string(exit_status) + 
+                          "; signal=" + std::to_string(term_signal) + "; ";
+
 #ifdef _WIN32
   // On Windows, get peak memory from job object
   if (ctx->jobObject) {
@@ -281,17 +311,16 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
     }
   }
 #else
-  // On Linux, read peak memory directly from /proc while PID is still valid
-  // The pidfd keeps the PID from being recycled until we close it
-  // Note: getrusage(RUSAGE_CHILDREN) is cumulative across all children,
-  // so we need per-process stats from /proc
-  fprintf(stderr, "[judge.cpp] OnProcessExit: About to read memory for pid %d\n", 
-          ctx->process.pid);
-  ctx->result.maxMemoryBytes = GetProcessPeakMemory(ctx->process.pid);
-  fprintf(stderr, "[judge.cpp] OnProcessExit: Got maxMemoryBytes = %llu\n", 
-          ctx->result.maxMemoryBytes);
+  // On Linux, we've been tracking memory via periodic polling
+  // Final check: read one more time
+  uint64_t finalMem = ReadProcessMemory(ctx->process.pid);
+  if (finalMem > ctx->result.maxMemoryBytes) {
+    ctx->result.maxMemoryBytes = finalMem;
+  }
   
-  // Close the pidfd now that we've read the stats
+  ctx->result.debugInfo += "maxMem: " + std::to_string(ctx->result.maxMemoryBytes / 1024) + " KB; ";
+  
+  // Close the pidfd
   if (ctx->pidfd >= 0) {
     close(ctx->pidfd);
     ctx->pidfd = -1;
@@ -365,7 +394,18 @@ void OnProcessExit(uv_process_t *process, int64_t exit_status,
     ctx->totalHandles--;
   }
 
-  // No timers to close - all limits enforced at OS level!
+  // Close timers if active
+  if (ctx->timeoutTimerActive) {
+    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->timeoutTimer), OnHandleClose);
+  } else {
+    ctx->totalHandles--;
+  }
+  
+  if (ctx->memoryTimerActive) {
+    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->memoryTimer), OnHandleClose);
+  } else {
+    ctx->totalHandles--;
+  }
 
   // Only close stdout/stderr if not already closed by EOF
   if (!ctx->stdoutClosed) {
@@ -512,9 +552,22 @@ public:
     }
 
 #ifdef __linux__
-    // Open a pidfd to prevent PID reuse and safely access process stats later
-    // The pidfd holds a reference to the process even after it exits
+    // Open a pidfd to prevent PID reuse
     ctx_->pidfd = pidfd_open(ctx_->process.pid, 0);
+    
+    // Start wall clock timeout timer if timeout is specified
+    if (ctx_->timeoutMs > 0) {
+      uv_timer_init(ctx_->loop, &ctx_->timeoutTimer);
+      ctx_->timeoutTimer.data = ctx_.get();
+      uv_timer_start(&ctx_->timeoutTimer, OnTimeoutTimerFired, ctx_->timeoutMs, 0);
+      ctx_->timeoutTimerActive = true;
+    }
+    
+    // Start memory polling timer (poll every 50ms)
+    uv_timer_init(ctx_->loop, &ctx_->memoryTimer);
+    ctx_->memoryTimer.data = ctx_.get();
+    uv_timer_start(&ctx_->memoryTimer, OnMemoryTimerTick, 0, 50);
+    ctx_->memoryTimerActive = true;
     
     // Use prlimit() to set resource limits on the child process
     // 
@@ -630,7 +683,8 @@ public:
     }
 
     // Update totalHandles: process, stdinAsync, stdin, stdout, stderr (5 total)
-    ctx_->totalHandles = 5;
+    // Count handles: process, stdinAsync, stdin, stdout, stderr, timeoutTimer, memoryTimer
+    ctx_->totalHandles = 7;
 
     // On Windows and Linux, all limits are enforced at OS level:
     // - Windows: Job objects (time + memory)
@@ -662,6 +716,7 @@ public:
     result.Set("memoryLimitExceeded",
                Napi::Boolean::New(env, ctx_->result.memoryLimitExceeded));
     result.Set("spawnError", Napi::Boolean::New(env, ctx_->result.spawnError));
+    result.Set("debugInfo", Napi::String::New(env, ctx_->result.debugInfo));
 
     Callback().Call({env.Null(), result});
   }
