@@ -30,6 +30,12 @@ constexpr size_t PIPE_BUFFER_SIZE = 65536;
 constexpr uint64_t MEMORY_SAMPLE_INTERVAL_MS = 50;
 constexpr uint64_t BYTES_PER_MEGABYTE = 1024 * 1024;
 
+// Stdin write management constants
+// Chunk size for stdin writes - smaller than pipe buffer to ensure writes succeed
+constexpr size_t STDIN_WRITE_CHUNK_SIZE = 32768; // 32KB chunks
+// Maximum number of outstanding write requests to prevent memory buildup
+constexpr size_t MAX_PENDING_WRITES = 4;
+
 struct ProcessResult {
   int64_t exitCode = 0;
   int termSignal = 0;
@@ -77,6 +83,11 @@ struct ProcessContext {
   int totalHandles = 0;
 
   std::shared_ptr<StdinState> stdinState;
+
+  // Write queue for chunked stdin writes with backpressure
+  std::vector<std::string> stdinWriteQueue;
+  size_t pendingWriteCount = 0;
+  bool stdinCloseRequested = false;
 
   void (*completionCallback)(ProcessContext *) = nullptr;
 
@@ -248,9 +259,95 @@ void OnStderrRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   }
 }
 
+// Forward declaration for write queue processing
+void ProcessStdinWriteQueue(ProcessContext *ctx);
+
 void OnStdinWrite(uv_write_t *req, int status) {
-  delete[] static_cast<char *>(req->data);
+  auto *ctx = static_cast<ProcessContext *>(req->data);
   delete req;
+
+  if (!ctx) {
+    return;
+  }
+
+  // Decrement pending write counter
+  if (ctx->pendingWriteCount > 0) {
+    ctx->pendingWriteCount--;
+  }
+
+  // Process next chunk in queue if available
+  ProcessStdinWriteQueue(ctx);
+}
+
+// Process queued stdin writes with backpressure control
+// This ensures large stdin data is written in chunks without overwhelming the pipe buffer
+void ProcessStdinWriteQueue(ProcessContext *ctx) {
+  if (!ctx || ctx->stdinClosed || ctx->processExited) {
+    return;
+  }
+
+  // Respect backpressure limit - don't queue too many writes
+  while (!ctx->stdinWriteQueue.empty() && 
+         ctx->pendingWriteCount < MAX_PENDING_WRITES) {
+    
+    std::string &nextChunk = ctx->stdinWriteQueue.front();
+    size_t chunkSize = std::min(nextChunk.size(), STDIN_WRITE_CHUNK_SIZE);
+
+    // Allocate buffer for this chunk
+    auto *buf = new char[chunkSize];
+    std::memcpy(buf, nextChunk.data(), chunkSize);
+
+    // Create a wrapper that stores both context and buffer pointer
+    struct WriteData {
+      ProcessContext *ctx;
+      char *buffer;
+    };
+    auto *writeData = new WriteData{ctx, buf};
+
+    auto *writeReq = new uv_write_t;
+    writeReq->data = writeData;
+
+    uv_buf_t uvBuf = uv_buf_init(buf, static_cast<unsigned int>(chunkSize));
+    int result = uv_write(writeReq, reinterpret_cast<uv_stream_t *>(&ctx->stdinPipe),
+                          &uvBuf, 1, 
+                          [](uv_write_t *req, int status) {
+                            // Extract write data and free buffer
+                            auto *writeData = static_cast<WriteData *>(req->data);
+                            auto *ctx = writeData->ctx;
+                            delete[] writeData->buffer;
+                            delete writeData;
+                            
+                            // Update request to point to context for OnStdinWrite
+                            req->data = ctx;
+                            OnStdinWrite(req, status);
+                          });
+
+    if (result < 0) {
+      // Write failed, clean up and stop
+      delete[] buf;
+      delete writeData;
+      delete writeReq;
+      ctx->stdinWriteQueue.clear();
+      return;
+    }
+
+    ctx->pendingWriteCount++;
+
+    // Remove processed chunk from front of queue
+    if (chunkSize >= nextChunk.size()) {
+      ctx->stdinWriteQueue.erase(ctx->stdinWriteQueue.begin());
+    } else {
+      // Partial chunk written, keep the rest
+      nextChunk.erase(0, chunkSize);
+    }
+  }
+
+  // If queue is empty and close was requested, close stdin now
+  if (ctx->stdinWriteQueue.empty() && ctx->stdinCloseRequested && 
+      !ctx->stdinClosed && ctx->pendingWriteCount == 0) {
+    ctx->stdinClosed = true;
+    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->stdinPipe), OnHandleClose);
+  }
 }
 
 void OnTimeoutTimerFired(uv_timer_t *timer) {
@@ -359,24 +456,20 @@ void OnStdinAsync(uv_async_t *handle) {
     return;
   }
 
-  // Write buffered data to stdin
+  // Queue buffered data for chunked writing
   if (!dataToWrite.empty() && !ctx->stdinClosed) {
-    auto *buf = new char[dataToWrite.size()];
-    std::memcpy(buf, dataToWrite.data(), dataToWrite.size());
-
-    auto *writeReq = new uv_write_t;
-    writeReq->data = buf;
-
-    uv_buf_t uvBuf =
-        uv_buf_init(buf, static_cast<unsigned int>(dataToWrite.size()));
-    uv_write(writeReq, reinterpret_cast<uv_stream_t *>(&ctx->stdinPipe), &uvBuf,
-             1, OnStdinWrite);
+    ctx->stdinWriteQueue.push_back(std::move(dataToWrite));
+    ProcessStdinWriteQueue(ctx);
   }
 
-  // Close stdin if requested
+  // Request stdin close (will happen after queue is drained)
   if (shouldClose && !ctx->stdinClosed) {
-    ctx->stdinClosed = true;
-    uv_close(reinterpret_cast<uv_handle_t *>(&ctx->stdinPipe), OnHandleClose);
+    ctx->stdinCloseRequested = true;
+    // Close immediately if nothing is queued
+    if (ctx->stdinWriteQueue.empty() && ctx->pendingWriteCount == 0) {
+      ctx->stdinClosed = true;
+      uv_close(reinterpret_cast<uv_handle_t *>(&ctx->stdinPipe), OnHandleClose);
+    }
   }
 }
 
@@ -823,25 +916,21 @@ public:
       shouldCloseStdin = stdinState_->closed;
     }
 
-    // Write any buffered stdin data
+    // Queue any buffered stdin data for chunked writing
     if (!stdinData.empty()) {
-      auto *buf = new char[stdinData.size()];
-      std::memcpy(buf, stdinData.data(), stdinData.size());
-
-      auto *writeReq = new uv_write_t;
-      writeReq->data = buf;
-
-      uv_buf_t uvBuf =
-          uv_buf_init(buf, static_cast<unsigned int>(stdinData.size()));
-      uv_write(writeReq, reinterpret_cast<uv_stream_t *>(&ctx_->stdinPipe),
-               &uvBuf, 1, OnStdinWrite);
+      ctx_->stdinWriteQueue.push_back(std::move(stdinData));
+      ProcessStdinWriteQueue(ctx_.get());
     }
 
-    // Close stdin if it was closed before spawn
+    // Request stdin close (will happen after queue is drained)
     if (shouldCloseStdin) {
-      ctx_->stdinClosed = true;
-      uv_close(reinterpret_cast<uv_handle_t *>(&ctx_->stdinPipe),
-               OnHandleClose);
+      ctx_->stdinCloseRequested = true;
+      // Close immediately if nothing is queued
+      if (ctx_->stdinWriteQueue.empty() && ctx_->pendingWriteCount == 0) {
+        ctx_->stdinClosed = true;
+        uv_close(reinterpret_cast<uv_handle_t *>(&ctx_->stdinPipe),
+                 OnHandleClose);
+      }
     }
 
     // Fire spawn callback to notify main thread that process is ready
