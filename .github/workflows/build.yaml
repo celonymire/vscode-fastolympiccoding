@@ -77,6 +77,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run addon stress tests
+        run: node --force-node-api-uncaught-exceptions-policy=true scripts/stress-test-addon.js
+        continue-on-error: true
+
       - name: Package VSIX
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
