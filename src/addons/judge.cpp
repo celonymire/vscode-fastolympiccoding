@@ -31,7 +31,8 @@ constexpr uint64_t MEMORY_SAMPLE_INTERVAL_MS = 50;
 constexpr uint64_t BYTES_PER_MEGABYTE = 1024 * 1024;
 
 // Stdin write management constants
-// Chunk size for stdin writes - smaller than pipe buffer to ensure writes succeed
+// Chunk size for stdin writes - smaller than pipe buffer to ensure writes
+// succeed
 constexpr size_t STDIN_WRITE_CHUNK_SIZE = 32768; // 32KB chunks
 // Maximum number of outstanding write requests to prevent memory buildup
 constexpr size_t MAX_PENDING_WRITES = 4;
@@ -280,16 +281,17 @@ void OnStdinWrite(uv_write_t *req, int status) {
 }
 
 // Process queued stdin writes with backpressure control
-// This ensures large stdin data is written in chunks without overwhelming the pipe buffer
+// This ensures large stdin data is written in chunks without overwhelming the
+// pipe buffer
 void ProcessStdinWriteQueue(ProcessContext *ctx) {
   if (!ctx || ctx->stdinClosed || ctx->processExited) {
     return;
   }
 
   // Respect backpressure limit - don't queue too many writes
-  while (!ctx->stdinWriteQueue.empty() && 
+  while (!ctx->stdinWriteQueue.empty() &&
          ctx->pendingWriteCount < MAX_PENDING_WRITES) {
-    
+
     std::string &nextChunk = ctx->stdinWriteQueue.front();
     size_t chunkSize = std::min(nextChunk.size(), STDIN_WRITE_CHUNK_SIZE);
 
@@ -308,19 +310,19 @@ void ProcessStdinWriteQueue(ProcessContext *ctx) {
     writeReq->data = writeData;
 
     uv_buf_t uvBuf = uv_buf_init(buf, static_cast<unsigned int>(chunkSize));
-    int result = uv_write(writeReq, reinterpret_cast<uv_stream_t *>(&ctx->stdinPipe),
-                          &uvBuf, 1, 
-                          [](uv_write_t *req, int status) {
-                            // Extract write data and free buffer
-                            auto *writeData = static_cast<WriteData *>(req->data);
-                            auto *ctx = writeData->ctx;
-                            delete[] writeData->buffer;
-                            delete writeData;
-                            
-                            // Update request to point to context for OnStdinWrite
-                            req->data = ctx;
-                            OnStdinWrite(req, status);
-                          });
+    int result =
+        uv_write(writeReq, reinterpret_cast<uv_stream_t *>(&ctx->stdinPipe),
+                 &uvBuf, 1, [](uv_write_t *req, int status) {
+                   // Extract write data and free buffer
+                   auto *writeData = static_cast<WriteData *>(req->data);
+                   auto *ctx = writeData->ctx;
+                   delete[] writeData->buffer;
+                   delete writeData;
+
+                   // Update request to point to context for OnStdinWrite
+                   req->data = ctx;
+                   OnStdinWrite(req, status);
+                 });
 
     if (result < 0) {
       // Write failed, clean up and stop
@@ -343,7 +345,7 @@ void ProcessStdinWriteQueue(ProcessContext *ctx) {
   }
 
   // If queue is empty and close was requested, close stdin now
-  if (ctx->stdinWriteQueue.empty() && ctx->stdinCloseRequested && 
+  if (ctx->stdinWriteQueue.empty() && ctx->stdinCloseRequested &&
       !ctx->stdinClosed && ctx->pendingWriteCount == 0) {
     ctx->stdinClosed = true;
     uv_close(reinterpret_cast<uv_handle_t *>(&ctx->stdinPipe), OnHandleClose);

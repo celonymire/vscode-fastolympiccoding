@@ -58,7 +58,6 @@ const os = require("os");
 // Platform detection
 const IS_WINDOWS = os.platform() === "win32";
 const IS_MACOS = os.platform() === "darwin";
-const IS_LINUX = os.platform() === "linux";
 const SHELL = IS_WINDOWS ? "cmd" : "sh";
 const SHELL_FLAG = IS_WINDOWS ? "/c" : "-c";
 
