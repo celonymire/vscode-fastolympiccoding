@@ -256,6 +256,7 @@ void OnWindowsCpuTimerTick(uv_timer_t *timer) {
 }
 #endif
 
+#ifdef __linux__
 void OnMemoryTimerTick(uv_timer_t *timer) {
   auto *ctx = static_cast<ProcessContext *>(timer->data);
   if (ctx->processExited) {
@@ -267,6 +268,7 @@ void OnMemoryTimerTick(uv_timer_t *timer) {
     ctx->result.maxMemoryBytes = currentMem;
   }
 }
+#endif
 
 // Called on worker thread when stdin data is available or kill is requested
 void OnStdinAsync(uv_async_t *handle) {
