@@ -86,13 +86,13 @@ protected:
     
     bool shouldWait = true;
 
-    // Check if process already exited/doesn't exist before waiting
+    // Check if process already exited/doesn't exist before waiting.
+    // On macOS, EVFILT_PROC registration fails with ESRCH if the process is 
+    // already a zombie or has finished exiting. We must handle this to avoid
+    // returning a false error for fast-running processes (like /bin/true).
     if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
-        // Debug logging
-        // printf("kevent registration failed for pid %d, errno: %d\n", pid_, errno);
-
-        // If process is gone (ESRCH=3), that's fine, we'll collect exit code below
-        if (errno == ESRCH || errno == 3) {
+        // If process is gone (ESRCH), that's fine, we'll collect exit code with wait4 below
+        if (errno == ESRCH) {
             shouldWait = false;
         } else {
             errorMsg_ = "Failed to register events with kqueue: ";

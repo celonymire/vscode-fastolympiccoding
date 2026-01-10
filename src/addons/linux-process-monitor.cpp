@@ -68,79 +68,61 @@ public:
 
 protected:
   void Execute() override {
-    // Set resource limits using prlimit() before monitoring
-    // Note: prlimit() must be called early, ideally right after fork/spawn
-    // RLIMIT_CPU for CPU time limit (in seconds of actual CPU usage)
-    if (timeoutMs_ > 0) {
-      struct rlimit cpuLimit;
-      // Convert milliseconds to seconds, rounding up
-      rlim_t seconds = (timeoutMs_ + 999) / 1000;
-      if (seconds == 0) seconds = 1; // Minimum 1 second
-      cpuLimit.rlim_cur = seconds;
-      cpuLimit.rlim_max = seconds;
-      
-      if (prlimit(pid_, RLIMIT_CPU, &cpuLimit, nullptr) != 0) {
-        // Non-fatal: we'll fall back to no CPU limit enforcement
-        // This can happen if the process already exited or if permissions are insufficient
-      }
-    }
-    
-    // RLIMIT_AS for virtual memory address space limit
-    // Use 1.5x the memory limit to account for virtual address space overhead
-    if (memoryLimitBytes_ > 0) {
-      struct rlimit memLimit;
-      rlim_t limit = static_cast<rlim_t>(memoryLimitBytes_ * 1.5);
-      memLimit.rlim_cur = limit;
-      memLimit.rlim_max = limit;
-      
-      if (prlimit(pid_, RLIMIT_AS, &memLimit, nullptr) != 0) {
-        // Non-fatal: we'll fall back to no memory limit enforcement
-      }
-    }
+    // Note: Resource limits (RLIMIT_CPU, RLIMIT_AS) are set in the child process
+    // prior to exec(). We don't need to use prlimit() here.
 
     int status = 0;
     struct rusage rusage;
     
     // Open pidfd for efficient waiting (requires Linux 5.3+)
     int pidfd = pidfd_open(pid_, 0);
+    bool shouldWait = true;
+
     if (pidfd < 0) {
-      errorMsg_ = "pidfd_open failed (requires Linux 5.3+): ";
-      errorMsg_ += std::strerror(errno);
-      return;
-    }
-    
-    // Set up poll with both pidfd (process exit) and stopEventFd (external stop)
-    struct pollfd pfds[2];
-    pfds[0].fd = pidfd;
-    pfds[0].events = POLLIN;
-    pfds[1].fd = stopEventFd_;
-    pfds[1].events = POLLIN;
-    
-    // Wait for process exit, stop signal, or timeout
-    int pollTimeout = (timeoutMs_ > 0) ? static_cast<int>(timeoutMs_) : -1;
-    int pollResult = poll(pfds, 2, pollTimeout);
-    
-    if (pollResult == -1) {
-      close(pidfd);
-      errorMsg_ = "poll failed: ";
-      errorMsg_ += std::strerror(errno);
-      return;
-    }
-    
-    if (pollResult == 0) {
-      // Timeout occurred (Wall clock)
-      timedOut_ = true;
-      kill(pid_, SIGKILL);
-      close(pidfd);
-    } else {
-      // Event signaled
-      if (pfds[1].revents & POLLIN) {
-        // External stop requested
-        close(pidfd);
-        kill(pid_, SIGKILL);
+      if (errno == ESRCH) {
+        // Process is already a zombie or reaped, skip waiting and collect stats below
+        shouldWait = false;
       } else {
-        // Process exited or state changed
+        errorMsg_ = "pidfd_open failed (requires Linux 5.3+): ";
+        errorMsg_ += std::strerror(errno);
+        return;
+      }
+    }
+    
+    if (shouldWait) {
+      // Set up poll with both pidfd (process exit) and stopEventFd (external stop)
+      struct pollfd pfds[2];
+      pfds[0].fd = pidfd;
+      pfds[0].events = POLLIN;
+      pfds[1].fd = stopEventFd_;
+      pfds[1].events = POLLIN;
+      
+      // Wait for process exit, stop signal, or timeout
+      int pollTimeout = (timeoutMs_ > 0) ? static_cast<int>(timeoutMs_) : -1;
+      int pollResult = poll(pfds, 2, pollTimeout);
+      
+      if (pollResult == -1) {
         close(pidfd);
+        errorMsg_ = "poll failed: ";
+        errorMsg_ += std::strerror(errno);
+        return;
+      }
+      
+      if (pollResult == 0) {
+        // Timeout occurred (Wall clock)
+        timedOut_ = true;
+        kill(pid_, SIGKILL);
+        close(pidfd);
+      } else {
+        // Event signaled
+        if (pfds[1].revents & POLLIN) {
+          // External stop requested
+          close(pidfd);
+          kill(pid_, SIGKILL);
+        } else {
+          // Process exited or state changed
+          close(pidfd);
+        }
       }
     }
 

@@ -111,7 +111,21 @@ protected:
       WaitForSingleObject(hProcess, INFINITE);
     }
 
-    // Get final timing info
+    // Get final timing info and peak memory
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION extendedInfo;
+    bool hasExtendedInfo = QueryInformationJobObject(hJob, JobObjectExtendedLimitInformation,
+                                                    &extendedInfo, sizeof(extendedInfo), NULL);
+
+    if (hasExtendedInfo) {
+      peakMemoryBytes_ = static_cast<uint64_t>(extendedInfo.PeakProcessMemoryUsed);
+    } else {
+      // Fallback to process memory counters if job query fails
+      PROCESS_MEMORY_COUNTERS pmc;
+      if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
+        peakMemoryBytes_ = static_cast<uint64_t>(pmc.PeakWorkingSetSize);
+      }
+    }
+
     FILETIME ftExitFinal, ftKernelFinal, ftUserFinal;
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExitFinal, &ftKernelFinal,
                          &ftUserFinal)) {
@@ -129,35 +143,24 @@ protected:
     }
     exitCode_ = static_cast<int>(exitCode);
 
-    // Check if process was killed due to exceeding limits
+    // Check if process was killed due to exceeding limits (STATUS_JOB_TERMINATED_AND_DID_NOT_EXIT)
     if (exitCode == 0xC0000044 || exitCode == 0x705) {
-      JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION accountingInfo;
-      if (QueryInformationJobObject(hJob, JobObjectBasicAndIoAccountingInformation,
-                                    &accountingInfo, sizeof(accountingInfo), NULL)) {
-        ULONGLONG totalUserTime = accountingInfo.BasicInfo.TotalUserTime.QuadPart;
-        if (timeoutMs_ > 0) {
-          ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
-          if (totalUserTime >= timeLimit100ns * 0.95) {
-            timedOut_ = true;
-          } else {
-            memoryLimitExceeded_ = true;
-          }
+      // Calculate CPU time from final process times
+      ULARGE_INTEGER userTime;
+      userTime.LowPart = ftUserFinal.dwLowDateTime;
+      userTime.HighPart = ftUserFinal.dwHighDateTime;
+      ULONGLONG totalUserTime100ns = userTime.QuadPart;
+
+      if (timeoutMs_ > 0) {
+        ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
+        // If we reached the time limit (or very close to it), it's a timeout
+        if (totalUserTime100ns >= timeLimit100ns * 0.95) {
+          timedOut_ = true;
         } else {
           memoryLimitExceeded_ = true;
         }
-      }
-    }
-
-    // Get peak memory from job accounting - use ExtendedLimitInformation for memory metrics
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION extendedInfo;
-    if (QueryInformationJobObject(hJob, JobObjectExtendedLimitInformation,
-                                  &extendedInfo, sizeof(extendedInfo), NULL)) {
-      peakMemoryBytes_ = static_cast<uint64_t>(extendedInfo.PeakProcessMemoryUsed);
-    } else {
-      // Fallback to process memory counters if job query fails
-      PROCESS_MEMORY_COUNTERS pmc;
-      if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
-        peakMemoryBytes_ = static_cast<uint64_t>(pmc.PeakWorkingSetSize);
+      } else {
+        memoryLimitExceeded_ = true;
       }
     }
 
