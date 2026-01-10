@@ -116,8 +116,9 @@ protected:
     pfds[1].fd = stopEventFd_;
     pfds[1].events = POLLIN;
     
-    // Wait indefinitely - kernel will wake us when process exits or stop is signaled
-    int pollResult = poll(pfds, 2, -1);
+    // Wait for process exit, stop signal, or timeout
+    int pollTimeout = (timeoutMs_ > 0) ? static_cast<int>(timeoutMs_) : -1;
+    int pollResult = poll(pfds, 2, pollTimeout);
     
     if (pollResult == -1) {
       close(pidfd);
@@ -126,13 +127,21 @@ protected:
       return;
     }
     
-    // Check if stopped before process exit
-    if (stopped_) {
-      close(pidfd);
+    if (pollResult == 0) {
+      // Timeout occurred (Wall clock)
+      timedOut_ = true;
       kill(pid_, SIGKILL);
-    } else {
-      // Process exited normally
       close(pidfd);
+    } else {
+      // Event signaled
+      if (pfds[1].revents & POLLIN) {
+        // External stop requested
+        close(pidfd);
+        kill(pid_, SIGKILL);
+      } else {
+        // Process exited or state changed
+        close(pidfd);
+      }
     }
 
     // Collect exit status and resource usage

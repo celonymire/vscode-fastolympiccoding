@@ -322,16 +322,7 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     }
     argv.push_back(nullptr);
 
-    // Prepare envp
-    std::vector<char*> envp;
-    for (auto& s : envStrs) {
-      envp.push_back(const_cast<char*>(s.c_str()));
-    }
-    envp.push_back(nullptr);
-    
-    if (!envStrs.empty()) {
-      environ = envp.data();
-    }
+
 
     // Execute
     execvp(command.c_str(), argv.data());
