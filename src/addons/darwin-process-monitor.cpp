@@ -84,20 +84,41 @@ protected:
     EV_SET(&kevs[0], pid_, EVFILT_PROC, EV_ADD | EV_ENABLE, NOTE_EXIT, 0, nullptr);
     EV_SET(&kevs[1], 0, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, nullptr);
     
+    // Check if process already exited/doesn't exist before waiting
     if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
-      errorMsg_ = "Failed to register events with kqueue: ";
-      errorMsg_ += std::strerror(errno);
-      return;
+      if (errno == ESRCH) {
+         // Process already exited, this is fine
+      } else {
+         errorMsg_ = "Failed to register events with kqueue: ";
+         errorMsg_ += std::strerror(errno);
+         return;
+      }
     }
     
-    // Wait for either process exit or stop signal - INFINITE WAIT, no polling!
+    struct timespec timeout;
+    struct timespec* timeoutPtr = nullptr;
+
+    if (timeoutMs_ > 0) {
+      timeout.tv_sec = timeoutMs_ / 1000;
+      timeout.tv_nsec = (timeoutMs_ % 1000) * 1000000;
+      timeoutPtr = &timeout;
+    }
+
+    // Wait for either process exit, stop signal, or timeout
     struct kevent event;
-    int nev = kevent(kq_, nullptr, 0, &event, 1, nullptr);
+    int nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
     
     if (nev == -1) {
-      errorMsg_ = "kevent failed: ";
-      errorMsg_ += std::strerror(errno);
-      return;
+       // Interrupted system call is okay, otherwise error
+       if (errno != EINTR) { 
+          errorMsg_ = "kevent failed: ";
+          errorMsg_ += std::strerror(errno);
+          return;
+       }
+    } else if (nev == 0) {
+       // Timeout occurred
+       timedOut_ = true;
+       kill(pid_, SIGKILL);
     }
     
     // Check if stopped before process exit
