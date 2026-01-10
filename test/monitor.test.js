@@ -235,3 +235,26 @@ test('CPU Limit Enforcement: Multi-threaded', { timeout: 20000 }, async () => {
     // With 4 threads, it should be around 750ms + overhead
     assert.ok(duration < 2500, `Process took ${duration}ms, suggesting wall clock timeout killed it instead of CPU limit`);
 });
+
+test('Thread Pool Concurrency (libuv)', { timeout: 15000 }, async () => {
+    // Default UV_THREADPOOL_SIZE is 4.
+    // We spawn 6 processes that sleep for 2000ms.
+    // If they were blocked by the thread pool, they would take ~4000ms total.
+    // Since our addon releases the GIL/runs in the thread pool, they should take ~2000ms.
+    
+    const count = 6;
+    const duration = 2000;
+    const start = Date.now();
+    
+    const promises = [];
+    for (let i = 0; i < count; i++) {
+        promises.push(spawnPromise(['-e', `setTimeout(() => {}, ${duration})`]));
+    }
+    
+    await Promise.all(promises);
+    const end = Date.now();
+    const totalTime = end - start;
+    
+    // Allow some overhead, but it should be much less than 4000ms (2*duration)
+    assert.ok(totalTime < duration * 1.5, `Total time ${totalTime}ms suggest thread pool exhaustion or serialization`);
+});
