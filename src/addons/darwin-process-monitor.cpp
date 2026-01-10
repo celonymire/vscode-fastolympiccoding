@@ -86,41 +86,45 @@ protected:
     
     // Check if process already exited/doesn't exist before waiting
     if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
-      if (errno == ESRCH) {
-         // Process already exited, this is fine
-      } else {
-         errorMsg_ = "Failed to register events with kqueue: ";
-         errorMsg_ += std::strerror(errno);
-         return;
-      }
+        // If process is gone (ESRCH), that's fine, we'll collect exit code below
+        if (errno != ESRCH) {
+            errorMsg_ = "Failed to register events with kqueue: ";
+            errorMsg_ += std::strerror(errno);
+            return;
+        }
     }
     
-    struct timespec timeout;
-    struct timespec* timeoutPtr = nullptr;
-
-    if (timeoutMs_ > 0) {
-      timeout.tv_sec = timeoutMs_ / 1000;
-      timeout.tv_nsec = (timeoutMs_ % 1000) * 1000000;
-      timeoutPtr = &timeout;
-    }
-
     // Wait for either process exit, stop signal, or timeout
     struct kevent event;
-    int nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
+    int nev = -1;
+    
+    // Use timespec for wall clock timeout
+    struct timespec timeout;
+    struct timespec* timeoutPtr = nullptr;
+    if (timeoutMs_ > 0) {
+        timeout.tv_sec = timeoutMs_ / 1000;
+        timeout.tv_nsec = (timeoutMs_ % 1000) * 1000000;
+        timeoutPtr = &timeout;
+    }
+
+    // Wait - if EINTR happens, we just loop out/fail for now as requested (simple)
+    // or just let it return -1. 
+    // The previous code had a loop. 
+    // I will restore to a clean single kevent call.
+    nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
     
     if (nev == -1) {
-       // Interrupted system call is okay, otherwise error
-       if (errno != EINTR) { 
-          errorMsg_ = "kevent failed: ";
-          errorMsg_ += std::strerror(errno);
-          return;
-       }
+        if (errno != EINTR && errno != ESRCH) {
+             errorMsg_ = "kevent failed: ";
+             errorMsg_ += std::strerror(errno);
+             return;
+        }
     } else if (nev == 0) {
-       // Timeout occurred
-       timedOut_ = true;
-       kill(pid_, SIGKILL);
+        // Timeout
+        timedOut_ = true;
+        kill(pid_, SIGKILL);
     }
-    
+
     // Check if stopped before process exit
     if (stopped_) {
       kill(pid_, SIGKILL);

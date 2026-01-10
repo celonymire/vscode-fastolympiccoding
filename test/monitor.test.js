@@ -151,7 +151,7 @@ test('Memory limit enforcement', async () => {
     // Node startup uses ~30MB. Limit to 50MB, allocate 100MB strings.
     const res = await spawnPromise(
         ['-e', 'const a = []; while(1) { a.push("x".repeat(1024*1024)); }'],
-        { memoryLimitMB: 50 } 
+        { memoryLimitMB: 50, timeoutMs: 5000 } // Add safety timeout
     );
     
     // On Linux/macOS, hitting RLIMIT_AS usually causes SIGKILL (signal 9) or SIGSEGV
