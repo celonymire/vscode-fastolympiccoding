@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 const fs = require('node:fs');
+const net = require('node:net');
+const crypto = require('node:crypto');
 
 
 // --- Helper to load the addon (similar to runtime.ts) ---
@@ -13,12 +15,7 @@ function getProcessMonitor() {
   else if (platform === 'win32') addonName = 'win32-process-monitor.node';
   else throw new Error(`Unsupported platform: ${platform}`);
 
-  // Look in build/Release first (dev), then src/addons (prod layout maybe?)
-  // The user seems to have them in build/Release based on previous ls
   const localBuildPath = path.join(__dirname, '..', 'build', 'Release', addonName);
-  
-  // Note: In runtime.ts it looks in __dirname which is dist/extension/utils. 
-  // Here we are in test/, so we look in build/Release.
   
   if (fs.existsSync(localBuildPath)) {
     return require(localBuildPath);
@@ -31,6 +28,16 @@ const monitor = getProcessMonitor();
 
 // --- Wrappers for the monitor.spawn API ---
 
+function createPipeServer(pipeName) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(pipeName, () => {
+      resolve(server);
+    });
+    server.on('error', reject);
+  });
+}
+
 function spawnPromise(args, options = {}) {
   const {
     timeoutMs = 0,
@@ -38,61 +45,108 @@ function spawnPromise(args, options = {}) {
     input = null
   } = options;
 
-  return new Promise((resolve, reject) => {
-    // We use process.execPath to run "node"
+  return new Promise(async (resolve, reject) => {
     const command = process.execPath;
     
-    // Create temporary file for stdout to avoid implementing a full stream reader here if we just want results
-    // Actually, the addon returns file descriptors. We need to read them.
-    // To properly test the addon, we should read the pipes.
+    // Generate unique pipe names
+    const id = crypto.randomBytes(8).toString('hex');
+    let pipeNameIn, pipeNameOut, pipeNameErr;
+
+    if (process.platform === 'win32') {
+        pipeNameIn = `\\\\.\\pipe\\foc-test-${id}-in`;
+        pipeNameOut = `\\\\.\\pipe\\foc-test-${id}-out`;
+        pipeNameErr = `\\\\.\\pipe\\foc-test-${id}-err`;
+    } else {
+        const os = require('node:os');
+        const tmpDir = os.tmpdir();
+        pipeNameIn = path.join(tmpDir, `foc-test-${id}-in.sock`);
+        pipeNameOut = path.join(tmpDir, `foc-test-${id}-out.sock`);
+        pipeNameErr = path.join(tmpDir, `foc-test-${id}-err.sock`);
+    }
+
+    let serverIn, serverOut, serverErr;
+    let socketIn, socketOut, socketErr;
     
-    let spawnResult;
     try {
-        spawnResult = monitor.spawn(
+        serverIn = await createPipeServer(pipeNameIn);
+        serverOut = await createPipeServer(pipeNameOut);
+        serverErr = await createPipeServer(pipeNameErr);
+        
+        let connectedCount = 0;
+        const checkConnected = () => {
+            connectedCount++;
+            if (connectedCount === 3) {
+                 // All connected
+                 serverIn.close();
+                 serverOut.close();
+                 serverErr.close();
+                 
+                 // Handle IO
+                 let output = '';
+                 let errorOutput = '';
+
+                 socketOut.setEncoding('utf8');
+                 socketOut.on('data', chunk => output += chunk);
+                 
+                 socketErr.setEncoding('utf8');
+                 socketErr.on('data', chunk => errorOutput += chunk);
+                 
+                 if (input) {
+                     socketIn.write(input);
+                     socketIn.end();
+                 } else {
+                     socketIn.end();
+                 }
+                 
+                 // Wait for close
+                 const streamPromises = [
+                     new Promise(res => socketOut.on('close', res)),
+                     new Promise(res => socketErr.on('close', res))
+                 ];
+                 
+                 Promise.all([spawnResult.result, ...streamPromises])
+                    .then(([stats]) => {
+                        if (stats.exitCode !== 0) {
+                             console.error('Process FAILED:', {
+                                 exitCode: stats.exitCode,
+                                 errorOutput,
+                                 output,
+                                 command,
+                                 args
+                             });
+                        }
+                        resolve({
+                            ...stats,
+                            output,
+                            errorOutput
+                        });
+                    })
+                    .catch(reject);
+            }
+        };
+
+        serverIn.on('connection', socket => { socketIn = socket; checkConnected(); });
+        serverOut.on('connection', socket => { socketOut = socket; checkConnected(); });
+        serverErr.on('connection', socket => { socketErr = socket; checkConnected(); });
+
+        const spawnResult = monitor.spawn(
             command,
             args,
             process.cwd(),
             timeoutMs,
             memoryLimitMB,
+            pipeNameIn,
+            pipeNameOut,
+            pipeNameErr,
             () => {} // onSpawn
         );
+        
     } catch (e) {
+        if (serverIn) serverIn.close();
+        if (serverOut) serverOut.close();
+        if (serverErr) serverErr.close();
         return reject(e);
     }
-
-    const { stdio, result } = spawnResult;
-    const [ stdinFd, stdoutFd, stderrFd ] = stdio;
-
-    // Create streams from FDs
-    const stdout = fs.createReadStream('', { fd: stdoutFd, autoClose: true });
-    const stderr = fs.createReadStream('', { fd: stderrFd, autoClose: true });
-    const stdin = fs.createWriteStream('', { fd: stdinFd, autoClose: true });
-
-    let output = '';
-    let errorOutput = '';
-
-    stdout.on('data', chunk => output += chunk.toString());
-    stderr.on('data', chunk => errorOutput += chunk.toString());
-
-    if (input) {
-        stdin.write(input);
-        stdin.end();
-    } else {
-        stdin.end();
-    }
-
-    // Wait for native result AND streams to finish
-    Promise.all([
-        result.then(stats => spawnResult.stats = stats),
-        new Promise(resolve => stdout.on('close', resolve)),
-        new Promise(resolve => stderr.on('close', resolve))
-    ]).then(() => {
-        resolve({
-            ...spawnResult.stats,
-            output,
-            errorOutput
-        });
-    }).catch(reject);
   });
 }
 

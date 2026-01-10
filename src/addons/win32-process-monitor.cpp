@@ -2,6 +2,9 @@
 #include <napi.h>
 #include <psapi.h>
 #include <cmath>
+#include <string>
+#include <cstdint>
+#include <vector>
 
 #pragma comment(lib, "psapi.lib")
 
@@ -14,11 +17,16 @@ public:
       : Napi::AsyncWorker(env), hProcess_(hProcess), pid_(pid), timeoutMs_(timeoutMs), 
         memoryLimitBytes_(memoryLimitBytes), deferred_(env),
         elapsedMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
-        timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
+        timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {
+          hStopEvent_ = CreateEvent(NULL, TRUE, FALSE, NULL); // Manual reset, initially nonsignaled
+        }
 
   ~WaitForProcessWorker() {
     if (hProcess_ != NULL) {
       CloseHandle(hProcess_);
+    }
+    if (hStopEvent_ != NULL) {
+      CloseHandle(hStopEvent_);
     }
   }
 
@@ -27,6 +35,9 @@ public:
   // Allow external stop request
   void Stop() {
     stopped_ = true;
+    if (hStopEvent_ != NULL) {
+      SetEvent(hStopEvent_);
+    }
   }
 
 protected:
@@ -36,6 +47,11 @@ protected:
 
     if (hProcess == NULL) {
       errorMsg_ = "Invalid process handle";
+      return;
+    }
+
+    if (hStopEvent_ == NULL) {
+      errorMsg_ = "Failed to create stop event";
       return;
     }
 
@@ -73,9 +89,17 @@ protected:
 
     // Assign the process to the job
     if (!AssignProcessToJobObject(hJob, hProcess)) {
-      CloseHandle(hJob);
-      errorMsg_ = "Failed to assign process to job object";
-      return;
+      // It's possible the process already exited before we could assign it
+      DWORD exitCode = 0;
+      if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
+        // Process is dead, so we can't assign it (and don't need to enforce limits)
+        // We continue to collect stats (though job stats will be empty/invalid, we fall back to process stats)
+      } else {
+         // Real failure
+         CloseHandle(hJob);
+         errorMsg_ = "Failed to assign process to job object (Error: " + std::to_string(GetLastError()) + ")";
+         return;
+      }
     }
 
     // Get creation time before waiting
@@ -87,27 +111,37 @@ protected:
     }
 
     // Wait for process to complete or be stopped externally
+    // We wait on both the process handle and the stop event
+    HANDLE waitHandles[2] = { hProcess, hStopEvent_ };
+    DWORD waitMillis = (timeoutMs_ > 0) ? timeoutMs_ : INFINITE;
+    DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, waitMillis);
+
     bool processExited = false;
-    const DWORD pollIntervalMs = 100;
-
-    while (!processExited && !stopped_) {
-      DWORD waitResult = WaitForSingleObject(hProcess, pollIntervalMs);
-
-      if (waitResult == WAIT_OBJECT_0) {
-        processExited = true;
-        break;
-      } else if (waitResult == WAIT_TIMEOUT) {
-        continue;
-      } else {
-        CloseHandle(hJob);
-        errorMsg_ = "Failed to wait for process";
-        return;
-      }
+    
+    if (waitResult == WAIT_OBJECT_0) {
+      // Process handle signaled -> Process exited
+      processExited = true;
+    } else if (waitResult == WAIT_OBJECT_0 + 1) {
+      // Stop event signaled -> External stop
+      stopped_ = true;
+    } else if (waitResult == WAIT_TIMEOUT) {
+        // Timeout signaled
+        if (timeoutMs_ > 0) {
+            timedOut_ = true;
+        }
+        stopped_ = true; // treat as stopped/finished
+    } else {
+      // Failed or other error
+      CloseHandle(hJob);
+      errorMsg_ = "WaitForMultipleObjects failed";
+      return;
     }
 
-    // Handle external stop request
+    // Handle external stop request or timeout
     if (stopped_ && !processExited) {
+      // If we stopped manually or timed out, we must terminate the process
       TerminateProcess(hProcess, 1);
+      // Wait for it to actually die so we can get accounting info
       WaitForSingleObject(hProcess, INFINITE);
     }
 
@@ -209,6 +243,7 @@ protected:
 
 private:
   HANDLE hProcess_;
+  HANDLE hStopEvent_;
   DWORD pid_;
   DWORD timeoutMs_;
   uint64_t memoryLimitBytes_;
@@ -223,7 +258,6 @@ private:
 };
 
 
-
 // Helper to convert UTF-8 string to UTF-16 wstring for Windows APIs
 std::wstring ToWString(const std::string& utf8) {
   if (utf8.empty()) return L"";
@@ -233,19 +267,62 @@ std::wstring ToWString(const std::string& utf8) {
   return wstrTo;
 }
 
+// Helper to quote arguments for Windows command line
+std::wstring QuoteArg(const std::wstring& arg) {
+  // If empty, return pair of quotes
+  if (arg.empty()) return L"\"\"";
+
+  // Check if quoting is necessary (contains space, tab, quote, or newline)
+  if (arg.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
+    return arg;
+  }
+
+  std::wstring quoted;
+  quoted.push_back(L'"');
+
+  for (size_t i = 0; i < arg.length(); ++i) {
+    unsigned int backslashes = 0;
+    while (i < arg.length() && arg[i] == L'\\') {
+      ++i;
+      ++backslashes;
+    }
+
+    if (i == arg.length()) {
+      // Backslashes at end of string must be escaped if we add a closing quote
+      quoted.append(backslashes * 2, L'\\');
+    } else if (arg[i] == L'"') {
+      // Backslashes before a quote must be escaped, plus the quote itself
+      quoted.append(backslashes * 2 + 1, L'\\');
+      quoted.push_back(L'"');
+    } else {
+      // Backslashes not followed by quote function as literals
+      quoted.append(backslashes, L'\\');
+      quoted.push_back(arg[i]);
+    }
+  }
+
+  quoted.push_back(L'"');
+  return quoted;
+}
+
+
+// Arguments:
 // 0: command (string)
 // 1: args (array of strings)
 // 2: cwd (string) or empty
 // 3: timeoutMs (number)
 // 4: memoryLimitBytes (number)
-// 5: onSpawn (function)
-// Returns: { pid: number, stdio: [stdinFd, stdoutFd, stderrFd], result: Promise<AddonResult> }
+// 5: pipeNameIn (string)
+// 6: pipeNameOut (string)
+// 7: pipeNameErr (string)
+// 8: onSpawn (function)
+// Returns: { pid: number, result: Promise<AddonResult> }
 //
 Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 6) {
-    Napi::TypeError::New(env, "Expected 6 arguments").ThrowAsJavaScriptException();
+  if (info.Length() < 9) {
+    Napi::TypeError::New(env, "Expected 9 arguments").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -254,34 +331,56 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   std::string cwd = info[2].As<Napi::String>().Utf8Value();
   uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
   double memoryLimitMB = info[4].As<Napi::Number>().DoubleValue();
+  std::string pipeNameIn = info[5].As<Napi::String>().Utf8Value();
+  std::string pipeNameOut = info[6].As<Napi::String>().Utf8Value();
+  std::string pipeNameErr = info[7].As<Napi::String>().Utf8Value();
+  Napi::Function onSpawn = info[8].As<Napi::Function>();
+
   uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
-  Napi::Function onSpawn = info[5].As<Napi::Function>();
 
   // Prepare command line (Windows expects a single string)
   std::wstring wCommand = ToWString(command);
-  std::wstring cmdLine = L"\"" + wCommand + L"\"";
+  std::wstring cmdLine = QuoteArg(wCommand); // Quote the command path too just in case
   for (uint32_t i = 0; i < argsArray.Length(); i++) {
     std::string arg = argsArray.Get(i).As<Napi::String>().Utf8Value();
-    cmdLine += L" " + ToWString(arg);
+    cmdLine += L" " + QuoteArg(ToWString(arg));
   }
 
-  // Create pipes for stdio
-  HANDLE hChildStdInRead = NULL, hChildStdInWrite = NULL;
-  HANDLE hChildStdOutRead = NULL, hChildStdOutWrite = NULL;
-  HANDLE hChildStdErrRead = NULL, hChildStdErrWrite = NULL;
+  // Connect to the Named Pipes
+  // CAUTION: The server side (Node.js) must be listening already.
+  // We use CreateFile to open the client end of the pipe.
+  
+  SECURITY_ATTRIBUTES sa;
+  sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+  sa.bInheritHandle = TRUE;
+  sa.lpSecurityDescriptor = NULL;
 
-  SECURITY_ATTRIBUTES saAttr;
-  saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
-  saAttr.bInheritHandle = TRUE;
-  saAttr.lpSecurityDescriptor = NULL;
+  auto openPipe = [&](const std::string& name, DWORD access) -> HANDLE {
+    std::wstring wName = ToWString(name);
+    HANDLE hPipe = CreateFileW(
+      wName.c_str(),
+      access,
+      0, // No sharing
+      &sa,
+      OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL,
+      NULL
+    );
+    return hPipe;
+  };
 
-  if (!CreatePipe(&hChildStdOutRead, &hChildStdOutWrite, &saAttr, 0) ||
-      !SetHandleInformation(hChildStdOutRead, HANDLE_FLAG_INHERIT, 0) ||
-      !CreatePipe(&hChildStdErrRead, &hChildStdErrWrite, &saAttr, 0) ||
-      !SetHandleInformation(hChildStdErrRead, HANDLE_FLAG_INHERIT, 0) ||
-      !CreatePipe(&hChildStdInRead, &hChildStdInWrite, &saAttr, 0) ||
-      !SetHandleInformation(hChildStdInWrite, HANDLE_FLAG_INHERIT, 0)) {
-    Napi::Error::New(env, "Failed to create pipes").ThrowAsJavaScriptException();
+  // stdout/stderr are WRITTEN to by child (GENERIC_WRITE)
+  // stdin is READ by child (GENERIC_READ)
+  
+  HANDLE hStdin = openPipe(pipeNameIn, GENERIC_READ);
+  HANDLE hStdout = openPipe(pipeNameOut, GENERIC_WRITE);
+  HANDLE hStderr = openPipe(pipeNameErr, GENERIC_WRITE);
+
+  if (hStdin == INVALID_HANDLE_VALUE || hStdout == INVALID_HANDLE_VALUE || hStderr == INVALID_HANDLE_VALUE) {
+    if (hStdin != INVALID_HANDLE_VALUE) CloseHandle(hStdin);
+    if (hStdout != INVALID_HANDLE_VALUE) CloseHandle(hStdout);
+    if (hStderr != INVALID_HANDLE_VALUE) CloseHandle(hStderr);
+    Napi::Error::New(env, "Failed to connect to named pipes").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -289,9 +388,9 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   PROCESS_INFORMATION piProcInfo;
   ZeroMemory(&siStartInfo, sizeof(siStartInfo));
   siStartInfo.cb = sizeof(siStartInfo);
-  siStartInfo.hStdError = hChildStdErrWrite;
-  siStartInfo.hStdOutput = hChildStdOutWrite;
-  siStartInfo.hStdInput = hChildStdInRead;
+  siStartInfo.hStdError = hStderr;
+  siStartInfo.hStdOutput = hStdout;
+  siStartInfo.hStdInput = hStdin;
   siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
   ZeroMemory(&piProcInfo, sizeof(piProcInfo));
@@ -312,30 +411,20 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     &piProcInfo
   );
 
+  CloseHandle(hStdin);
+  CloseHandle(hStdout);
+  CloseHandle(hStderr);
+
   if (!success) {
-    CloseHandle(hChildStdInRead); CloseHandle(hChildStdInWrite);
-    CloseHandle(hChildStdOutRead); CloseHandle(hChildStdOutWrite);
-    CloseHandle(hChildStdErrRead); CloseHandle(hChildStdErrWrite);
     Napi::Error::New(env, "CreateProcessW failed").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  // Create Job Object for resource limits
-  HANDLE hJob = CreateJobObject(NULL, NULL);
-  if (hJob) {
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobLimits = {0};
-    if (timeoutMs > 0) {
-      jobLimits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = static_cast<LONGLONG>(timeoutMs) * 10000;
-      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_TIME;
-    }
-    if (memoryLimitBytes > 0) {
-      jobLimits.ProcessMemoryLimit = (SIZE_T)memoryLimitBytes;
-      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
-    }
-    SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobLimits, sizeof(jobLimits));
-    AssignProcessToJobObject(hJob, piProcInfo.hProcess);
-    CloseHandle(hJob); // handle closed but job stays until process exits
-  }
+  // NOTE: We do NOT create the Job Object here. 
+  // We defer that to the WaitForProcessWorker so it can manage the Job lifetime 
+  // and query it for statistics (Peak Memory, etc).
+  // Although this introduces a small window where the process runs without limits,
+  // it avoids double-assignment errors and complexity sharing the handle.
 
   ResumeThread(piProcInfo.hThread);
   CloseHandle(piProcInfo.hThread);
@@ -346,11 +435,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   DuplicateHandle(GetCurrentProcess(), piProcInfo.hProcess, GetCurrentProcess(), &hProcessDup,
                   0, FALSE, DUPLICATE_SAME_ACCESS);
   CloseHandle(piProcInfo.hProcess);
-
-  // Close child-side pipe ends
-  CloseHandle(hChildStdInRead);
-  CloseHandle(hChildStdOutWrite);
-  CloseHandle(hChildStdErrWrite);
 
   // Notify JS
   onSpawn.Call({});
@@ -363,12 +447,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Object result = Napi::Object::New(env);
   result.Set("pid", Napi::Number::New(env, pid));
   result.Set("result", promise);
-
-  Napi::Array stdio = Napi::Array::New(env, 3);
-  stdio.Set(uint32_t(0), Napi::Number::New(env, (double)HandleToLong(hChildStdInWrite)));
-  stdio.Set(uint32_t(1), Napi::Number::New(env, (double)HandleToLong(hChildStdOutRead)));
-  stdio.Set(uint32_t(2), Napi::Number::New(env, (double)HandleToLong(hChildStdErrRead)));
-  result.Set("stdio", stdio);
 
   return result;
 }

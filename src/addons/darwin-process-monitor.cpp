@@ -16,23 +16,15 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 // macOS implementation using kqueue for efficient process monitoring
 // Combined with resource limits enforced by rlimit-wrapper and wait4 for stats
 //
 // Exports:
-//   waitForProcess(pid: number, timeoutMs: number, memoryLimitBytes: number)
-//     -> Promise<{ elapsedMs, peakMemoryBytes, exitCode, timedOut, memoryLimitExceeded, stopped }>
+//   spawn(...) -> { pid: number, result: Promise<AddonResult> }
 //
-// The waitForProcess function uses:
-//  - kqueue with EVFILT_PROC (NOTE_EXIT) for efficient exit notification
-//  - kqueue with EVFILT_USER for stop signal notification
-//  - kevent() for waiting (kernel notifies us, NO polling loops!)
-//  - wait4 to collect rusage stats and exit status
-//  - Signal analysis (SIGXCPU, SIGKILL) to detect limit violations
-//
-// Note: Resource limits (RLIMIT_CPU, RLIMIT_AS) must be set by the rlimit-wrapper
-// binary before the target process is spawned. This addon only monitors the process.
 
 namespace {
 
@@ -87,11 +79,7 @@ protected:
     bool shouldWait = true;
 
     // Check if process already exited/doesn't exist before waiting.
-    // On macOS, EVFILT_PROC registration fails with ESRCH if the process is 
-    // already a zombie or has finished exiting. We must handle this to avoid
-    // returning a false error for fast-running processes (like /bin/true).
     if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
-        // If process is gone (ESRCH), that's fine, we'll collect exit code with wait4 below
         if (errno == ESRCH) {
             shouldWait = false;
         } else {
@@ -113,12 +101,10 @@ protected:
             timeout.tv_sec = timeoutMs_ / 1000;
             timeout.tv_nsec = (timeoutMs_ % 1000) * 1000000;
             timeoutPtr = &timeout;
-            // printf("Waiting with timeout: %dms (%lds %ldns)\n", timeoutMs_, timeout.tv_sec, timeout.tv_nsec);
         }
 
         // Wait
         nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
-        // printf("kevent wait returned: %d\n", nev);
         
         if (nev == -1) {
             if (errno != EINTR && errno != ESRCH) {
@@ -128,7 +114,6 @@ protected:
             }
         } else if (nev == 0) {
             // Timeout
-            // printf("Timeout occurred (nev=0)\n");
             timedOut_ = true;
             kill(pid_, SIGKILL);
         }
@@ -267,14 +252,17 @@ std::vector<std::string> ToArgv(Napi::Array args) {
 // 2: cwd (string) or empty
 // 3: timeoutMs (number)
 // 4: memoryLimitBytes (number)
-// 5: onSpawn (function)
-// Returns: { pid: number, stdio: [stdinFd, stdoutFd, stderrFd], result: Promise<AddonResult> }
+// 5: pipeNameIn (string)
+// 6: pipeNameOut (string)
+// 7: pipeNameErr (string)
+// 8: onSpawn (function)
+// Returns: { pid: number, result: Promise<AddonResult> }
 //
 Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 6) {
-    Napi::TypeError::New(env, "Expected 6 arguments").ThrowAsJavaScriptException();
+  if (info.Length() < 9) {
+    Napi::TypeError::New(env, "Expected 9 arguments").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -284,27 +272,19 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
   double memoryLimitMB = info[4].As<Napi::Number>().DoubleValue();
   uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
-  Napi::Function onSpawn = info[5].As<Napi::Function>();
+  
+  std::string pipeNameIn = ToString(info[5]);
+  std::string pipeNameOut = ToString(info[6]);
+  std::string pipeNameErr = ToString(info[7]);
+  
+  Napi::Function onSpawn = info[8].As<Napi::Function>();
 
   // Pre-convert JS values to C++ strings/vectors in the parent process.
-  // DO NOT access 'info', 'argsArray' in the child process after fork().
   std::vector<std::string> args = ToArgv(argsArray);
-
-  // Create pipes for stdio
-  int stdinPipe[2], stdoutPipe[2], stderrPipe[2];
-
-  if (pipe(stdinPipe) < 0 || pipe(stdoutPipe) < 0 || pipe(stderrPipe) < 0) {
-    Napi::Error::New(env, "Failed to create pipes").ThrowAsJavaScriptException();
-    return env.Null();
-  }
 
   pid_t pid = fork();
 
   if (pid < 0) {
-    // Fork failed
-    close(stdinPipe[0]); close(stdinPipe[1]);
-    close(stdoutPipe[0]); close(stdoutPipe[1]);
-    close(stderrPipe[0]); close(stderrPipe[1]);
     Napi::Error::New(env, "fork failed").ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -312,18 +292,47 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   if (pid == 0) {
     // Child process
     
+    // Connect to Unix Domain Sockets for stdio
+    auto connectSocket = [](const std::string& path) -> int {
+        int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (sock < 0) return -1;
+        
+        struct sockaddr_un addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
+        
+        if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+            close(sock);
+            return -1;
+        }
+        return sock;
+    };
+
+    // Stdin: Read from socket
+    int sockIn = connectSocket(pipeNameIn);
+    // Stdout: Write to socket
+    int sockOut = connectSocket(pipeNameOut);
+    // Stderr: Write to socket
+    int sockErr = connectSocket(pipeNameErr);
+
+    if (sockIn < 0 || sockOut < 0 || sockErr < 0) {
+        perror("Failed to connect to stdio sockets");
+        _exit(1);
+    }
+
     // Redirect stdio
-    if (dup2(stdinPipe[0], STDIN_FILENO) < 0 ||
-        dup2(stdoutPipe[1], STDOUT_FILENO) < 0 ||
-        dup2(stderrPipe[1], STDERR_FILENO) < 0) {
+    if (dup2(sockIn, STDIN_FILENO) < 0 ||
+        dup2(sockOut, STDOUT_FILENO) < 0 ||
+        dup2(sockErr, STDERR_FILENO) < 0) {
       perror("dup2 failed");
       _exit(1);
     }
 
-    // Close all pipe FDs
-    close(stdinPipe[0]); close(stdinPipe[1]);
-    close(stdoutPipe[0]); close(stdoutPipe[1]);
-    close(stderrPipe[0]); close(stderrPipe[1]);
+    // Close sockets
+    close(sockIn);
+    close(sockOut);
+    close(sockErr);
 
     // Set resource limits
     if (timeoutMs > 0) {
@@ -356,9 +365,8 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     }
     argv.push_back(nullptr);
 
-
-
     // Execute
+    // Use execvp to inherit environment
     execvp(command.c_str(), argv.data());
     
     // If exec fails
@@ -370,11 +378,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   // Notify JS that the process has spawned
   onSpawn.Call({});
 
-  // Close child-side pipe ends
-  close(stdinPipe[0]);
-  close(stdoutPipe[1]);
-  close(stderrPipe[1]);
-
   // Start monitoring immediataely
   auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
   auto promise = worker->GetPromise();
@@ -384,12 +387,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   result.Set("pid", Napi::Number::New(env, pid));
   result.Set("result", promise);
   
-  Napi::Array stdio = Napi::Array::New(env, 3);
-  stdio.Set(uint32_t(0), Napi::Number::New(env, stdinPipe[1])); // Parent writes to index 1
-  stdio.Set(uint32_t(1), Napi::Number::New(env, stdoutPipe[0])); // Parent reads from index 0
-  stdio.Set(uint32_t(2), Napi::Number::New(env, stderrPipe[0])); // Parent reads from index 0
-  result.Set("stdio", stdio);
-
   return result;
 }
 

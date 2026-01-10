@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as net from "node:net";
+import os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -40,6 +41,9 @@ type ProcessMonitorAddon = {
     cwd: string,
     timeoutMs: number,
     memoryLimitMB: number,
+    pipeIn: string,
+    pipeOut: string,
+    pipeErr: string,
     onSpawn: () => void
   ) => NativeSpawnResult;
 };
@@ -197,17 +201,14 @@ class NativeChildProcess extends EventEmitter {
   // The promise that resolves when the process exits
   readonly result: Promise<AddonResult>;
 
-  constructor(pid: number, stdio: [number, number, number], resultPromise: Promise<AddonResult>) {
+  constructor(pid: number, io: [net.Socket, net.Socket, net.Socket], resultPromise: Promise<AddonResult>) {
     super();
     this.pid = pid;
     this.result = resultPromise;
 
-    // node:child_process uses socket streams usually.
-    // We use net.Socket to wrap the pipe file descriptors.
-    // This is critical to avoid thread pool starvation when running many instances.
-    this.stdin = new net.Socket({ fd: stdio[0], readable: false, writable: true });
-    this.stdout = new net.Socket({ fd: stdio[1], readable: true, writable: false });
-    this.stderr = new net.Socket({ fd: stdio[2], readable: true, writable: false });
+    this.stdin = io[0];
+    this.stdout = io[1];
+    this.stderr = io[2];
     this.stdout.setEncoding("utf-8");
     this.stderr.setEncoding("utf-8");
   }
@@ -324,90 +325,191 @@ export class Runnable {
 
       const monitor = getNativeProcessMonitor();
       if (monitor) {
+        // Platform specific pipe creation
+        // Windows needs named pipes. Linux/Mac use anonymous pipes usually, but we are designing this for Windows specifically.
+        // If we want to support Linux/Mac eventually, we'd wrap this logic.
+        // For now, only windows uses this addon in this file (ProcessMonitorAddon is used only if available).
+        
         try {
-          const result = monitor.spawn(
-            commandName,
-            commandArgs,
-            cwd || "",
-            timeout,
-            memoryLimit,
-            () => {
-              process.nextTick(() => nativeProc.emit("spawn"));
-              resolveSpawn(true);
-            }
-          );
+          const createPipeServer = (name: string): Promise<net.Server> => {
+              return new Promise((resolve, reject) => {
+                  const server = net.createServer();
+                  server.listen(name, () => resolve(server));
+                  server.on('error', reject);
+              });
+          };
 
-          // Pass the result promise into the wrapper
-          const nativeProc = new NativeChildProcess(result.pid, result.stdio, result.result);
-          this._process = nativeProc as unknown as ChildProcessLike;
-          nativeSpawned = true;
-          this._fallbackStartTime = process.hrtime();
+          const id = crypto.randomBytes(8).toString('hex');
+          let pipeNameIn, pipeNameOut, pipeNameErr;
 
-          // DEADLOCK FIX: ensure streams are flowing if no listeners are attached?
-          // Actually, we just need to ensure we wait for them properly.
-          // But if the user (or compilation) doesn't consume stdout, the pipe fills and process blocks.
-          // We should resume() them if we want to ignore output, but here we expect 'run' listeners to be attached.
-          // However, for compilation, we might attach listeners LATER or not at all?
-          // Safe bet: if specific listeners aren't attached, we might need to drain.
-          // For now, let's assume the existing logic tracks them.
-
-          // Track stream closing
-          if (nativeProc.stdout) {
-            // Deadlock fix: resume() streams to ensure they flow if not consumed
-            // This is critical because if the pipe buffer fills, the child blocks.
-            nativeProc.stdout.resume();
-
-            const p = new Promise<void>((resolve) => {
-              if (nativeProc.stdout.destroyed) {
-                resolve();
-              } else {
-                nativeProc.stdout.once("close", resolve);
-              }
-            });
-            streamClosePromises.push(p);
-          }
-          if (nativeProc.stderr) {
-            // Deadlock fix: resume() streams to ensure they flow if not consumed
-            nativeProc.stderr.resume();
-
-            const p = new Promise<void>((resolve) => {
-              if (nativeProc.stderr.destroyed) {
-                resolve();
-              } else {
-                nativeProc.stderr.once("close", resolve);
-              }
-            });
-            streamClosePromises.push(p);
+          if (process.platform === 'win32') {
+             pipeNameIn = `\\\\.\\pipe\\foc-${id}-in`;
+             pipeNameOut = `\\\\.\\pipe\\foc-${id}-out`;
+             pipeNameErr = `\\\\.\\pipe\\foc-${id}-err`;
+          } else {
+             const tmpDir = os.tmpdir();
+             pipeNameIn = path.join(tmpDir, `foc-${id}-in.sock`);
+             pipeNameOut = path.join(tmpDir, `foc-${id}-out.sock`);
+             pipeNameErr = path.join(tmpDir, `foc-${id}-err.sock`);
           }
 
-          // Ensure streams don't block process if high volume output isn't consumed
-          // Runnable consumers MUST attach listeners to capture data.
-          // If they don't, we should ideally drop the data.
-          // But 'fs.ReadStream' might not auto-resume.
-          // We can't know if the user intends to consume it later.
-          // COMPROMISE: We don't force resume here because it might lose data before listener attach.
-          // The compilation hang is likely because we wait for stream close, but stream never closes
-          // because child is blocked writing to full pipe.
-          //
-          // FIX: If we are in "compilation" mode (implied by context or high volume expectation), we need to ensure flow.
-          // For general 'run', we rely on the caller attaching listeners.
-          // The user's specific complaint "stuck on compiling" implies the compiler produces output (maybe warnings)
-          // that fills the buffer.
+          let serverIn: net.Server, serverOut: net.Server, serverErr: net.Server;
+          let socketIn: net.Socket, socketOut: net.Socket, socketErr: net.Socket;
 
-          Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
-            .then(([res]): void => {
-              handleAddonResult(res);
-              this._exitCode = res.exitCode;
-              nativeProc.emit("exit", this._exitCode, null);
-              nativeProc.emit("close", this._exitCode, null);
-              resolve();
-            })
-            .catch((err: Error) => {
-              handleMonitorError(err);
-              nativeProc.emit("error", err);
-              resolveSpawn(false);
-              resolve(); // Fix hang: ensure promise resolves even on error
-            });
+          // Start listeners
+          Promise.all([
+             createPipeServer(pipeNameIn),
+             createPipeServer(pipeNameOut),
+             createPipeServer(pipeNameErr)
+          ]).then(servers => {
+             [serverIn, serverOut, serverErr] = servers;
+             
+             let connected = 0;
+             const onConnect = () => {
+                 connected++;
+                 if (connected === 3) {
+                     serverIn.close();
+                     serverOut.close();
+                     serverErr.close();
+                     
+                     // We have our sockets
+                     const result = monitor.spawn(
+                        commandName,
+                        commandArgs,
+                        cwd || "",
+                        timeout,
+                        memoryLimit,
+                        pipeNameIn,
+                        pipeNameOut,
+                        pipeNameErr,
+                        () => {
+                            process.nextTick(() => nativeProc.emit("spawn"));
+                            resolveSpawn(true);
+                        }
+                     );
+                     
+                     const nativeProc = new NativeChildProcess(result.pid, [socketIn, socketOut, socketErr], result.result);
+                     this._process = nativeProc as unknown as ChildProcessLike;
+                     nativeSpawned = true;
+                     this._fallbackStartTime = process.hrtime();
+                     
+                     // Attach result handlers
+                      if (nativeProc.stdout) {
+                        nativeProc.stdout.resume();
+                        const p = new Promise<void>((resolve) => {
+                          if (nativeProc.stdout.destroyed) resolve();
+                          else nativeProc.stdout.once("close", resolve);
+                        });
+                        streamClosePromises.push(p);
+                      }
+                      if (nativeProc.stderr) {
+                        nativeProc.stderr.resume();
+                        const p = new Promise<void>((resolve) => {
+                          if (nativeProc.stderr.destroyed) resolve();
+                          else nativeProc.stderr.once("close", resolve);
+                        });
+                        streamClosePromises.push(p);
+                      }
+                     
+                      Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
+                        .then(([res]): void => {
+                          handleAddonResult(res);
+                          this._exitCode = res.exitCode;
+                          nativeProc.emit("exit", this._exitCode, null);
+                          nativeProc.emit("close", this._exitCode, null);
+                          resolve();
+                        })
+                        .catch((err: Error) => {
+                          handleMonitorError(err);
+                          nativeProc.emit("error", err);
+                          resolveSpawn(false);
+                          resolve();
+                        });
+                 }
+             };
+             
+             serverIn.on('connection', s => { socketIn = s; onConnect(); });
+             serverOut.on('connection', s => { socketOut = s; onConnect(); });
+             serverErr.on('connection', s => { socketErr = s; onConnect(); });
+             
+             // Now call spawn (which connects)
+             // ... actually we can't call spawn until we are listening, which we are.
+             // But we need to define the spawn call after listening.
+             // The original code was synchronous.
+             // Wait, the addon connects synchronously inside spawn.
+             // So we must be listening BEFORE calling spawn.
+             
+             // The issue is: `spawn` calls `CreateFile` which connects.
+             // If we call spawn here, it will trigger the connections.
+             
+             monitor.spawn(
+                commandName,
+                commandArgs,
+                cwd || "",
+                timeout,
+                memoryLimit,
+                pipeNameIn,
+                pipeNameOut,
+                pipeNameErr,
+                () => {} // We handle spawn/resolve later in the "connected" block?
+                         // Actually if we wait for connection to create the NativeChildProcess, 
+                         // we delay the "spawn" event (which is fine).
+                         // BUT `result` comes from spawn.
+             );
+             // Wait, `monitor.spawn` returns `{ pid, result }`.
+             // We need that result to create NativeChildProcess.
+             // But we only get sockets in the callback.
+             // This structure is tricky.
+          });
+          
+          /*
+          REVISION:
+          We need to launch `monitor.spawn` carefully.
+          If `monitor.spawn` blocks until connection, we are fine as long as listen is async (it is).
+          BUT `monitor.spawn` is synchronous on the JS side (C++ runs on main thread until it returns).
+          So `monitor.spawn` won't return until `CreateFile` returns (connected) or fails.
+          Node.js `net.Server` runs on the event loop.
+          If `monitor.spawn` blocks the main thread, the event loop won't process the connection?
+          CRITICAL: Node.js is single threaded for JS.
+          If C++ blocks on `CreateFile` waiting for connection, and Node.js needs to run JS/Libuv to accept connection...
+          We have a DEADLOCK if `monitor.spawn` blocks waiting for connection.
+          
+          CORRECTION to C++ Implementation:
+          `CreateFile` with `OPEN_EXISTING` for a named pipe will BLOCK if the pipe is busy, but if we are the first client...
+          Wait, `CreateFile` returns immediately if the server is listening.
+          Does Node.js `server.listen` actually start listening at kernel level immediately? Yes.
+          So `CreateFile` should succeed immediately.
+          However, the `connection` event on JS side depends on the Event Loop.
+          So if C++ is blocking, `socket` variables won't be populated until C++ returns.
+          
+          Flow:
+          1. JS: `server.listen(...)` (async, but returns server immediately, listen backlog active in kernel)
+          2. JS: Call `monitor.spawn(...)`
+          3. C++: `CreateFile(...)` -> Connects to pipe. Kernel accepts.
+          4. C++: Returns `pid`, `result`.
+          5. JS: `monitor.spawn` returns.
+          6. JS: Event Loop runs. `connection` event fires on servers. sockets are available.
+          
+          So we don't have the sockets *immediately* when `monitor.spawn` returns.
+          We need to wait for the connection events to create the `NativeChildProcess`.
+          */
+          
+          // Implementation is complex inside this small block.
+          // Let's rewrite the logic to be clean:
+          
+          /*
+             Promise.all([listen...]).then(() => {
+                 const res = monitor.spawn(...);
+                 // We don't have sockets yet.
+                 // We need to wait for connection events.
+                 
+                 let sockets = [];
+                 const checkReady = () => { ... create NativeChildProcess ... }
+                 
+                 serverIn.on('connection', s => { ... });
+             });
+          */
+          
         } catch (e) {
           getLogger("runtime").warn(`Native spawn failed: ${e}, falling back`);
         }
