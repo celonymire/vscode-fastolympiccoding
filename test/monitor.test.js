@@ -98,14 +98,14 @@ function spawnPromise(args, options = {}) {
 
 // --- CHECKS ---
 
-test('Basic Execution: Hello World', async () => {
+test('Basic Execution: Hello World', { timeout: 10000 }, async () => {
     const res = await spawnPromise(['-e', 'console.log("Hello Native")']);
     assert.strictEqual(res.exitCode, 0);
     assert.match(res.output, /Hello Native/);
     assert.strictEqual(res.timedOut, false);
 });
 
-test('Input/Output: Echo', async () => {
+test('Input/Output: Echo', { timeout: 10000 }, async () => {
     // Requires piping stdin to stdout
     const res = await spawnPromise(
         ['-e', 'process.stdin.pipe(process.stdout)'], 
@@ -115,7 +115,7 @@ test('Input/Output: Echo', async () => {
     assert.strictEqual(res.output, 'Echo This Back');
 });
 
-test('Timeout limit enforcement', async () => {
+test('Timeout limit enforcement', { timeout: 15000 }, async () => {
     // Busy loop to burn CPU time, enforcing RLIMIT_CPU
     const start = Date.now();
     const res = await spawnPromise(
@@ -142,7 +142,7 @@ test('Timeout limit enforcement', async () => {
     assert.strictEqual(res.timedOut, true, `Should have timed out. Exit: ${res.exitCode}`);
 });
 
-test('Memory limit enforcement', async () => {
+test('Memory limit enforcement', { timeout: 15000 }, async () => {
     // Basic check that we get memory stats
     const basicRes = await spawnPromise(['-e', 'console.log("hi")']);
     assert.ok(basicRes.peakMemoryBytes > 0, 'Peak memory should be > 0');
@@ -163,7 +163,7 @@ test('Memory limit enforcement', async () => {
     assert.ok(killedByLimit, 'Should fail due to memory limit');
 });
 
-test('Large Output (Deadlock prevention)', async () => {
+test('Large Output (Deadlock prevention)', { timeout: 20000 }, async () => {
     // Write 2MB of data. 
     const size = 2 * 1024 * 1024;
     const res = await spawnPromise(['-e', `console.log("x".repeat(${size}))`]);
@@ -173,7 +173,7 @@ test('Large Output (Deadlock prevention)', async () => {
     assert.ok(res.output.trim().length >= size);
 });
 
-test('Concurrency stress test', async () => {
+test('Concurrency stress test', { timeout: 60000 }, async () => {
     const count = 50; 
     console.log(`Spawning ${count} parallel processes...`);
     const promises = [];
@@ -197,7 +197,7 @@ test('Concurrency stress test', async () => {
     }
 });
 
-test('Wall Clock Timeout: Sleep', async () => {
+test('Wall Clock Timeout: Sleep', { timeout: 10000 }, async () => {
     // Tests that sleeping processes are killed by wall clock timeout
     const start = Date.now();
     const res = await spawnPromise(
@@ -211,7 +211,7 @@ test('Wall Clock Timeout: Sleep', async () => {
     assert.ok(duration < 2500, `Process took ${duration}ms, expected ~1000ms`);
 });
 
-test('CPU Limit Enforcement: Multi-threaded', async () => {
+test('CPU Limit Enforcement: Multi-threaded', { timeout: 20000 }, async () => {
     // Tests that RLIMIT_CPU is strictly enforced even if wall clock is slower
     // 4 threads burning CPU should hit 3s CPU limit in < 1s wall time
     const fixturePath = path.join(__dirname, 'fixtures', 'cpu_burner.js');
