@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 const fs = require('node:fs');
-const { createRequire } = require('node:module');
+
 
 // --- Helper to load the addon (similar to runtime.ts) ---
 function getProcessMonitor() {
@@ -60,7 +60,7 @@ function spawnPromise(args, options = {}) {
         return reject(e);
     }
 
-    const { pid, stdio, result } = spawnResult;
+    const { stdio, result } = spawnResult;
     const [ stdinFd, stdoutFd, stderrFd ] = stdio;
 
     // Create streams from FDs

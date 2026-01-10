@@ -1,4 +1,3 @@
-import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -187,7 +186,7 @@ type ListenerCallback =
   | ((code: number | null, signal: NodeJS.Signals | null) => void)
   | ((err: Error) => void);
 
-const EventEmitter = require("events");
+import { EventEmitter } from "node:events";
 
 class NativeChildProcess extends EventEmitter {
   pid: number;
@@ -217,7 +216,7 @@ class NativeChildProcess extends EventEmitter {
     try {
       process.kill(this.pid, signal);
       this.killed = true;
-    } catch (e) {
+    } catch {
       // Ignore ESRCH
     }
   }
@@ -229,9 +228,9 @@ interface ChildProcessLike {
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;
   stderr: NodeJS.ReadableStream;
-  on(event: string, listener: any): this;
-  once(event: string, listener: any): this;
-  off(event: string, listener: any): this;
+  on(event: string, listener: ListenerCallback): this;
+  once(event: string, listener: ListenerCallback): this;
+  off(event: string, listener: ListenerCallback): this;
   removeAllListeners(event?: string): this;
   kill(signal?: NodeJS.Signals): boolean;
 }
@@ -396,7 +395,7 @@ export class Runnable {
           // that fills the buffer.
 
           Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
-            .then(([res, _]) => {
+            .then(([res]): void => {
               handleAddonResult(res);
               this._exitCode = res.exitCode;
               nativeProc.emit("exit", this._exitCode, null);

@@ -7,13 +7,11 @@ if (isMainThread) {
     new Worker(__filename);
   }
   
-  const start = Date.now();
   while (true) {
     // Burn CPU
   }
 } else {
   // Worker thread
-  const start = Date.now();
   while (true) {
     // Burn CPU
   }
