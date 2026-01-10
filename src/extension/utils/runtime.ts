@@ -64,7 +64,7 @@ function getNativeProcessMonitor(): ProcessMonitorAddon | null {
     } else if (process.platform === "win32") {
       addonPath = path.join(__dirname, "win32-process-monitor.node");
     } else {
-        return null;
+      return null;
     }
 
     if (!fs.existsSync(addonPath)) {
@@ -176,8 +176,6 @@ export function mapTestcaseTermination(termination: RunTermination): Status {
   }
 }
 
-
-
 // ============================================================================
 // Runnable - Process runner with session-based listener API
 // ============================================================================
@@ -204,7 +202,7 @@ class NativeChildProcess extends EventEmitter {
     super();
     this.pid = pid;
     this.result = resultPromise;
-    
+
     // node:child_process uses socket streams usually.
     // We use net.Socket to wrap the pipe file descriptors.
     // This is critical to avoid thread pool starvation when running many instances.
@@ -272,10 +270,10 @@ export class Runnable {
       // Use logical check to see if we can remove listeners on streams
       // (NativeChildProcess streams are Node streams so they have removeAllListeners)
       if (typeof this._process.stdout.removeAllListeners === "function") {
-         this._process.stdout.removeAllListeners();
+        this._process.stdout.removeAllListeners();
       }
       if (typeof this._process.stderr.removeAllListeners === "function") {
-         this._process.stderr.removeAllListeners();
+        this._process.stderr.removeAllListeners();
       }
     }
   }
@@ -286,7 +284,7 @@ export class Runnable {
     }
 
     const [commandName, ...commandArgs] = command;
-    
+
     this.cleanup();
     this._timedOut = false;
     this._maxMemoryBytes = 0;
@@ -315,109 +313,111 @@ export class Runnable {
       };
 
       const handleMonitorError = (error: unknown) => {
-         const logger = getLogger("runtime");
-         logger.error(`Process monitor addon failed: ${error instanceof Error ? error.message : String(error)}`);
+        const logger = getLogger("runtime");
+        logger.error(
+          `Process monitor addon failed: ${error instanceof Error ? error.message : String(error)}`
+        );
       };
 
       let nativeSpawned = false;
-      
-      const streamClosePromises: Promise<void>[] = [];
 
+      const streamClosePromises: Promise<void>[] = [];
 
       const monitor = getNativeProcessMonitor();
       if (monitor) {
-          try {
-            const result = monitor.spawn(
-              commandName, 
-              commandArgs, 
-              cwd || "", 
-              timeout, 
-              memoryLimit,
-              () => {
-                process.nextTick(() => nativeProc.emit("spawn"));
-                resolveSpawn(true);
-              }
-            );
-            
-            // Pass the result promise into the wrapper
-            const nativeProc = new NativeChildProcess(result.pid, result.stdio, result.result);
-            this._process = nativeProc as unknown as ChildProcessLike; 
-            nativeSpawned = true;
-            this._fallbackStartTime = process.hrtime();
-            
-            // DEADLOCK FIX: ensure streams are flowing if no listeners are attached?
-            // Actually, we just need to ensure we wait for them properly.
-            // But if the user (or compilation) doesn't consume stdout, the pipe fills and process blocks.
-            // We should resume() them if we want to ignore output, but here we expect 'run' listeners to be attached.
-            // However, for compilation, we might attach listeners LATER or not at all?
-            // Safe bet: if specific listeners aren't attached, we might need to drain.
-            // For now, let's assume the existing logic tracks them.
-            
-            // Track stream closing
-            if (nativeProc.stdout) {
-                 // Deadlock fix: resume() streams to ensure they flow if not consumed
-                 // This is critical because if the pipe buffer fills, the child blocks.
-                 nativeProc.stdout.resume();
-
-                 const p = new Promise<void>(resolve => {
-                    if (nativeProc.stdout.destroyed) {
-                        resolve();
-                    } else {
-                        nativeProc.stdout.once('close', resolve);
-                    }
-                });
-                streamClosePromises.push(p);
+        try {
+          const result = monitor.spawn(
+            commandName,
+            commandArgs,
+            cwd || "",
+            timeout,
+            memoryLimit,
+            () => {
+              process.nextTick(() => nativeProc.emit("spawn"));
+              resolveSpawn(true);
             }
-            if (nativeProc.stderr) {
-                 // Deadlock fix: resume() streams to ensure they flow if not consumed
-                 nativeProc.stderr.resume();
+          );
 
-                 const p = new Promise<void>(resolve => {
-                    if (nativeProc.stderr.destroyed) {
-                        resolve();
-                    } else {
-                        nativeProc.stderr.once('close', resolve);
-                    }
-                });
-                streamClosePromises.push(p);
-            }
+          // Pass the result promise into the wrapper
+          const nativeProc = new NativeChildProcess(result.pid, result.stdio, result.result);
+          this._process = nativeProc as unknown as ChildProcessLike;
+          nativeSpawned = true;
+          this._fallbackStartTime = process.hrtime();
 
-            // Ensure streams don't block process if high volume output isn't consumed
-            // Runnable consumers MUST attach listeners to capture data.
-            // If they don't, we should ideally drop the data.
-            // But 'fs.ReadStream' might not auto-resume. 
-            // We can't know if the user intends to consume it later.
-            // COMPROMISE: We don't force resume here because it might lose data before listener attach.
-            // The compilation hang is likely because we wait for stream close, but stream never closes
-            // because child is blocked writing to full pipe.
-            // 
-            // FIX: If we are in "compilation" mode (implied by context or high volume expectation), we need to ensure flow.
-            // For general 'run', we rely on the caller attaching listeners.
-            // The user's specific complaint "stuck on compiling" implies the compiler produces output (maybe warnings)
-            // that fills the buffer.
-            
-            Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
-              .then(([res, _]) => {
-                handleAddonResult(res);
-                this._exitCode = res.exitCode;
-                nativeProc.emit("exit", this._exitCode, null);
-                nativeProc.emit("close", this._exitCode, null);
+          // DEADLOCK FIX: ensure streams are flowing if no listeners are attached?
+          // Actually, we just need to ensure we wait for them properly.
+          // But if the user (or compilation) doesn't consume stdout, the pipe fills and process blocks.
+          // We should resume() them if we want to ignore output, but here we expect 'run' listeners to be attached.
+          // However, for compilation, we might attach listeners LATER or not at all?
+          // Safe bet: if specific listeners aren't attached, we might need to drain.
+          // For now, let's assume the existing logic tracks them.
+
+          // Track stream closing
+          if (nativeProc.stdout) {
+            // Deadlock fix: resume() streams to ensure they flow if not consumed
+            // This is critical because if the pipe buffer fills, the child blocks.
+            nativeProc.stdout.resume();
+
+            const p = new Promise<void>((resolve) => {
+              if (nativeProc.stdout.destroyed) {
                 resolve();
-              })
-              .catch((err: Error) => {
-                handleMonitorError(err);
-                nativeProc.emit("error", err);
-                resolveSpawn(false);
-                resolve(); // Fix hang: ensure promise resolves even on error
-              });
-              
-          } catch (e) {
-            getLogger("runtime").warn(`Native spawn failed: ${e}, falling back`);
+              } else {
+                nativeProc.stdout.once("close", resolve);
+              }
+            });
+            streamClosePromises.push(p);
           }
+          if (nativeProc.stderr) {
+            // Deadlock fix: resume() streams to ensure they flow if not consumed
+            nativeProc.stderr.resume();
+
+            const p = new Promise<void>((resolve) => {
+              if (nativeProc.stderr.destroyed) {
+                resolve();
+              } else {
+                nativeProc.stderr.once("close", resolve);
+              }
+            });
+            streamClosePromises.push(p);
+          }
+
+          // Ensure streams don't block process if high volume output isn't consumed
+          // Runnable consumers MUST attach listeners to capture data.
+          // If they don't, we should ideally drop the data.
+          // But 'fs.ReadStream' might not auto-resume.
+          // We can't know if the user intends to consume it later.
+          // COMPROMISE: We don't force resume here because it might lose data before listener attach.
+          // The compilation hang is likely because we wait for stream close, but stream never closes
+          // because child is blocked writing to full pipe.
+          //
+          // FIX: If we are in "compilation" mode (implied by context or high volume expectation), we need to ensure flow.
+          // For general 'run', we rely on the caller attaching listeners.
+          // The user's specific complaint "stuck on compiling" implies the compiler produces output (maybe warnings)
+          // that fills the buffer.
+
+          Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
+            .then(([res, _]) => {
+              handleAddonResult(res);
+              this._exitCode = res.exitCode;
+              nativeProc.emit("exit", this._exitCode, null);
+              nativeProc.emit("close", this._exitCode, null);
+              resolve();
+            })
+            .catch((err: Error) => {
+              handleMonitorError(err);
+              nativeProc.emit("error", err);
+              resolveSpawn(false);
+              resolve(); // Fix hang: ensure promise resolves even on error
+            });
+        } catch (e) {
+          getLogger("runtime").warn(`Native spawn failed: ${e}, falling back`);
+        }
       }
 
       if (!nativeSpawned) {
-        getLogger("runtime").error(`Native monitor failed to spawn process for command: ${commandName}`);
+        getLogger("runtime").error(
+          `Native monitor failed to spawn process for command: ${commandName}`
+        );
         resolveSpawn(false);
         resolve();
       }
