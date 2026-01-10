@@ -107,15 +107,6 @@ function spawnPromise(args, options = {}) {
                  
                  Promise.all([spawnResult.result, ...streamPromises])
                     .then(([stats]) => {
-                        if (stats.exitCode !== 0) {
-                             console.error('Process FAILED:', {
-                                 exitCode: stats.exitCode,
-                                 errorOutput,
-                                 output,
-                                 command,
-                                 args
-                             });
-                        }
                         resolve({
                             ...stats,
                             output,
