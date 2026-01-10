@@ -21,7 +21,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Check and lint formatting
         run: npm run check
@@ -75,7 +75,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm clean-cache --force
+          npm ci
 
       - name: Test native addon
         run: npm test
