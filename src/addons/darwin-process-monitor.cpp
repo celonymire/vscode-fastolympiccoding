@@ -84,22 +84,56 @@ protected:
     EV_SET(&kevs[0], pid_, EVFILT_PROC, EV_ADD | EV_ENABLE, NOTE_EXIT, 0, nullptr);
     EV_SET(&kevs[1], 0, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, nullptr);
     
+    bool shouldWait = true;
+
+    // Check if process already exited/doesn't exist before waiting
     if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
-      errorMsg_ = "Failed to register events with kqueue: ";
-      errorMsg_ += std::strerror(errno);
-      return;
+        // Debug logging
+        // printf("kevent registration failed for pid %d, errno: %d\n", pid_, errno);
+
+        // If process is gone (ESRCH=3), that's fine, we'll collect exit code below
+        if (errno == ESRCH || errno == 3) {
+            shouldWait = false;
+        } else {
+            errorMsg_ = "Failed to register events with kqueue: ";
+            errorMsg_ += std::strerror(errno);
+            return;
+        }
     }
     
-    // Wait for either process exit or stop signal - INFINITE WAIT, no polling!
-    struct kevent event;
-    int nev = kevent(kq_, nullptr, 0, &event, 1, nullptr);
-    
-    if (nev == -1) {
-      errorMsg_ = "kevent failed: ";
-      errorMsg_ += std::strerror(errno);
-      return;
+    // Wait for either process exit, stop signal, or timeout
+    if (shouldWait) {
+        struct kevent event;
+        int nev = -1;
+        
+        // Use timespec for wall clock timeout
+        struct timespec timeout;
+        struct timespec* timeoutPtr = nullptr;
+        if (timeoutMs_ > 0) {
+            timeout.tv_sec = timeoutMs_ / 1000;
+            timeout.tv_nsec = (timeoutMs_ % 1000) * 1000000;
+            timeoutPtr = &timeout;
+            // printf("Waiting with timeout: %dms (%lds %ldns)\n", timeoutMs_, timeout.tv_sec, timeout.tv_nsec);
+        }
+
+        // Wait
+        nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
+        // printf("kevent wait returned: %d\n", nev);
+        
+        if (nev == -1) {
+            if (errno != EINTR && errno != ESRCH) {
+                 errorMsg_ = "kevent failed: ";
+                 errorMsg_ += std::strerror(errno);
+                 return;
+            }
+        } else if (nev == 0) {
+            // Timeout
+            // printf("Timeout occurred (nev=0)\n");
+            timedOut_ = true;
+            kill(pid_, SIGKILL);
+        }
     }
-    
+
     // Check if stopped before process exit
     if (stopped_) {
       kill(pid_, SIGKILL);
