@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <napi.h>
 #include <psapi.h>
+#include <cmath>
 
 #pragma comment(lib, "psapi.lib")
 
@@ -9,11 +10,17 @@
 // Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number, exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped: boolean }
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
-  WaitForProcessWorker(Napi::Env &env, DWORD pid, DWORD timeoutMs, uint64_t memoryLimitBytes)
-      : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs), 
+  WaitForProcessWorker(Napi::Env &env, HANDLE hProcess, DWORD pid, DWORD timeoutMs, uint64_t memoryLimitBytes)
+      : Napi::AsyncWorker(env), hProcess_(hProcess), pid_(pid), timeoutMs_(timeoutMs), 
         memoryLimitBytes_(memoryLimitBytes), deferred_(env),
         elapsedMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
         timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
+
+  ~WaitForProcessWorker() {
+    if (hProcess_ != NULL) {
+      CloseHandle(hProcess_);
+    }
+  }
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
@@ -24,18 +31,17 @@ public:
 
 protected:
   void Execute() override {
-    HANDLE hProcess =
-        OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid_);
+    // We already have a duplicated handle from SpawnProcess
+    HANDLE hProcess = hProcess_;
 
     if (hProcess == NULL) {
-      errorMsg_ = "Failed to open process with given PID";
+      errorMsg_ = "Invalid process handle";
       return;
     }
 
     // Create a job object to manage resource limits
     HANDLE hJob = CreateJobObject(NULL, NULL);
     if (hJob == NULL) {
-      CloseHandle(hProcess);
       errorMsg_ = "Failed to create job object";
       return;
     }
@@ -61,7 +67,6 @@ protected:
     if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, 
                                   &jobLimits, sizeof(jobLimits))) {
       CloseHandle(hJob);
-      CloseHandle(hProcess);
       errorMsg_ = "Failed to set job object limits";
       return;
     }
@@ -69,7 +74,6 @@ protected:
     // Assign the process to the job
     if (!AssignProcessToJobObject(hJob, hProcess)) {
       CloseHandle(hJob);
-      CloseHandle(hProcess);
       errorMsg_ = "Failed to assign process to job object";
       return;
     }
@@ -78,30 +82,24 @@ protected:
     FILETIME ftCreation, ftExit, ftKernel, ftUser;
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser)) {
       CloseHandle(hJob);
-      CloseHandle(hProcess);
       errorMsg_ = "Failed to get initial process times";
       return;
     }
 
     // Wait for process to complete or be stopped externally
-    // Job Objects automatically enforce limits - we just need to wait for the process
-    // We use a polling interval only to check for external stop requests (stopped_ flag)
     bool processExited = false;
-    const DWORD pollIntervalMs = 100; // Check for stop request every 100ms
+    const DWORD pollIntervalMs = 100;
 
     while (!processExited && !stopped_) {
       DWORD waitResult = WaitForSingleObject(hProcess, pollIntervalMs);
 
       if (waitResult == WAIT_OBJECT_0) {
-        // Process exited (either normally or killed by Job Object limits)
         processExited = true;
         break;
       } else if (waitResult == WAIT_TIMEOUT) {
-        // Process still running - continue loop to check stopped_ flag
         continue;
       } else {
         CloseHandle(hJob);
-        CloseHandle(hProcess);
         errorMsg_ = "Failed to wait for process";
         return;
       }
@@ -118,7 +116,6 @@ protected:
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExitFinal, &ftKernelFinal,
                          &ftUserFinal)) {
       CloseHandle(hJob);
-      CloseHandle(hProcess);
       errorMsg_ = "Failed to get final process times";
       return;
     }
@@ -127,24 +124,20 @@ protected:
     DWORD exitCode = 0;
     if (!GetExitCodeProcess(hProcess, &exitCode)) {
       CloseHandle(hJob);
-      CloseHandle(hProcess);
       errorMsg_ = "Failed to get exit code";
       return;
     }
     exitCode_ = static_cast<int>(exitCode);
 
     // Check if process was killed due to exceeding limits
-    // ERROR_NOT_ENOUGH_QUOTA (0x705) or STATUS_QUOTA_EXCEEDED (0xC0000044) indicates limit exceeded
     if (exitCode == 0xC0000044 || exitCode == 0x705) {
-      // Could be memory or time limit - check job accounting info
       JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION accountingInfo;
       if (QueryInformationJobObject(hJob, JobObjectBasicAndIoAccountingInformation,
                                     &accountingInfo, sizeof(accountingInfo), NULL)) {
-        // If total user time is near the limit, it was likely a time limit
         ULONGLONG totalUserTime = accountingInfo.BasicInfo.TotalUserTime.QuadPart;
         if (timeoutMs_ > 0) {
           ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
-          if (totalUserTime >= timeLimit100ns * 0.95) { // Within 5% of limit
+          if (totalUserTime >= timeLimit100ns * 0.95) {
             timedOut_ = true;
           } else {
             memoryLimitExceeded_ = true;
@@ -155,13 +148,13 @@ protected:
       }
     }
 
-    // Get peak memory from job accounting
-    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accountingInfo;
-    if (QueryInformationJobObject(hJob, JobObjectBasicAccountingInformation,
-                                  &accountingInfo, sizeof(accountingInfo), NULL)) {
-      peakMemoryBytes_ = static_cast<uint64_t>(accountingInfo.PeakProcessMemoryUsed);
+    // Get peak memory from job accounting - use ExtendedLimitInformation for memory metrics
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION extendedInfo;
+    if (QueryInformationJobObject(hJob, JobObjectExtendedLimitInformation,
+                                  &extendedInfo, sizeof(extendedInfo), NULL)) {
+      peakMemoryBytes_ = static_cast<uint64_t>(extendedInfo.PeakProcessMemoryUsed);
     } else {
-      // Fallback to process memory counters
+      // Fallback to process memory counters if job query fails
       PROCESS_MEMORY_COUNTERS pmc;
       if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
         peakMemoryBytes_ = static_cast<uint64_t>(pmc.PeakWorkingSetSize);
@@ -169,7 +162,7 @@ protected:
     }
 
     CloseHandle(hJob);
-    CloseHandle(hProcess);
+    // hProcess_ will be closed in destructor
 
     // Calculate elapsed time
     ULARGE_INTEGER creationTime, exitTime;
@@ -184,7 +177,8 @@ protected:
     kernelTime.HighPart = ftKernelFinal.dwHighDateTime;
     userTime.LowPart = ftUserFinal.dwLowDateTime;
     userTime.HighPart = ftUserFinal.dwHighDateTime;
-    elapsedMs_ = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
+    double rawElapsedMs = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
+    elapsedMs_ = std::round(rawElapsedMs);
   }
 
   void OnOK() override {
@@ -211,6 +205,7 @@ protected:
   }
 
 private:
+  HANDLE hProcess_;
   DWORD pid_;
   DWORD timeoutMs_;
   uint64_t memoryLimitBytes_;
@@ -224,99 +219,160 @@ private:
   std::string errorMsg_;
 };
 
-Napi::Value WaitForProcess(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
 
-  if (info.Length() < 3) {
-    Napi::TypeError::New(env, "PID, timeout, and memoryLimit arguments are required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
 
-  if (!info[0].IsNumber() || !info[1].IsNumber() || !info[2].IsNumber()) {
-    Napi::TypeError::New(env, "PID, timeout, and memoryLimit must be numbers")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
-  uint32_t timeoutMs = info[1].As<Napi::Number>().Uint32Value();
-  double memoryLimitMB = info[2].As<Napi::Number>().DoubleValue();
-  uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
-
-  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
-  worker->Queue();
-  return worker->GetPromise();
+// Helper to convert UTF-8 string to UTF-16 wstring for Windows APIs
+std::wstring ToWString(const std::string& utf8) {
+  if (utf8.empty()) return L"";
+  int size_needed = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), NULL, 0);
+  std::wstring wstrTo(size_needed, 0);
+  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), &wstrTo[0], size_needed);
+  return wstrTo;
 }
 
-// Combined function to get process stats (elapsed CPU time and memory)
-Napi::Value GetWin32ProcessStats(const Napi::CallbackInfo &info) {
+// 0: command (string)
+// 1: args (array of strings)
+// 2: cwd (string) or empty
+// 3: timeoutMs (number)
+// 4: memoryLimitBytes (number)
+// 5: onSpawn (function)
+// Returns: { pid: number, stdio: [stdinFd, stdoutFd, stderrFd], result: Promise<AddonResult> }
+//
+Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 1) {
-    Napi::TypeError::New(env, "PID argument is required")
-        .ThrowAsJavaScriptException();
+  if (info.Length() < 6) {
+    Napi::TypeError::New(env, "Expected 6 arguments").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  if (!info[0].IsNumber()) {
-    Napi::TypeError::New(env, "PID must be a number")
-        .ThrowAsJavaScriptException();
+  std::string command = info[0].As<Napi::String>().Utf8Value();
+  Napi::Array argsArray = info[1].As<Napi::Array>();
+  std::string cwd = info[2].As<Napi::String>().Utf8Value();
+  uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
+  double memoryLimitMB = info[4].As<Napi::Number>().DoubleValue();
+  uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
+  Napi::Function onSpawn = info[5].As<Napi::Function>();
+
+  // Prepare command line (Windows expects a single string)
+  std::wstring wCommand = ToWString(command);
+  std::wstring cmdLine = L"\"" + wCommand + L"\"";
+  for (uint32_t i = 0; i < argsArray.Length(); i++) {
+    std::string arg = argsArray.Get(i).As<Napi::String>().Utf8Value();
+    cmdLine += L" " + ToWString(arg);
+  }
+
+  // Create pipes for stdio
+  HANDLE hChildStdInRead = NULL, hChildStdInWrite = NULL;
+  HANDLE hChildStdOutRead = NULL, hChildStdOutWrite = NULL;
+  HANDLE hChildStdErrRead = NULL, hChildStdErrWrite = NULL;
+
+  SECURITY_ATTRIBUTES saAttr;
+  saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+  saAttr.bInheritHandle = TRUE;
+  saAttr.lpSecurityDescriptor = NULL;
+
+  if (!CreatePipe(&hChildStdOutRead, &hChildStdOutWrite, &saAttr, 0) ||
+      !SetHandleInformation(hChildStdOutRead, HANDLE_FLAG_INHERIT, 0) ||
+      !CreatePipe(&hChildStdErrRead, &hChildStdErrWrite, &saAttr, 0) ||
+      !SetHandleInformation(hChildStdErrRead, HANDLE_FLAG_INHERIT, 0) ||
+      !CreatePipe(&hChildStdInRead, &hChildStdInWrite, &saAttr, 0) ||
+      !SetHandleInformation(hChildStdInWrite, HANDLE_FLAG_INHERIT, 0)) {
+    Napi::Error::New(env, "Failed to create pipes").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
-  HANDLE hProcess =
-      OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+  STARTUPINFOW siStartInfo;
+  PROCESS_INFORMATION piProcInfo;
+  ZeroMemory(&siStartInfo, sizeof(siStartInfo));
+  siStartInfo.cb = sizeof(siStartInfo);
+  siStartInfo.hStdError = hChildStdErrWrite;
+  siStartInfo.hStdOutput = hChildStdOutWrite;
+  siStartInfo.hStdInput = hChildStdInRead;
+  siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
-  if (hProcess == NULL) {
-    Napi::Error::New(env, "Failed to open process with given PID")
-        .ThrowAsJavaScriptException();
+  ZeroMemory(&piProcInfo, sizeof(piProcInfo));
+
+  std::wstring wCwd = ToWString(cwd);
+  LPCWSTR lpCwd = wCwd.empty() ? NULL : wCwd.c_str();
+
+  BOOL success = CreateProcessW(
+    NULL, 
+    &cmdLine[0], 
+    NULL, 
+    NULL, 
+    TRUE, 
+    CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, 
+    NULL, 
+    lpCwd, 
+    &siStartInfo, 
+    &piProcInfo
+  );
+
+  if (!success) {
+    CloseHandle(hChildStdInRead); CloseHandle(hChildStdInWrite);
+    CloseHandle(hChildStdOutRead); CloseHandle(hChildStdOutWrite);
+    CloseHandle(hChildStdErrRead); CloseHandle(hChildStdErrWrite);
+    Napi::Error::New(env, "CreateProcessW failed").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  // Get process times
-  FILETIME ftCreation, ftExit, ftKernel, ftUser;
-  if (!GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser)) {
-    CloseHandle(hProcess);
-    Napi::Error::New(env, "Failed to get process times")
-        .ThrowAsJavaScriptException();
-    return env.Null();
+  // Create Job Object for resource limits
+  HANDLE hJob = CreateJobObject(NULL, NULL);
+  if (hJob) {
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobLimits = {0};
+    if (timeoutMs > 0) {
+      jobLimits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = static_cast<LONGLONG>(timeoutMs) * 10000;
+      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_TIME;
+    }
+    if (memoryLimitBytes > 0) {
+      jobLimits.ProcessMemoryLimit = (SIZE_T)memoryLimitBytes;
+      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+    }
+    SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobLimits, sizeof(jobLimits));
+    AssignProcessToJobObject(hJob, piProcInfo.hProcess);
+    CloseHandle(hJob); // handle closed but job stays until process exits
   }
 
-  // Calculate elapsed CPU time (user + kernel)
-  ULARGE_INTEGER kernelTime, userTime;
-  kernelTime.LowPart = ftKernel.dwLowDateTime;
-  kernelTime.HighPart = ftKernel.dwHighDateTime;
-  userTime.LowPart = ftUser.dwLowDateTime;
-  userTime.HighPart = ftUser.dwHighDateTime;
-  double elapsedMs = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
+  ResumeThread(piProcInfo.hThread);
+  CloseHandle(piProcInfo.hThread);
+  
+  DWORD pid = piProcInfo.dwProcessId;
+  // Duplicate process handle for the background worker thread
+  HANDLE hProcessDup = NULL;
+  DuplicateHandle(GetCurrentProcess(), piProcInfo.hProcess, GetCurrentProcess(), &hProcessDup,
+                  0, FALSE, DUPLICATE_SAME_ACCESS);
+  CloseHandle(piProcInfo.hProcess);
 
-  // Get memory stats
-  PROCESS_MEMORY_COUNTERS pmc;
-  if (!GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
-    CloseHandle(hProcess);
-    Napi::Error::New(env, "Failed to get process memory info")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
+  // Close child-side pipe ends
+  CloseHandle(hChildStdInRead);
+  CloseHandle(hChildStdOutWrite);
+  CloseHandle(hChildStdErrWrite);
 
-  CloseHandle(hProcess);
+  // Notify JS
+  onSpawn.Call({});
+
+  // Start monitoring
+  auto worker = new WaitForProcessWorker(env, hProcessDup, pid, timeoutMs, memoryLimitBytes);
+  auto promise = worker->GetPromise();
+  worker->Queue();
 
   Napi::Object result = Napi::Object::New(env);
-  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
-  result.Set("rss", Napi::Number::New(env, (double)pmc.WorkingSetSize));
-  result.Set("peakRss", Napi::Number::New(env, (double)pmc.PeakWorkingSetSize));
+  result.Set("pid", Napi::Number::New(env, pid));
+  result.Set("result", promise);
+
+  Napi::Array stdio = Napi::Array::New(env, 3);
+  stdio.Set(uint32_t(0), Napi::Number::New(env, (double)HandleToLong(hChildStdInWrite)));
+  stdio.Set(uint32_t(1), Napi::Number::New(env, (double)HandleToLong(hChildStdOutRead)));
+  stdio.Set(uint32_t(2), Napi::Number::New(env, (double)HandleToLong(hChildStdErrRead)));
+  result.Set("stdio", stdio);
 
   return result;
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  exports.Set("waitForProcess",
-              Napi::Function::New(env, WaitForProcess, "waitForProcess"));
-  exports.Set("getWin32ProcessStats",
-              Napi::Function::New(env, GetWin32ProcessStats,
-                                  "getWin32ProcessStats"));
+  exports.Set("spawn",
+              Napi::Function::New(env, SpawnProcess, "spawn"));
   return exports;
 }
 

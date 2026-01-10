@@ -48,12 +48,17 @@ function addonCopyPlugins(): Configuration["plugins"] {
     );
   } else if (process.platform === "darwin") {
     const darwinMonitorPath = path.join("build", "Release", "darwin-process-monitor.node");
+    const rlimitWrapperPath = path.join("build", "Release", "rlimit-wrapper");
     plugins.push(
       new CopyRspackPlugin({
         patterns: [
           {
             from: darwinMonitorPath,
             to: "darwin-process-monitor.node",
+          },
+          {
+            from: rlimitWrapperPath,
+            to: "rlimit-wrapper",
           },
         ],
       })

@@ -4,24 +4,30 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <string>
+#include <vector>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <poll.h>
 #include <sys/syscall.h>
+#include <sys/eventfd.h>
 
-// Linux implementation using pidfd_open + poll for efficient process monitoring
-// and wait4 for accurate timing and memory stats
+// Linux implementation using kernel-enforced resource limits for process monitoring
+// Combined with pidfd_open + poll for efficient waiting and wait4 for stats
 //
 // Exports:
-//   waitForProcess(pid: number, timeoutMs: number) -> Promise<{ elapsedMs, cpuMs, peakMemoryBytes, exitCode, timedOut }>
-//   getLinuxProcessStats(pid: number) -> { elapsedMs: number, rss: number, peakRss: number }
+//   waitForProcess(pid: number, timeoutMs: number, memoryLimitBytes: number) 
+//     -> Promise<{ elapsedMs, peakMemoryBytes, exitCode, timedOut, memoryLimitExceeded, stopped }>
 //
 // The waitForProcess function uses:
-//  - pidfd_open + poll for efficient waiting (kernel notification instead of polling)
-//  - wait4 to get rusage stats directly from the kernel
+//  - prlimit() to set RLIMIT_CPU (timeout) and RLIMIT_AS (memory limit) on the target process
+//  - pidfd_open + poll for efficient waiting (kernel notification, NO polling loops!)
+//  - eventfd for stop signaling (allows poll to wake on external stop)
+//  - wait4 to collect rusage stats and exit status
+//  - Signal analysis (SIGXCPU, SIGKILL) to detect limit violations
 
 // pidfd_open syscall wrapper (available since Linux 5.3)
 static int pidfd_open(pid_t pid, unsigned int flags) {
@@ -36,218 +42,154 @@ public:
   WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
         memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
-        exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
+        exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
+        stopEventFd_(-1) {
+    // Create eventfd for stop signaling
+    stopEventFd_ = eventfd(0, EFD_NONBLOCK);
+  }
+  
+  ~WaitForProcessWorker() {
+    if (stopEventFd_ >= 0) {
+      close(stopEventFd_);
+    }
+  }
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
   // Allow external stop request
   void Stop() {
     stopped_ = true;
+    // Signal the eventfd to wake up poll()
+    if (stopEventFd_ >= 0) {
+      uint64_t val = 1;
+      write(stopEventFd_, &val, sizeof(val));
+    }
   }
 
 protected:
   void Execute() override {
-    struct timeval startTime;
-    gettimeofday(&startTime, nullptr);
-
-    // Try to open pidfd for efficient waiting (requires Linux 5.3+)
-    int pidfd = pidfd_open(pid_, 0);
-    bool usePidfd = (pidfd >= 0);
-
-    int status = 0;
-    struct rusage rusage;
-    bool processExited = false;
+    // Set resource limits using prlimit() before monitoring
+    // Note: prlimit() must be called early, ideally right after fork/spawn
+    // RLIMIT_CPU for CPU time limit (in seconds of actual CPU usage)
+    if (timeoutMs_ > 0) {
+      struct rlimit cpuLimit;
+      // Convert milliseconds to seconds, rounding up
+      rlim_t seconds = (timeoutMs_ + 999) / 1000;
+      if (seconds == 0) seconds = 1; // Minimum 1 second
+      cpuLimit.rlim_cur = seconds;
+      cpuLimit.rlim_max = seconds;
+      
+      if (prlimit(pid_, RLIMIT_CPU, &cpuLimit, nullptr) != 0) {
+        // Non-fatal: we'll fall back to no CPU limit enforcement
+        // This can happen if the process already exited or if permissions are insufficient
+      }
+    }
     
-    if (usePidfd) {
-      // Use pidfd + poll for efficient waiting (no polling overhead)
-      struct pollfd pfd;
-      pfd.fd = pidfd;
-      pfd.events = POLLIN;
+    // RLIMIT_AS for virtual memory address space limit
+    // Use 1.5x the memory limit to account for virtual address space overhead
+    if (memoryLimitBytes_ > 0) {
+      struct rlimit memLimit;
+      rlim_t limit = static_cast<rlim_t>(memoryLimitBytes_ * 1.5);
+      memLimit.rlim_cur = limit;
+      memLimit.rlim_max = limit;
       
-      while (!processExited && !stopped_) {
-        // Calculate remaining timeout
-        int pollTimeout = -1; // Infinite by default
-        if (timeoutMs_ > 0) {
-          struct timeval now;
-          gettimeofday(&now, nullptr);
-          uint64_t elapsedUs = (now.tv_sec - startTime.tv_sec) * 1000000ULL +
-                               (now.tv_usec - startTime.tv_usec);
-          uint64_t timeoutUs = static_cast<uint64_t>(timeoutMs_) * 1000;
-          
-          if (elapsedUs >= timeoutUs) {
-            // Time limit exceeded
-            timedOut_ = true;
-            close(pidfd);
-            kill(pid_, SIGKILL);
-            wait4(pid_, &status, 0, &rusage);
-            processExited = true;
-            break;
-          }
-          
-          pollTimeout = (timeoutUs - elapsedUs) / 1000; // Convert to milliseconds
-          if (pollTimeout > 100) {
-            pollTimeout = 100; // Check memory limit every 100ms
-          }
-        } else {
-          pollTimeout = 100; // Check memory/stop every 100ms even without timeout
-        }
-        
-        int pollResult = poll(&pfd, 1, pollTimeout);
-        
-        if (pollResult > 0 && (pfd.revents & POLLIN)) {
-          // Process exited
-          close(pidfd);
-          pid_t result = wait4(pid_, &status, WNOHANG, &rusage);
-          if (result == pid_) {
-            processExited = true;
-            break;
-          }
-        } else if (pollResult == -1) {
-          if (errno != EINTR) {
-            close(pidfd);
-            errorMsg_ = "poll failed: ";
-            errorMsg_ += std::strerror(errno);
-            return;
-          }
-          // EINTR is okay, just continue
-        }
-        
-        // Check memory limit if specified
-        if (memoryLimitBytes_ > 0) {
-          char path[64];
-          snprintf(path, sizeof(path), "/proc/%d/status", pid_);
-          FILE *f = fopen(path, "r");
-          if (f) {
-            char line[256];
-            while (fgets(line, sizeof(line), f)) {
-              if (strncmp(line, "VmRSS:", 6) == 0) {
-                unsigned long long rssKB = 0;
-                if (sscanf(line + 6, "%llu", &rssKB) == 1) {
-                  uint64_t rssBytes = rssKB * 1024ULL;
-                  if (rssBytes > memoryLimitBytes_) {
-                    memoryLimitExceeded_ = true;
-                    fclose(f);
-                    close(pidfd);
-                    kill(pid_, SIGKILL);
-                    wait4(pid_, &status, 0, &rusage);
-                    processExited = true;
-                    break;
-                  }
-                }
-                break;
-              }
-            }
-            fclose(f);
-            
-            if (memoryLimitExceeded_) {
-              break;
-            }
-          }
-        }
-      }
-      
-      // Handle external stop request
-      if (stopped_ && !processExited) {
-        close(pidfd);
-        kill(pid_, SIGKILL);
-        wait4(pid_, &status, 0, &rusage);
-      }
-    } else {
-      // Fallback to manual polling with wait4 if pidfd_open not available
-      const uint64_t pollIntervalUs = 50000; // 50ms poll interval
-      uint64_t elapsedUs = 0;
-      
-      while (!processExited && !stopped_) {
-        pid_t result = wait4(pid_, &status, WNOHANG, &rusage);
-        
-        if (result == -1) {
-          errorMsg_ = "wait4 failed: ";
-          errorMsg_ += std::strerror(errno);
-          return;
-        }
-        
-        if (result == pid_) {
-          // Process exited normally
-          processExited = true;
-          break;
-        }
-        
-        // Process still running, check limits
-        struct timeval now;
-        gettimeofday(&now, nullptr);
-        elapsedUs = (now.tv_sec - startTime.tv_sec) * 1000000ULL +
-                    (now.tv_usec - startTime.tv_usec);
-        
-        // Check time limit
-        if (timeoutMs_ > 0 && elapsedUs >= static_cast<uint64_t>(timeoutMs_) * 1000) {
-          timedOut_ = true;
-          kill(pid_, SIGKILL);
-          wait4(pid_, &status, 0, &rusage);
-          processExited = true;
-          break;
-        }
-        
-        // Check memory limit
-        if (memoryLimitBytes_ > 0) {
-          // Read current memory from /proc/<pid>/status
-          char path[64];
-          snprintf(path, sizeof(path), "/proc/%d/status", pid_);
-          FILE *f = fopen(path, "r");
-          if (f) {
-            char line[256];
-            while (fgets(line, sizeof(line), f)) {
-              if (strncmp(line, "VmRSS:", 6) == 0) {
-                unsigned long long rssKB = 0;
-                if (sscanf(line + 6, "%llu", &rssKB) == 1) {
-                  uint64_t rssBytes = rssKB * 1024ULL;
-                  if (rssBytes > memoryLimitBytes_) {
-                    memoryLimitExceeded_ = true;
-                    fclose(f);
-                    kill(pid_, SIGKILL);
-                    wait4(pid_, &status, 0, &rusage);
-                    processExited = true;
-                    break;
-                  }
-                }
-                break;
-              }
-            }
-            fclose(f);
-            
-            if (memoryLimitExceeded_) {
-              break;
-            }
-          }
-        }
-        
-        // Sleep before next poll
-        usleep(pollIntervalUs);
-      }
-      
-      // Handle external stop request
-      if (stopped_ && !processExited) {
-        kill(pid_, SIGKILL);
-        wait4(pid_, &status, 0, &rusage);
+      if (prlimit(pid_, RLIMIT_AS, &memLimit, nullptr) != 0) {
+        // Non-fatal: we'll fall back to no memory limit enforcement
       }
     }
 
-    // Get end time
-    struct timeval endTime;
-    gettimeofday(&endTime, nullptr);
+    int status = 0;
+    struct rusage rusage;
+    
+    // Open pidfd for efficient waiting (requires Linux 5.3+)
+    int pidfd = pidfd_open(pid_, 0);
+    if (pidfd < 0) {
+      errorMsg_ = "pidfd_open failed (requires Linux 5.3+): ";
+      errorMsg_ += std::strerror(errno);
+      return;
+    }
+    
+    // Set up poll with both pidfd (process exit) and stopEventFd (external stop)
+    struct pollfd pfds[2];
+    pfds[0].fd = pidfd;
+    pfds[0].events = POLLIN;
+    pfds[1].fd = stopEventFd_;
+    pfds[1].events = POLLIN;
+    
+    // Wait indefinitely - kernel will wake us when process exits or stop is signaled
+    int pollResult = poll(pfds, 2, -1);
+    
+    if (pollResult == -1) {
+      close(pidfd);
+      errorMsg_ = "poll failed: ";
+      errorMsg_ += std::strerror(errno);
+      return;
+    }
+    
+    // Check if stopped before process exit
+    if (stopped_) {
+      close(pidfd);
+      kill(pid_, SIGKILL);
+    } else {
+      // Process exited normally
+      close(pidfd);
+    }
+
+    // Collect exit status and resource usage
+    std::memset(&rusage, 0, sizeof(rusage));
+    if (wait4(pid_, &status, 0, &rusage) == -1) {
+      // Proceed with zeroed rusage
+    }
 
     // Calculate elapsed CPU time from rusage (user + system)
     uint64_t cpuUs = (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
                      (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
-    elapsedMs_ = static_cast<double>(cpuUs) / 1000.0;
+    elapsedMs_ = std::round(static_cast<double>(cpuUs) / 1000.0);
 
     // Get peak memory (in kilobytes on Linux, convert to bytes)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss) * 1024ULL;
 
-    // Get exit code
-    if (WIFEXITED(status)) {
+    // Analyze exit status to determine if limits were exceeded
+    if (WIFSIGNALED(status)) {
+      int signal = WTERMSIG(status);
+      
+      if (signal == SIGXCPU) {
+        // Process was killed by SIGXCPU - CPU time limit exceeded
+        timedOut_ = true;
+        exitCode_ = 128 + signal;
+      } else if (signal == SIGKILL) {
+        // Process was killed by SIGKILL - could be:
+        // 1. Memory limit (RLIMIT_AS causes SIGKILL)
+        // 2. SIGXCPU was upgraded to SIGKILL (if RLIMIT_CPU hard limit reached)
+        // 3. External stop request
+        
+        // Check for timeout: if CPU time is close to the limit, it was likely timeout
+        if (timeoutMs_ > 0) {
+          rlim_t limitSeconds = (timeoutMs_ + 999) / 1000;
+          double cpuSeconds = elapsedMs_ / 1000.0;
+          // If CPU time is within 90% of limit, consider it a timeout
+          if (cpuSeconds >= limitSeconds * 0.9) {
+            timedOut_ = true;
+          }
+        }
+        
+        // Check for memory limit: if peak memory is close to the limit
+        if (!timedOut_ && memoryLimitBytes_ > 0) {
+          // RLIMIT_AS uses 1.5x the memory limit
+          rlim_t memLimit = static_cast<rlim_t>(memoryLimitBytes_ * 1.5);
+          // If peak memory is within 90% of the virtual address space limit
+          if (peakMemoryBytes_ >= memLimit * 0.6) { // 0.6 = 0.9 / 1.5
+            memoryLimitExceeded_ = true;
+          }
+        }
+        
+        exitCode_ = 128 + signal;
+      } else {
+        // Other signal
+        exitCode_ = 128 + signal;
+      }
+    } else if (WIFEXITED(status)) {
       exitCode_ = WEXITSTATUS(status);
-    } else if (WIFSIGNALED(status)) {
-      exitCode_ = 128 + WTERMSIG(status);
     } else {
       exitCode_ = -1;
     }
@@ -288,276 +230,164 @@ private:
   bool memoryLimitExceeded_;
   bool stopped_;
   std::string errorMsg_;
+  int stopEventFd_;
 };
 
-Napi::Value WaitForProcess(const Napi::CallbackInfo &info) {
+
+
+
+// Helper to convert Napi::Value to std::string
+std::string ToString(Napi::Value value) {
+  if (value.IsString()) {
+    return value.As<Napi::String>().Utf8Value();
+  }
+  return "";
+}
+
+// Helper to convert Napi::Array of strings to std::vector<std::string>
+std::vector<std::string> ToArgv(Napi::Array args) {
+  std::vector<std::string> argv;
+  for (uint32_t i = 0; i < args.Length(); i++) {
+    argv.push_back(ToString(args[i]));
+  }
+  return argv;
+}
+
+// Spawns a process with native resource limits
+// Arguments:
+// 0: command (string)
+// 1: args (array of strings)
+// 2: cwd (string) or empty
+// 3: timeoutMs (number)
+// 4: memoryLimitBytes (number)
+// 5: onSpawn (function)
+// Returns: { pid: number, stdio: [stdinFd, stdoutFd, stderrFd], result: Promise<AddonResult> }
+//
+Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 3) {
-    Napi::TypeError::New(env, "PID, timeout, and memoryLimit arguments are required")
-        .ThrowAsJavaScriptException();
+  if (info.Length() < 6) {
+    Napi::TypeError::New(env, "Expected 6 arguments").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  if (!info[0].IsNumber() || !info[1].IsNumber() || !info[2].IsNumber()) {
-    Napi::TypeError::New(env, "PID, timeout, and memoryLimit must be numbers")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  int32_t pid = info[0].As<Napi::Number>().Int32Value();
-  uint32_t timeoutMs = info[1].As<Napi::Number>().Uint32Value();
-  double memoryLimitMB = info[2].As<Napi::Number>().DoubleValue();
+  std::string command = ToString(info[0]);
+  Napi::Array argsArray = info[1].As<Napi::Array>();
+  std::string cwd = ToString(info[2]);
+  uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
+  double memoryLimitMB = info[4].As<Napi::Number>().DoubleValue();
   uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
+  Napi::Function onSpawn = info[5].As<Napi::Function>();
 
-  if (pid < 1) {
-    Napi::RangeError::New(env, "PID must be positive")
-        .ThrowAsJavaScriptException();
+  // Pre-convert JS values to C++ strings/vectors in the parent process.
+  // DO NOT access 'info', 'argsArray' in the child process after fork().
+  std::vector<std::string> args = ToArgv(argsArray);
+
+  // Create pipes for stdio
+  int stdinPipe[2], stdoutPipe[2], stderrPipe[2];
+
+  if (pipe(stdinPipe) < 0 || pipe(stdoutPipe) < 0 || pipe(stderrPipe) < 0) {
+    Napi::Error::New(env, "Failed to create pipes").ThrowAsJavaScriptException();
     return env.Null();
   }
 
+  pid_t pid = fork();
+
+  if (pid < 0) {
+    // Fork failed
+    close(stdinPipe[0]); close(stdinPipe[1]);
+    close(stdoutPipe[0]); close(stdoutPipe[1]);
+    close(stderrPipe[0]); close(stderrPipe[1]);
+    Napi::Error::New(env, "fork failed").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (pid == 0) {
+    // Child process
+    
+    // Redirect stdio
+    if (dup2(stdinPipe[0], STDIN_FILENO) < 0 ||
+        dup2(stdoutPipe[1], STDOUT_FILENO) < 0 ||
+        dup2(stderrPipe[1], STDERR_FILENO) < 0) {
+      perror("dup2 failed");
+      _exit(1);
+    }
+
+    // Close all pipe FDs
+    close(stdinPipe[0]); close(stdinPipe[1]);
+    close(stdoutPipe[0]); close(stdoutPipe[1]);
+    close(stderrPipe[0]); close(stderrPipe[1]);
+
+    // Set resource limits
+    if (timeoutMs > 0) {
+      struct rlimit cpuLimit;
+      rlim_t seconds = (timeoutMs + 999) / 1000;
+      if (seconds == 0) seconds = 1;
+      cpuLimit.rlim_cur = seconds;
+      cpuLimit.rlim_max = seconds;
+      prlimit(0, RLIMIT_CPU, &cpuLimit, nullptr);
+    }
+
+    if (memoryLimitBytes > 0) {
+      struct rlimit memLimit;
+      rlim_t limit = static_cast<rlim_t>(memoryLimitBytes);
+      memLimit.rlim_cur = limit;
+      memLimit.rlim_max = limit;
+      prlimit(0, RLIMIT_AS, &memLimit, nullptr);
+    }
+
+    // Change directory
+    if (!cwd.empty()) {
+      chdir(cwd.c_str());
+    }
+
+    // Prepare argv
+    std::vector<char*> argv;
+    argv.push_back(const_cast<char*>(command.c_str()));
+    for (auto& arg : args) {
+      argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    // Execute
+    // Use execvp to inherit environment
+    execvp(command.c_str(), argv.data());
+    
+    // If exec fails
+    perror("exec failed");
+    _exit(1);
+  }
+
+  // Parent process
+  // Notify JS that the process has spawned
+  onSpawn.Call({});
+
+  // Close child-side pipe ends
+  close(stdinPipe[0]);
+  close(stdoutPipe[1]);
+  close(stderrPipe[1]);
+
+  // Start monitoring immediataely
   auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
+  auto promise = worker->GetPromise();
   worker->Queue();
-  return worker->GetPromise();
-}
-
-// Read /proc/<pid>/stat to get process start time (in clock ticks since boot)
-// and CPU times (utime, stime in clock ticks)
-bool ReadProcStat(uint32_t pid, uint64_t &startTimeJiffies, uint64_t &utimeJiffies,
-                  uint64_t &stimeJiffies, std::string &err) {
-  char path[64];
-  std::snprintf(path, sizeof(path), "/proc/%u/stat", pid);
-
-  std::FILE *f = std::fopen(path, "r");
-  if (!f) {
-    err = "Failed to open ";
-    err += path;
-    err += ": ";
-    err += std::strerror(errno);
-    return false;
-  }
-
-  int pidRead;
-  char comm[256];
-  char state;
-  int matched = std::fscanf(f, "%d %255s %c", &pidRead, comm, &state);
-  if (matched != 3) {
-    std::fclose(f);
-    err = "Failed to parse /proc/<pid>/stat (header)";
-    return false;
-  }
-
-  unsigned long long dummy;
-  for (int i = 0; i < 10; ++i) {
-    if (std::fscanf(f, "%llu", &dummy) != 1) {
-      std::fclose(f);
-      err = "Failed to parse /proc/<pid>/stat (skip fields)";
-      return false;
-    }
-  }
-
-  unsigned long long utime, stime;
-  if (std::fscanf(f, "%llu %llu", &utime, &stime) != 2) {
-    std::fclose(f);
-    err = "Failed to parse /proc/<pid>/stat (utime/stime)";
-    return false;
-  }
-
-  for (int i = 0; i < 6; ++i) {
-    if (std::fscanf(f, "%llu", &dummy) != 1) {
-      std::fclose(f);
-      err = "Failed to parse /proc/<pid>/stat (skip to starttime)";
-      return false;
-    }
-  }
-
-  unsigned long long starttime;
-  if (std::fscanf(f, "%llu", &starttime) != 1) {
-    std::fclose(f);
-    err = "Failed to parse /proc/<pid>/stat (starttime)";
-    return false;
-  }
-
-  std::fclose(f);
-
-  utimeJiffies = utime;
-  stimeJiffies = stime;
-  startTimeJiffies = starttime;
-  return true;
-}
-
-bool ReadSystemUptime(double &uptimeSeconds, std::string &err) {
-  std::FILE *f = std::fopen("/proc/uptime", "r");
-  if (!f) {
-    err = "Failed to open /proc/uptime: ";
-    err += std::strerror(errno);
-    return false;
-  }
-
-  double uptime, idletime;
-  if (std::fscanf(f, "%lf %lf", &uptime, &idletime) != 2) {
-    std::fclose(f);
-    err = "Failed to parse /proc/uptime";
-    return false;
-  }
-
-  std::fclose(f);
-  uptimeSeconds = uptime;
-  return true;
-}
-
-// Helper to parse memory lines from /proc/<pid>/status
-bool ParseKbLineToBytes(const char *line, const char *prefix,
-                        uint64_t &outBytes) {
-  const size_t prefixLen = std::strlen(prefix);
-  if (std::strncmp(line, prefix, prefixLen) != 0) {
-    return false;
-  }
-
-  const char *p = line + prefixLen;
-  while (*p == ' ' || *p == '\t') {
-    ++p;
-  }
-
-  errno = 0;
-  char *end = nullptr;
-  unsigned long long kb = std::strtoull(p, &end, 10);
-  if (errno != 0 || end == p) {
-    return false;
-  }
-
-  outBytes = static_cast<uint64_t>(kb) * 1024ULL;
-  return true;
-}
-
-bool ReadProcStatusMemory(uint32_t pid, uint64_t &rssBytes, uint64_t &peakRssBytes,
-                    std::string &err) {
-  rssBytes = 0;
-  peakRssBytes = 0;
-
-  char path[64];
-  std::snprintf(path, sizeof(path), "/proc/%u/status", pid);
-
-  std::FILE *f = std::fopen(path, "r");
-  if (!f) {
-    err = "Failed to open ";
-    err += path;
-    err += ": ";
-    err += std::strerror(errno);
-    return false;
-  }
-
-  char buf[512];
-  bool foundRss = false;
-  bool foundPeak = false;
-
-  while (std::fgets(buf, sizeof(buf), f) != nullptr) {
-    if (!foundRss) {
-      uint64_t v = 0;
-      if (ParseKbLineToBytes(buf, "VmRSS:", v)) {
-        rssBytes = v;
-        foundRss = true;
-      }
-    }
-
-    if (!foundPeak) {
-      uint64_t v = 0;
-      if (ParseKbLineToBytes(buf, "VmHWM:", v)) {
-        peakRssBytes = v;
-        foundPeak = true;
-      }
-    }
-
-    if (foundRss && foundPeak) {
-      break;
-    }
-  }
-
-  std::fclose(f);
-
-  if (!foundRss && !foundPeak) {
-    err = "Failed to find VmRSS/VmHWM in /proc/<pid>/status (process may have exited)";
-    return false;
-  }
-
-  if (!foundPeak) {
-    peakRssBytes = rssBytes;
-  }
-
-  if (!foundRss) {
-    rssBytes = peakRssBytes;
-  }
-
-  return true;
-}
-
-// Combined function to get process stats (elapsed CPU time and memory)
-Napi::Value GetLinuxProcessStats(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-  if (info.Length() < 1) {
-    Napi::TypeError::New(env, "PID argument is required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  if (!info[0].IsNumber()) {
-    Napi::TypeError::New(env, "PID must be a number")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
-
-  if (pid < 1 || pid > 4194304) {
-    Napi::RangeError::New(env, "PID is out of range")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  // Get CPU times from /proc/<pid>/stat
-  uint64_t startTimeJiffies = 0;
-  uint64_t utimeJiffies = 0;
-  uint64_t stimeJiffies = 0;
-  std::string err;
-  if (!ReadProcStat(pid, startTimeJiffies, utimeJiffies, stimeJiffies, err)) {
-    Napi::Error::New(env, err).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  long clockTicksPerSecond = sysconf(_SC_CLK_TCK);
-  if (clockTicksPerSecond <= 0) {
-    Napi::Error::New(env, "Failed to get _SC_CLK_TCK")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  // Calculate elapsed CPU time (user + system)
-  double cpuSeconds = static_cast<double>(utimeJiffies + stimeJiffies) /
-                      clockTicksPerSecond;
-  double elapsedMs = cpuSeconds * 1000.0;
-
-  // Get memory stats from /proc/<pid>/status
-  uint64_t rssBytes = 0;
-  uint64_t peakRssBytes = 0;
-  if (!ReadProcStatusMemory(pid, rssBytes, peakRssBytes, err)) {
-    Napi::Error::New(env, err).ThrowAsJavaScriptException();
-    return env.Null();
-  }
 
   Napi::Object result = Napi::Object::New(env);
-  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
-  result.Set("rss", Napi::Number::New(env, static_cast<double>(rssBytes)));
-  result.Set("peakRss",
-             Napi::Number::New(env, static_cast<double>(peakRssBytes)));
+  result.Set("pid", Napi::Number::New(env, pid));
+  result.Set("result", promise);
+  
+  Napi::Array stdio = Napi::Array::New(env, 3);
+  stdio.Set(uint32_t(0), Napi::Number::New(env, stdinPipe[1])); // Parent writes to index 1
+  stdio.Set(uint32_t(1), Napi::Number::New(env, stdoutPipe[0])); // Parent reads from index 0
+  stdio.Set(uint32_t(2), Napi::Number::New(env, stderrPipe[0])); // Parent reads from index 0
+  result.Set("stdio", stdio);
+
   return result;
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  exports.Set("waitForProcess",
-              Napi::Function::New(env, WaitForProcess, "waitForProcess"));
-  exports.Set("getLinuxProcessStats",
-              Napi::Function::New(env, GetLinuxProcessStats,
-                                  "getLinuxProcessStats"));
+  exports.Set("spawn",
+              Napi::Function::New(env, SpawnProcess, "spawn"));
   return exports;
 }
 

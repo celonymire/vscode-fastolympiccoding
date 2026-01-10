@@ -53,6 +53,16 @@
       "conditions": [
         ["OS != \"mac\"", { "type": "none" }]
       ]
+    },
+    {
+      "target_name": "rlimit-wrapper",
+      "type": "executable",
+      "sources": [
+        "src/addons/rlimit-wrapper.c"
+      ],
+      "conditions": [
+        ["OS != \"mac\"", { "type": "none" }]
+      ]
     }
   ]
 }

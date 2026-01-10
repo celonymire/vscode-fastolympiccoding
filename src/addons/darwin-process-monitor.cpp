@@ -4,21 +4,35 @@
 #include <mach/mach_time.h>
 #include <libproc.h>
 #include <sys/proc_info.h>
+#include <sys/event.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <signal.h>
+#include <unistd.h>
 #include <cstdint>
+#include <cstring>
+#include <cmath>
 #include <string>
+#include <vector>
 
-// macOS implementation for process timing and memory using libproc, mach APIs, and wait4.
+// macOS implementation using kqueue for efficient process monitoring
+// Combined with resource limits enforced by rlimit-wrapper and wait4 for stats
 //
 // Exports:
-//   waitForProcess(pid: number, timeoutMs: number) -> Promise<{ elapsedMs, cpuMs, peakMemoryBytes, exitCode, timedOut }>
-//   getDarwinProcessTimes(pid: number) -> { elapsedMs: number, cpuMs: number }
-//   getDarwinMemoryStats(pid: number) -> { rss: number, peakRss: number }
+//   waitForProcess(pid: number, timeoutMs: number, memoryLimitBytes: number)
+//     -> Promise<{ elapsedMs, peakMemoryBytes, exitCode, timedOut, memoryLimitExceeded, stopped }>
 //
-// Uses wait4 to get rusage stats directly from the kernel for accurate timing and memory.
+// The waitForProcess function uses:
+//  - kqueue with EVFILT_PROC (NOTE_EXIT) for efficient exit notification
+//  - kqueue with EVFILT_USER for stop signal notification
+//  - kevent() for waiting (kernel notifies us, NO polling loops!)
+//  - wait4 to collect rusage stats and exit status
+//  - Signal analysis (SIGXCPU, SIGKILL) to detect limit violations
+//
+// Note: Resource limits (RLIMIT_CPU, RLIMIT_AS) must be set by the rlimit-wrapper
+// binary before the target process is spawned. This addon only monitors the process.
 
 namespace {
 
@@ -28,103 +42,124 @@ public:
   WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
         memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
-        exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {}
+        exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
+        kq_(-1) {}
+  
+  ~WaitForProcessWorker() {
+    if (kq_ >= 0) {
+      close(kq_);
+    }
+  }
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
   // Allow external stop request
   void Stop() {
     stopped_ = true;
+    // Trigger the user event to wake up kevent()
+    if (kq_ >= 0) {
+      struct kevent kev;
+      EV_SET(&kev, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
+      kevent(kq_, &kev, 1, nullptr, 0, nullptr);
+    }
   }
 
 protected:
   void Execute() override {
-    struct timeval startTime;
-    gettimeofday(&startTime, nullptr);
-
     int status = 0;
     struct rusage rusage;
-    bool processExited = false;
     
-    const uint64_t pollIntervalUs = 50000; // 50ms poll interval
-    uint64_t elapsedUs = 0;
-    
-    while (!processExited && !stopped_) {
-      pid_t result = wait4(pid_, &status, WNOHANG, &rusage);
-      
-      if (result == -1) {
-        errorMsg_ = "wait4 failed: ";
-        errorMsg_ += std::strerror(errno);
-        return;
-      }
-      
-      if (result == pid_) {
-        // Process exited normally
-        processExited = true;
-        break;
-      }
-      
-      // Process still running, check limits
-      struct timeval now;
-      gettimeofday(&now, nullptr);
-      elapsedUs = (now.tv_sec - startTime.tv_sec) * 1000000ULL +
-                  (now.tv_usec - startTime.tv_usec);
-      
-      // Check time limit
-      if (timeoutMs_ > 0 && elapsedUs >= static_cast<uint64_t>(timeoutMs_) * 1000) {
-        timedOut_ = true;
-        kill(pid_, SIGKILL);
-        wait4(pid_, &status, 0, &rusage);
-        processExited = true;
-        break;
-      }
-      
-      // Check memory limit using proc_pidinfo
-      if (memoryLimitBytes_ > 0) {
-        struct proc_taskinfo taskinfo;
-        int ret = proc_pidinfo(pid_, PROC_PIDTASKINFO, 0, &taskinfo, sizeof(taskinfo));
-        if (ret == sizeof(taskinfo)) {
-          uint64_t currentRss = taskinfo.pti_resident_size;
-          if (currentRss > memoryLimitBytes_) {
-            memoryLimitExceeded_ = true;
-            kill(pid_, SIGKILL);
-            wait4(pid_, &status, 0, &rusage);
-            processExited = true;
-            break;
-          }
-        }
-      }
-      
-      // Sleep before next poll
-      usleep(pollIntervalUs);
+    // Create kqueue for efficient process monitoring
+    kq_ = kqueue();
+    if (kq_ == -1) {
+      errorMsg_ = "Failed to create kqueue: ";
+      errorMsg_ += std::strerror(errno);
+      return;
     }
     
-    // Handle external stop request
-    if (stopped_ && !processExited) {
+    // Register two events:
+    // 1. EVFILT_PROC with NOTE_EXIT - notifies when process exits
+    // 2. EVFILT_USER - allows us to trigger wake-up on external stop
+    struct kevent kevs[2];
+    EV_SET(&kevs[0], pid_, EVFILT_PROC, EV_ADD | EV_ENABLE, NOTE_EXIT, 0, nullptr);
+    EV_SET(&kevs[1], 0, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, nullptr);
+    
+    if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
+      errorMsg_ = "Failed to register events with kqueue: ";
+      errorMsg_ += std::strerror(errno);
+      return;
+    }
+    
+    // Wait for either process exit or stop signal - INFINITE WAIT, no polling!
+    struct kevent event;
+    int nev = kevent(kq_, nullptr, 0, &event, 1, nullptr);
+    
+    if (nev == -1) {
+      errorMsg_ = "kevent failed: ";
+      errorMsg_ += std::strerror(errno);
+      return;
+    }
+    
+    // Check if stopped before process exit
+    if (stopped_) {
       kill(pid_, SIGKILL);
-      wait4(pid_, &status, 0, &rusage);
+    }
+    
+    // Collect exit status and resource usage with wait4
+    std::memset(&rusage, 0, sizeof(rusage));
+    if (wait4(pid_, &status, 0, &rusage) == -1) {
+      // Proceed with zeroed rusage
     }
 
-    // Get end time
-    struct timeval endTime;
-    gettimeofday(&endTime, nullptr);
-
-    // Calculate elapsed wall-clock time
-    elapsedUs = (endTime.tv_sec - startTime.tv_sec) * 1000000ULL +
-                (endTime.tv_usec - startTime.tv_usec);
     // Calculate elapsed CPU time from rusage (user + system)
     uint64_t cpuUs = (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
                      (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
-    elapsedMs_ = static_cast<double>(cpuUs) / 1000.0;
+    elapsedMs_ = std::round(static_cast<double>(cpuUs) / 1000.0);
 
     // Get peak memory (ru_maxrss is in bytes on macOS)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss);
 
-    // Get exit code
-    if (WIFEXITED(status)) {
+    // Analyze exit status to determine if limits were exceeded
+    if (WIFSIGNALED(status)) {
+      int signal = WTERMSIG(status);
+      
+      if (signal == SIGXCPU) {
+        // Process was killed by SIGXCPU - CPU time limit exceeded
+        timedOut_ = true;
+        exitCode_ = 128 + signal;
+      } else if (signal == SIGKILL) {
+        // Process was killed by SIGKILL - could be:
+        // 1. Memory limit (RLIMIT_AS causes SIGKILL)
+        // 2. SIGXCPU was upgraded to SIGKILL (if RLIMIT_CPU hard limit reached)
+        // 3. External stop request
+        
+        // Check for timeout: if CPU time is close to the limit, it was likely timeout
+        if (timeoutMs_ > 0) {
+          rlim_t limitSeconds = (timeoutMs_ + 999) / 1000;
+          double cpuSeconds = elapsedMs_ / 1000.0;
+          // If CPU time is within 90% of limit, consider it a timeout
+          if (cpuSeconds >= limitSeconds * 0.9) {
+            timedOut_ = true;
+          }
+        }
+        
+        // Check for memory limit: if peak memory is close to the limit
+        if (!timedOut_ && memoryLimitBytes_ > 0) {
+          // RLIMIT_AS uses 1.5x the memory limit
+          rlim_t memLimit = static_cast<rlim_t>(memoryLimitBytes_ * 1.5);
+          // If peak memory is within 90% of the virtual address space limit
+          if (peakMemoryBytes_ >= memLimit * 0.6) { // 0.6 = 0.9 / 1.5
+            memoryLimitExceeded_ = true;
+          }
+        }
+        
+        exitCode_ = 128 + signal;
+      } else {
+        // Other signal
+        exitCode_ = 128 + signal;
+      }
+    } else if (WIFEXITED(status)) {
       exitCode_ = WEXITSTATUS(status);
-    } else if (WIFSIGNALED(status)) {
-      exitCode_ = 128 + WTERMSIG(status);
     } else {
       exitCode_ = -1;
     }
@@ -165,124 +200,178 @@ private:
   bool memoryLimitExceeded_;
   bool stopped_;
   std::string errorMsg_;
-};
-    result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
-    
-    deferred_.Resolve(result);
-  }
-
-  void OnError(const Napi::Error &e) override {
-    deferred_.Reject(e.Value());
-  }
-
-private:
-  pid_t pid_;
-  uint32_t timeoutMs_;
-  uint64_t memoryLimitBytes_;
-  Napi::Promise::Deferred deferred_;
-  double elapsedMs_;
-  uint64_t peakMemoryBytes_;
-  int exitCode_;
-  bool timedOut_;
-  bool memoryLimitExceeded_;
-  bool stopped_;
-  std::string errorMsg_;
+  int kq_;
 };
 
-Napi::Value WaitForProcess(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
 
-  if (info.Length() < 3) {
-    Napi::TypeError::New(env, "PID, timeout, and memoryLimit arguments are required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
+
+
+// External declaration for environ
+extern char **environ;
+
+// Helper to convert Napi::Value to std::string
+std::string ToString(Napi::Value value) {
+  if (value.IsString()) {
+    return value.As<Napi::String>().Utf8Value();
   }
-
-  if (!info[0].IsNumber() || !info[1].IsNumber() || !info[2].IsNumber()) {
-    Napi::TypeError::New(env, "PID, timeout, and memoryLimit must be numbers")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  int32_t pid = info[0].As<Napi::Number>().Int32Value();
-  uint32_t timeoutMs = info[1].As<Napi::Number>().Uint32Value();
-  double memoryLimitMB = info[2].As<Napi::Number>().DoubleValue();
-  uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
-
-  if (pid < 1) {
-    Napi::RangeError::New(env, "PID must be positive")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
-  worker->Queue();
-  return worker->GetPromise();
+  return "";
 }
 
-// Synchronous function to get current process times
-// Combined function to get process stats (elapsed CPU time and memory)
-Napi::Value GetDarwinProcessStats(const Napi::CallbackInfo &info) {
+// Helper to convert Napi::Array of strings to std::vector<std::string>
+std::vector<std::string> ToArgv(Napi::Array args) {
+  std::vector<std::string> argv;
+  for (uint32_t i = 0; i < args.Length(); i++) {
+    argv.push_back(ToString(args[i]));
+  }
+  return argv;
+}
+
+// Spawns a process with native resource limits
+// Arguments:
+// 0: command (string)
+// 1: args (array of strings)
+// 2: cwd (string) or empty
+// 3: timeoutMs (number)
+// 4: memoryLimitBytes (number)
+// 5: onSpawn (function)
+// Returns: { pid: number, stdio: [stdinFd, stdoutFd, stderrFd], result: Promise<AddonResult> }
+//
+Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 1) {
-    Napi::TypeError::New(env, "PID argument is required")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  if (!info[0].IsNumber()) {
-    Napi::TypeError::New(env, "PID must be a number")
-        .ThrowAsJavaScriptException();
+  if (info.Length() < 6) {
+    Napi::TypeError::New(env, "Expected 6 arguments").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  int32_t pid = info[0].As<Napi::Number>().Int32Value();
+  std::string command = ToString(info[0]);
+  Napi::Array argsArray = info[1].As<Napi::Array>();
+  std::string cwd = ToString(info[2]);
+  uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
+  double memoryLimitMB = info[4].As<Napi::Number>().DoubleValue();
+  uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
+  Napi::Function onSpawn = info[5].As<Napi::Function>();
 
-  if (pid < 1) {
-    Napi::RangeError::New(env, "PID must be positive")
-        .ThrowAsJavaScriptException();
+  // Pre-convert JS values to C++ strings/vectors in the parent process.
+  // DO NOT access 'info', 'argsArray' in the child process after fork().
+  std::vector<std::string> args = ToArgv(argsArray);
+
+  // Create pipes for stdio
+  int stdinPipe[2], stdoutPipe[2], stderrPipe[2];
+
+  if (pipe(stdinPipe) < 0 || pipe(stdoutPipe) < 0 || pipe(stderrPipe) < 0) {
+    Napi::Error::New(env, "Failed to create pipes").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  // Get process info using proc_pidinfo
-  struct proc_taskinfo taskinfo;
-  int ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskinfo, sizeof(taskinfo));
-  
-  if (ret != sizeof(taskinfo)) {
-    Napi::Error::New(env, "Failed to get process info (process may have exited)")
-        .ThrowAsJavaScriptException();
+  pid_t pid = fork();
+
+  if (pid < 0) {
+    // Fork failed
+    close(stdinPipe[0]); close(stdinPipe[1]);
+    close(stdoutPipe[0]); close(stdoutPipe[1]);
+    close(stderrPipe[0]); close(stderrPipe[1]);
+    Napi::Error::New(env, "fork failed").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  // Calculate elapsed CPU time (user + system)
-  // taskinfo times are in nanoseconds
-  uint64_t userTimeNanos = taskinfo.pti_total_user;
-  uint64_t systemTimeNanos = taskinfo.pti_total_system;
-  uint64_t cpuNanos = userTimeNanos + systemTimeNanos;
-  double elapsedMs = static_cast<double>(cpuNanos) / 1000000.0;
+  if (pid == 0) {
+    // Child process
+    
+    // Redirect stdio
+    if (dup2(stdinPipe[0], STDIN_FILENO) < 0 ||
+        dup2(stdoutPipe[1], STDOUT_FILENO) < 0 ||
+        dup2(stderrPipe[1], STDERR_FILENO) < 0) {
+      perror("dup2 failed");
+      _exit(1);
+    }
 
-  // Get memory stats
-  // pti_resident_size: current resident memory in bytes
-  // Note: macOS doesn't provide a direct "peak RSS" in proc_pidinfo like Linux/Windows
-  // We would need to track it ourselves or use different APIs
-  // For now, return current RSS as both values
-  uint64_t rssBytes = taskinfo.pti_resident_size;
+    // Close all pipe FDs
+    close(stdinPipe[0]); close(stdinPipe[1]);
+    close(stdoutPipe[0]); close(stdoutPipe[1]);
+    close(stderrPipe[0]); close(stderrPipe[1]);
+
+    // Set resource limits
+    if (timeoutMs > 0) {
+      struct rlimit cpuLimit;
+      rlim_t seconds = (timeoutMs + 999) / 1000;
+      if (seconds == 0) seconds = 1;
+      cpuLimit.rlim_cur = seconds;
+      cpuLimit.rlim_max = seconds;
+      setrlimit(RLIMIT_CPU, &cpuLimit);
+    }
+
+    if (memoryLimitBytes > 0) {
+      struct rlimit memLimit;
+      rlim_t limit = static_cast<rlim_t>(memoryLimitBytes);
+      memLimit.rlim_cur = limit;
+      memLimit.rlim_max = limit;
+      setrlimit(RLIMIT_AS, &memLimit);
+    }
+
+    // Change directory
+    if (!cwd.empty()) {
+      chdir(cwd.c_str());
+    }
+
+    // Prepare argv
+    std::vector<char*> argv;
+    argv.push_back(const_cast<char*>(command.c_str()));
+    for (auto& arg : args) {
+      argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    // Prepare envp
+    std::vector<char*> envp;
+    for (auto& s : envStrs) {
+      envp.push_back(const_cast<char*>(s.c_str()));
+    }
+    envp.push_back(nullptr);
+    
+    if (!envStrs.empty()) {
+      environ = envp.data();
+    }
+
+    // Execute
+    execvp(command.c_str(), argv.data());
+    
+    // If exec fails
+    perror("exec failed");
+    _exit(1);
+  }
+
+  // Parent process
+  // Notify JS that the process has spawned
+  onSpawn.Call({});
+
+  // Close child-side pipe ends
+  close(stdinPipe[0]);
+  close(stdoutPipe[1]);
+  close(stderrPipe[1]);
+
+  // Start monitoring immediataely
+  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
+  auto promise = worker->GetPromise();
+  worker->Queue();
 
   Napi::Object result = Napi::Object::New(env);
-  result.Set("elapsedMs", Napi::Number::New(env, elapsedMs));
-  result.Set("rss", Napi::Number::New(env, static_cast<double>(rssBytes)));
-  result.Set("peakRss", Napi::Number::New(env, static_cast<double>(rssBytes)));
+  result.Set("pid", Napi::Number::New(env, pid));
+  result.Set("result", promise);
+  
+  Napi::Array stdio = Napi::Array::New(env, 3);
+  stdio.Set(uint32_t(0), Napi::Number::New(env, stdinPipe[1])); // Parent writes to index 1
+  stdio.Set(uint32_t(1), Napi::Number::New(env, stdoutPipe[0])); // Parent reads from index 0
+  stdio.Set(uint32_t(2), Napi::Number::New(env, stderrPipe[0])); // Parent reads from index 0
+  result.Set("stdio", stdio);
+
   return result;
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  exports.Set("waitForProcess",
-              Napi::Function::New(env, WaitForProcess, "waitForProcess"));
-  exports.Set("getDarwinProcessStats",
-              Napi::Function::New(env, GetDarwinProcessStats,
-                                  "getDarwinProcessStats"));
+  exports.Set("spawn",
+              Napi::Function::New(env, SpawnProcess, "spawn"));
   return exports;
-}
 }
 
 } // namespace
