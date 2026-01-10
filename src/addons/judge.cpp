@@ -770,6 +770,14 @@ public:
       return;
     }
 
+    // CRITICAL: Start reading stdout/stderr IMMEDIATELY after spawn
+    // to ensure no output is lost, especially for fast-completing commands
+    // on macOS where pipe buffering behavior may differ
+    uv_read_start(reinterpret_cast<uv_stream_t *>(&ctx_->stdoutPipe),
+                  AllocBuffer, OnStdoutRead);
+    uv_read_start(reinterpret_cast<uv_stream_t *>(&ctx_->stderrPipe),
+                  AllocBuffer, OnStderrRead);
+
 #if defined(__linux__)
     // Open a pidfd to prevent PID reuse
     ctx_->pidfd = pidfd_open(ctx_->process.pid, 0);
@@ -890,11 +898,6 @@ public:
       }
     }
 #endif
-
-    uv_read_start(reinterpret_cast<uv_stream_t *>(&ctx_->stdoutPipe),
-                  AllocBuffer, OnStdoutRead);
-    uv_read_start(reinterpret_cast<uv_stream_t *>(&ctx_->stderrPipe),
-                  AllocBuffer, OnStderrRead);
 
     // Set up async handle for real-time stdin writes from main thread
     ctx_->stdinState = stdinState_;

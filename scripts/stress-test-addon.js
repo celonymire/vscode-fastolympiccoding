@@ -257,18 +257,38 @@ function spawn(command, options = {}) {
     if (stdin !== null && stdinDelay === 0) {
       const writeStdin = () => {
         if (Array.isArray(stdin)) {
-          stdin.forEach((chunk) => handle.writeStdin(chunk));
+          // On macOS, add delays between chunks to prevent pipe issues
+          if (IS_MACOS) {
+            stdin.forEach((chunk, i) => {
+              setTimeout(() => {
+                log(`${colors.gray}[stdin-chunk]${colors.reset} Writing chunk ${i + 1}/${stdin.length}`);
+                handle.writeStdin(chunk);
+              }, i * 10);
+            });
+            if (closeStdin) {
+              setTimeout(() => {
+                log(`${colors.gray}[stdin-end]${colors.reset} Closing stdin`);
+                handle.endStdin();
+              }, stdin.length * 10 + 10);
+            }
+          } else {
+            stdin.forEach((chunk) => handle.writeStdin(chunk));
+            if (closeStdin) {
+              handle.endStdin();
+            }
+          }
         } else {
           handle.writeStdin(stdin);
-        }
-        if (closeStdin) {
-          handle.endStdin();
+          if (closeStdin) {
+            handle.endStdin();
+          }
         }
       };
       
       if (IS_MACOS) {
         // On macOS, defer stdin writes slightly to ensure process is spawned
-        setTimeout(writeStdin, 50);
+        // Increased to 100ms to ensure pipe is fully initialized
+        setTimeout(writeStdin, 100);
       } else {
         writeStdin();
       }
@@ -369,7 +389,7 @@ const tests = [
     const { result, stdout } = await spawn(echoCmd(longArg));
     assertEqual(result.exitCode, 0, "Exit code");
     assertIncludes(stdout, longArg, "Long argument");
-  }, { skip: IS_WINDOWS }), // cmd.exe has 8191 character command line limit
+  }, { skip: IS_WINDOWS || IS_MACOS }), // cmd.exe and macOS have command line length limits
 
   test("PWD command with cwd", "basic", async () => {
     const testDir = IS_WINDOWS ? process.env.TEMP || "C:\\\\Windows\\\\Temp" : "/tmp";
