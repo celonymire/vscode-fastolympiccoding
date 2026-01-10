@@ -45,7 +45,8 @@ function spawnPromise(args, options = {}) {
     input = null
   } = options;
 
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    (async () => {
     const command = process.execPath;
     
     // Generate unique pipe names
@@ -141,12 +142,13 @@ function spawnPromise(args, options = {}) {
             () => {} // onSpawn
         );
         
-    } catch (e) {
+    } catch (err) {
         if (serverIn) serverIn.close();
         if (serverOut) serverOut.close();
         if (serverErr) serverErr.close();
-        return reject(e);
+        reject(err);
     }
+    })();
   });
 }
 
