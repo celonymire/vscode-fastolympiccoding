@@ -412,7 +412,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
 
-        testcase.process.process?.kill();
+        testcase.process.stop();
       })
       .on("close", () => {
         testcase.process.process?.stdin.end();
@@ -436,7 +436,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
 
-        testcase.interactorProcess.process?.kill();
+        testcase.interactorProcess.stop();
       })
       .on("close", () => {
         testcase.interactorProcess.process?.stdin.end();
@@ -1119,8 +1119,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       void vscode.debug.stopDebugging(vscode.debug.activeDebugSession);
     }
 
-    testcase.process.process?.kill();
-    testcase.interactorProcess.process?.kill();
+    testcase.process.stop();
+    testcase.interactorProcess.stop();
   }
 
   private _delete(id: number) {
