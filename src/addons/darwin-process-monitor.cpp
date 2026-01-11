@@ -79,13 +79,25 @@ static ProcessStats GetProcessStats(pid_t pid) {
   struct rusage_info_v2 ri;
   ProcessStats stats = {0, 0, 0, false};
   
+  // Use mach_timebase_info to convert ticks to nanoseconds.
+  // This is required because on Apple Silicon (M1+), time values are in Mach ticks,
+  // not nanoseconds, even for proc_pid_rusage in some contexts or versions.
+  // On Intel, this ratio is typically 1/1.
+  static mach_timebase_info_data_t timebase = {0, 0};
+  if (timebase.denom == 0) {
+      mach_timebase_info(&timebase);
+  }
+  
   // Use proc_pid_rusage with RUSAGE_INFO_V2
   // We cast &ri to (rusage_info_t *) because the API expects a pointer to the buffer pointer (void**)
   // effectively, but implementation-wise it treats it as the buffer address.
   if (proc_pid_rusage(pid, RUSAGE_INFO_V2, (rusage_info_t *)&ri) == 0) {
     stats.resident_size = ri.ri_resident_size;
     stats.phys_footprint = ri.ri_phys_footprint;
-    stats.total_cpu_time_ns = ri.ri_user_time + ri.ri_system_time;
+    
+    uint64_t total_ticks = ri.ri_user_time + ri.ri_system_time;
+    stats.total_cpu_time_ns = total_ticks * timebase.numer / timebase.denom;
+    
     stats.success = true;
   }
   return stats;
