@@ -22,7 +22,7 @@
 #include <algorithm>
 
 // macOS implementation using kqueue for efficient process monitoring
-// Combined with resource limits enforced by rlimit-wrapper and wait4 for stats
+// Combined with resource limits enforced by polling and wait4 for stats
 //
 // Exports:
 //   spawn(...) -> { pid: number, result: Promise<AddonResult> }
@@ -31,13 +31,29 @@
 namespace {
 
 // AsyncWorker for waiting on process completion
-// Helper to get Resident Set Size (RSS) in bytes
-static long GetRSS(pid_t pid) {
-  struct proc_taskinfo pti;
-  if (proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &pti, sizeof(pti)) == sizeof(pti)) {
-    return pti.pti_resident_size;
+// Structure to hold process statistics
+struct ProcessStats {
+  uint64_t resident_size;
+  uint64_t phys_footprint;
+  uint64_t total_cpu_time_ns;
+  bool success;
+};
+
+// Helper to get process stats using PROC_PIDRUSAGE
+// This provides CPU time in nanoseconds (architecture independent)
+// and strict memory usage (physical footprint).
+static ProcessStats GetProcessStats(pid_t pid) {
+  struct rusage_info_v2 ri;
+  ProcessStats stats = {0, 0, 0, false};
+  
+  // Try to get usage info. return value is bytes written.
+  if (proc_pidinfo(pid, PROC_PIDRUSAGE, 0, &ri, sizeof(ri)) > 0) {
+    stats.resident_size = ri.ri_resident_size;
+    stats.phys_footprint = ri.ri_phys_footprint;
+    stats.total_cpu_time_ns = ri.ri_user_time + ri.ri_system_time;
+    stats.success = true;
   }
-  return 0;
+  return stats;
 }
 
 // AsyncWorker for waiting on process completion
@@ -157,29 +173,45 @@ protected:
              }
          }
          
-         // Timeout or Interval Wakeup
-         if (nev == 0) {
-             // Check Memory
-             if (memoryLimitBytes_ > 0) {
-                 long rss = GetRSS(pid_);
-                 if (rss > (long)memoryLimitBytes_) {
-                     memoryLimitExceeded_ = true;
-                     kill(pid_, SIGKILL);
-                     break;
-                 }
-             }
-             
-             // Check Wall Clock Timeout
-             if (timeoutMs_ > 0) {
-                 auto now = std::chrono::steady_clock::now();
-                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
-                 if (elapsed > (long)timeoutMs_ * 2) {
-                     timedOut_ = true;
-                     kill(pid_, SIGKILL);
-                     break;
-                 }
-             }
-         }
+          // Timeout or Interval Wakeup
+          if (nev == 0) {
+              // Check Process Stats (CPU and Memory)
+              if (memoryLimitBytes_ > 0 || timeoutMs_ > 0) {
+                  ProcessStats stats = GetProcessStats(pid_);
+                  if (stats.success) {
+                      // Check Memory
+                      if (memoryLimitBytes_ > 0) {
+                          if (stats.resident_size > memoryLimitBytes_) {
+                              memoryLimitExceeded_ = true;
+                              kill(pid_, SIGKILL);
+                              break;
+                          }
+                      }
+                      
+                      // Check CPU Time
+                      if (timeoutMs_ > 0) {
+                          uint64_t cpuLimitNs = (uint64_t)timeoutMs_ * 1000000ULL;
+                          if (stats.total_cpu_time_ns > cpuLimitNs) {
+                              timedOut_ = true;
+                              kill(pid_, SIGKILL);
+                              break;
+                          }
+                      }
+                  }
+              }
+              
+              // Check Wall Clock Timeout (Safety net)
+              if (timeoutMs_ > 0) {
+                  auto now = std::chrono::steady_clock::now();
+                  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
+                  // Use a multiplier (e.g. 3x) for wall clock safety net to allow for I/O waits etc.
+                  if (elapsed > (long)timeoutMs_ * 3) {
+                      timedOut_ = true;
+                      kill(pid_, SIGKILL);
+                      break;
+                  }
+              }
+          }
        }
     }
 
@@ -383,17 +415,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     close(sockIn);
     close(sockOut);
     close(sockErr);
-
-    // Set resource limits
-    if (timeoutMs > 0) {
-      struct rlimit cpuLimit;
-      rlim_t seconds = (timeoutMs + 999) / 1000;
-      if (seconds == 0) seconds = 1;
-      cpuLimit.rlim_cur = seconds;
-      cpuLimit.rlim_max = seconds;
-      setrlimit(RLIMIT_CPU, &cpuLimit);
-    }
-
 
     // Change directory
     if (!cwd.empty()) {

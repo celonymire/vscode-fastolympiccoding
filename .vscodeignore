@@ -17,4 +17,3 @@
 !dist/win32-process-monitor.node
 !dist/linux-process-monitor.node
 !dist/darwin-process-monitor.node
-!dist/rlimit-wrapper
