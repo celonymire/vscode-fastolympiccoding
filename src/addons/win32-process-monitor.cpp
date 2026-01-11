@@ -131,7 +131,7 @@ protected:
       }
 
       // Calculate wait time for this slice
-      DWORD slice = 100; // Poll every 100ms
+      DWORD slice = 50; // Poll every 50ms
       DWORD waitMillis = slice;
       
       if (timeoutMs_ > 0) {
