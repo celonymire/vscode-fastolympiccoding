@@ -98,8 +98,12 @@ protected:
         struct timespec timeout;
         struct timespec* timeoutPtr = nullptr;
         if (timeoutMs_ > 0) {
-            timeout.tv_sec = timeoutMs_ / 1000;
-            timeout.tv_nsec = (timeoutMs_ % 1000) * 1000000;
+            // Use 2x timeout for Wall Clock leniency (CPU limit is enforced by RLIMIT_CPU)
+            // RLIMIT_CPU has second granularity and rounds up.
+            // We round up here too to ensure Wall Clock limit >= CPU limit (with 2x factor it will be >)
+            uint32_t seconds = (timeoutMs_ + 999) / 1000;
+            timeout.tv_sec = seconds * 2;
+            timeout.tv_nsec = 0;
             timeoutPtr = &timeout;
         }
 

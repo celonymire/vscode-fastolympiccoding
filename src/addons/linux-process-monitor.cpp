@@ -93,7 +93,8 @@ protected:
       pfds[1].events = POLLIN;
       
       // Wait for process exit, stop signal, or timeout
-      int pollTimeout = (timeoutMs_ > 0) ? static_cast<int>(timeoutMs_) : -1;
+      // Use 2x timeout for Wall Clock leniency (CPU limit is enforced by RLIMIT_CPU)
+      int pollTimeout = (timeoutMs_ > 0) ? static_cast<int>(timeoutMs_ * 2) : -1;
       int pollResult = poll(pfds, 2, pollTimeout);
       
       if (pollResult == -1) {
