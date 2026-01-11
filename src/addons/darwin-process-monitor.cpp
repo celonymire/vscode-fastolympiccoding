@@ -31,6 +31,39 @@
 namespace {
 
 // AsyncWorker for waiting on process completion
+// Define rusage_info_v2 if missing (older SDKs or strict headers)
+#ifndef RUSAGE_INFO_V2
+#define RUSAGE_INFO_V2 2
+struct rusage_info_v2 {
+    uint8_t  ri_uuid[16];
+    uint64_t ri_user_time;
+    uint64_t ri_system_time;
+    uint64_t ri_pkg_idle_wkups;
+    uint64_t ri_interrupt_wkups;
+    uint64_t ri_pageins;
+    uint64_t ri_wired_size;
+    uint64_t ri_resident_size;
+    uint64_t ri_phys_footprint;
+    uint64_t ri_proc_start_abstime;
+    uint64_t ri_proc_exit_abstime;
+    uint64_t ri_child_user_time;
+    uint64_t ri_child_system_time;
+    uint64_t ri_child_pkg_idle_wkups;
+    uint64_t ri_child_interrupt_wkups;
+    uint64_t ri_child_pageins;
+    uint64_t ri_child_elapsed_abstime;
+    uint64_t ri_diskio_bytesread;
+    uint64_t ri_diskio_byteswritten;
+};
+#endif
+
+extern "C" {
+    // Forward declare proc_pid_rusage
+    // It's available in macOS 10.9+ but might be missing from headers
+    typedef void *rusage_info_t;
+    int proc_pid_rusage(int pid, int flavor, rusage_info_t *buffer);
+}
+
 // Structure to hold process statistics
 struct ProcessStats {
   uint64_t resident_size;
@@ -39,15 +72,17 @@ struct ProcessStats {
   bool success;
 };
 
-// Helper to get process stats using PROC_PIDRUSAGE
+// Helper to get process stats using proc_pid_rusage
 // This provides CPU time in nanoseconds (architecture independent)
 // and strict memory usage (physical footprint).
 static ProcessStats GetProcessStats(pid_t pid) {
   struct rusage_info_v2 ri;
   ProcessStats stats = {0, 0, 0, false};
   
-  // Try to get usage info. return value is bytes written.
-  if (proc_pidinfo(pid, PROC_PIDRUSAGE, 0, &ri, sizeof(ri)) > 0) {
+  // Use proc_pid_rusage with RUSAGE_INFO_V2
+  // We cast &ri to (rusage_info_t *) because the API expects a pointer to the buffer pointer (void**)
+  // effectively, but implementation-wise it treats it as the buffer address.
+  if (proc_pid_rusage(pid, RUSAGE_INFO_V2, (rusage_info_t *)&ri) == 0) {
     stats.resident_size = ri.ri_resident_size;
     stats.phys_footprint = ri.ri_phys_footprint;
     stats.total_cpu_time_ns = ri.ri_user_time + ri.ri_system_time;
