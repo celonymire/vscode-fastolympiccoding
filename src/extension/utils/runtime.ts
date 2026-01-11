@@ -350,7 +350,7 @@ export class Runnable {
                   spawnResult.result
                 );
                 this._process = nativeProc as unknown as ChildProcessLike;
-                
+
                 // Proxy events from the native process to our internal emitter
                 nativeProc.once("spawn", () => this._emitter.emit("spawn"));
                 nativeProc.on("error", (err) => this._emitter.emit("error", err));
@@ -358,10 +358,12 @@ export class Runnable {
                 nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
                 nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
                 nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
-                nativeProc.once("close", (code, signal) => this._emitter.emit("close", code, signal));
+                nativeProc.once("close", (code, signal) =>
+                  this._emitter.emit("close", code, signal)
+                );
 
                 nativeSpawned = true;
-                
+
                 // Signal spawn success
                 nativeProc.emit("spawn");
                 resolveSpawn(true);
@@ -386,10 +388,9 @@ export class Runnable {
                   streamClosePromises.push(p);
                 }
 
-
                 Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
                   .then(([res]): void => {
-                     this.handleAddonResult(res);
+                    this.handleAddonResult(res);
                     this._exitCode = res.exitCode;
                     nativeProc.emit("exit", this._exitCode, null);
                     nativeProc.emit("close", this._exitCode, null);
@@ -432,20 +433,16 @@ export class Runnable {
               pipeNameErr,
               () => {} // Callback unused in this flow setup
             );
-
           })
           .catch((e) => {
             getLogger("runtime").warn(`Native spawn preparation failed: ${e}`);
             resolveSpawn(false);
             resolve();
           });
-
       } else {
         // Fallback or Error if monitor not available (but we expect it to be available)
         // Since we don't have a fallback impl in this snippet, we just error.
-        getLogger("runtime").error(
-          `Process monitor addon not found. Cannot spawn: ${commandName}`
-        );
+        getLogger("runtime").error(`Process monitor addon not found. Cannot spawn: ${commandName}`);
         resolveSpawn(false);
         resolve();
       }
@@ -496,7 +493,6 @@ export class Runnable {
     this._emitter.on(event, listener);
     return this;
   }
-
 
   private _computeTermination(): RunTermination {
     if (this._timedOut) {
