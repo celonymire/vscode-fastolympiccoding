@@ -258,6 +258,56 @@ test('Wall Clock Timeout: Sleep', { timeout: 10000 }, async () => {
     assert.ok(duration < 2500, `Process took ${duration}ms, expected ~1000ms`);
 });
 
+test('Execution: Spaced Paths', { timeout: 10000 }, async () => {
+    // 1. Create a directory with spaces
+    const tmpDir = require('os').tmpdir();
+    const spacedDir = path.join(tmpDir, 'foc space test');
+    if (!fs.existsSync(spacedDir)) fs.mkdirSync(spacedDir, { recursive: true });
+
+    // 2. Create a script inside it
+    const scriptPath = path.join(spacedDir, 'hello.js');
+    fs.writeFileSync(scriptPath, 'console.log("Spaced Hello");');
+    
+    // 3. Run it using node
+    // This tests ARGS with spaces (the script path)
+    const res = await spawnPromise([scriptPath]);
+    assert.strictEqual(res.exitCode, 0);
+    assert.match(res.output, /Spaced Hello/);
+
+    // 4. Try copying node executable to a spaced path (if possible/fast)
+    // Skipping full node copy as it might be permission heavy or slow. 
+    // Instead relying on args test which exercises QuoteArg logic similarly.
+    
+    // Cleanup
+    try { fs.rmSync(spacedDir, { recursive: true, force: true }); } catch (e) {}
+});
+
+test('Input/Output: Spaced Path Script', { timeout: 10000 }, async () => {
+    // 1. Create a directory with spaces
+    const tmpDir = require('os').tmpdir();
+    const spacedDir = path.join(tmpDir, 'foc space input test');
+    if (!fs.existsSync(spacedDir)) fs.mkdirSync(spacedDir, { recursive: true });
+
+    // 2. Create a script that reads stdin
+    const scriptPath = path.join(spacedDir, 'echo_stdin.js');
+    fs.writeFileSync(scriptPath, `
+        process.stdin.setEncoding('utf8');
+        process.stdin.on('data', (chunk) => {
+            process.stdout.write(chunk);
+        });
+    `);
+    
+    // 3. Run it and provide input
+    const inputStr = 'Hello From Spaced Path';
+    const res = await spawnPromise([scriptPath], { input: inputStr });
+    
+    assert.strictEqual(res.exitCode, 0);
+    assert.strictEqual(res.output, inputStr);
+
+    // Cleanup
+    try { fs.rmSync(spacedDir, { recursive: true, force: true }); } catch (e) {}
+});
+
 test('CPU Limit Enforcement: Multi-threaded', { timeout: 20000 }, async () => {
     // Tests that RLIMIT_CPU is strictly enforced even if wall clock is slower
     // 4 threads burning CPU should hit 3s CPU limit in < 1s wall time
