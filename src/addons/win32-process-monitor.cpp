@@ -307,8 +307,12 @@ protected:
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
     
-    // Check if exit code indicates a crash (Exception code >= 0xC0000000)
-    if (static_cast<unsigned int>(exitCode_) >= 0xC0000000) {
+    // Check if exit code indicates a crash:
+    // 1. NTSTATUS/Exception codes (>= 0xC0000000)
+    // 2. Node.js/Unix Signal Emulation (128 + Signal), Range 129-159
+    //    e.g. SIGABRT (6) -> 134, SIGSEGV (11) -> 139
+    if ((static_cast<unsigned int>(exitCode_) >= 0xC0000000) ||
+        (exitCode_ >= 129 && exitCode_ < 160)) {
        result.Set("exitCode", env.Null());
     } else {
        result.Set("exitCode", Napi::Number::New(env, exitCode_));
