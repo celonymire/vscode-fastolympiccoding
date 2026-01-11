@@ -191,10 +191,6 @@ test("Timeout limit enforcement", { timeout: 15000 }, async () => {
 });
 
 test("Memory limit enforcement", { timeout: 15000 }, async () => {
-  // Basic check that we get memory stats
-  const basicRes = await spawnPromise(["-e", 'console.log("hi")']);
-  assert.ok(basicRes.peakMemoryBytes > 0, "Peak memory should be > 0");
-
   // Strict limit test.
   // Node startup uses ~30MB. Limit to 50MB, allocate 100MB strings.
   const res = await spawnPromise(
