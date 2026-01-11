@@ -251,8 +251,8 @@ protected:
               if (timeoutMs_ > 0) {
                   auto now = std::chrono::steady_clock::now();
                   auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
-                  // Use a multiplier (e.g. 3x) for wall clock safety net to allow for I/O waits etc.
-                  if (elapsed > (long)timeoutMs_ * 3) {
+                  // Use a multiplier (e.g. 2x) for wall clock safety net to allow for I/O waits etc.
+                  if (elapsed > (long)timeoutMs_ * 2) {
                       timedOut_ = true;
                       kill(pid_, SIGKILL);
                       break;
