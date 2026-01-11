@@ -435,7 +435,7 @@ export class Runnable {
               pipeNameIn,
               pipeNameOut,
               pipeNameErr,
-              () => { } // Callback unused in this flow setup
+              () => {} // Callback unused in this flow setup
             );
           })
           .catch((e) => {

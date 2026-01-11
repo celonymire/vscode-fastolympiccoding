@@ -478,7 +478,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         } else if (maxSeverity === 1) {
           // The stress tester was stopped
           break;
-        } else if (this._solutionState.process.exitCode === null || this._judgeState.process.exitCode === null) {
+        } else if (
+          this._solutionState.process.exitCode === null ||
+          this._judgeState.process.exitCode === null
+        ) {
           // The one of the two processes crashed.
           break;
         } else if (this._judgeState.process.exitCode !== 0) {
