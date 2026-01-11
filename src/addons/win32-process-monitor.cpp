@@ -1,60 +1,66 @@
 #include <Windows.h>
+#include <cmath>
+#include <cstdint>
 #include <napi.h>
 #include <psapi.h>
-#include <cmath>
 #include <string>
-#include <cstdint>
 #include <vector>
 
 #pragma comment(lib, "psapi.lib")
 
 // Windows implementation using Job Objects for resource limit enforcement
 // Job Objects allow the OS to enforce time and memory limits directly
-// Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number, exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped: boolean }
-// Shared state for synchronization between worker and JS thread
+// Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number,
+// exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped:
+// boolean } Shared state for synchronization between worker and JS thread
 struct SharedStopState {
-    HANDLE hStopEvent = NULL;
-    std::mutex mutex;
-    bool closed = false;
-    
-    SharedStopState() {
-        hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL); // Manual reset, initially nonsignaled
+  HANDLE hStopEvent = NULL;
+  std::mutex mutex;
+  bool closed = false;
+
+  SharedStopState() {
+    hStopEvent = CreateEvent(NULL, TRUE, FALSE,
+                             NULL); // Manual reset, initially nonsignaled
+  }
+
+  ~SharedStopState() {
+    if (hStopEvent != NULL) {
+      CloseHandle(hStopEvent);
+      hStopEvent = NULL;
     }
-    
-    ~SharedStopState() {
-        if (hStopEvent != NULL) {
-            CloseHandle(hStopEvent);
-            hStopEvent = NULL;
-        }
-    }
-    
-    // Called by worker when it's done
-    void Close() {
-        std::lock_guard<std::mutex> lock(mutex);
-        closed = true;
-    }
-    
-    // Called by JS 'cancel' function
-    bool SignalStop() {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (closed || hStopEvent == NULL) return false;
-        
-        return SetEvent(hStopEvent);
-    }
+  }
+
+  // Called by worker when it's done
+  void Close() {
+    std::lock_guard<std::mutex> lock(mutex);
+    closed = true;
+  }
+
+  // Called by JS 'cancel' function
+  bool SignalStop() {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (closed || hStopEvent == NULL)
+      return false;
+
+    return SetEvent(hStopEvent);
+  }
 };
 
 // Windows implementation using Job Objects for resource limit enforcement
 // Job Objects allow the OS to enforce time and memory limits directly
-// Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number, exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped: boolean }
+// Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number,
+// exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped:
+// boolean }
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
-  WaitForProcessWorker(Napi::Env &env, HANDLE hProcess, DWORD pid, DWORD timeoutMs, uint64_t memoryLimitBytes,
+  WaitForProcessWorker(Napi::Env &env, HANDLE hProcess, DWORD pid,
+                       DWORD timeoutMs, uint64_t memoryLimitBytes,
                        std::shared_ptr<SharedStopState> sharedState)
-      : Napi::AsyncWorker(env), hProcess_(hProcess), pid_(pid), timeoutMs_(timeoutMs), 
-        memoryLimitBytes_(memoryLimitBytes), deferred_(env),
-        elapsedMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
-        timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
-        sharedState_(sharedState) {}
+      : Napi::AsyncWorker(env), hProcess_(hProcess), pid_(pid),
+        timeoutMs_(timeoutMs), memoryLimitBytes_(memoryLimitBytes),
+        deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
+        timedOut_(false), memoryLimitExceeded_(false), stopped_(false),
+        errorMsg_(""), sharedState_(sharedState) {}
 
   ~WaitForProcessWorker() {
     if (hProcess_ != NULL) {
@@ -95,19 +101,22 @@ protected:
     // Set time limit if specified (in 100-nanosecond intervals)
     if (timeoutMs_ > 0) {
       ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
-      jobLimits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = timeLimit100ns;
-      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_TIME;
+      jobLimits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart =
+          timeLimit100ns;
+      jobLimits.BasicLimitInformation.LimitFlags |=
+          JOB_OBJECT_LIMIT_PROCESS_TIME;
     }
 
     // Set memory limit if specified
     if (memoryLimitBytes_ > 0) {
       jobLimits.ProcessMemoryLimit = memoryLimitBytes_;
-      jobLimits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+      jobLimits.BasicLimitInformation.LimitFlags |=
+          JOB_OBJECT_LIMIT_PROCESS_MEMORY;
     }
 
     // Set the job limits
-    if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, 
-                                  &jobLimits, sizeof(jobLimits))) {
+    if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation,
+                                 &jobLimits, sizeof(jobLimits))) {
       CloseHandle(hJob);
       errorMsg_ = "Failed to set job object limits";
       return;
@@ -118,13 +127,15 @@ protected:
       // It's possible the process already exited before we could assign it
       DWORD exitCode = 0;
       if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
-        // Process is dead, so we can't assign it (and don't need to enforce limits)
-        // We continue to collect stats (though job stats will be empty/invalid, we fall back to process stats)
+        // Process is dead, so we can't assign it (and don't need to enforce
+        // limits) We continue to collect stats (though job stats will be
+        // empty/invalid, we fall back to process stats)
       } else {
-         // Real failure
-         CloseHandle(hJob);
-         errorMsg_ = "Failed to assign process to job object (Error: " + std::to_string(GetLastError()) + ")";
-         return;
+        // Real failure
+        CloseHandle(hJob);
+        errorMsg_ = "Failed to assign process to job object (Error: " +
+                    std::to_string(GetLastError()) + ")";
+        return;
       }
     }
 
@@ -137,18 +148,21 @@ protected:
     }
 
     // Wait loop for process to complete or be stopped externally
-    // We poll to check for Total CPU Time (User + Kernel) and enforce Wall Clock limit (2x CPU limit)
-    
+    // We poll to check for Total CPU Time (User + Kernel) and enforce Wall
+    // Clock limit (2x CPU limit)
+
     DWORD startTime = GetTickCount();
-    unsigned long long timeoutMsLong = static_cast<unsigned long long>(timeoutMs_);
-    
-    // We keep the OS-level User Time limit (set above in jobLimits) as a backup.
-    
+    unsigned long long timeoutMsLong =
+        static_cast<unsigned long long>(timeoutMs_);
+
+    // We keep the OS-level User Time limit (set above in jobLimits) as a
+    // backup.
+
     bool processExited = false;
 
     while (!processExited && !stopped_) {
       DWORD elapsedWall = GetTickCount() - startTime;
-      
+
       // 1. Wall Clock Check (2x CPU Limit for leniency)
       if (timeoutMs_ > 0 && elapsedWall >= timeoutMs_ * 2) {
         timedOut_ = true;
@@ -159,17 +173,19 @@ protected:
       // Calculate wait time for this slice
       DWORD slice = 50; // Poll every 50ms
       DWORD waitMillis = slice;
-      
+
       if (timeoutMs_ > 0) {
-         // Don't sleep past the hard wall limit
-         DWORD remaining = (timeoutMs_ * 2) - elapsedWall;
-         if (remaining < slice) waitMillis = remaining;
+        // Don't sleep past the hard wall limit
+        DWORD remaining = (timeoutMs_ * 2) - elapsedWall;
+        if (remaining < slice)
+          waitMillis = remaining;
       } else {
         waitMillis = slice;
       }
-      
-      HANDLE waitHandles[2] = { hProcess, hStopEvent };
-      DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, waitMillis);
+
+      HANDLE waitHandles[2] = {hProcess, hStopEvent};
+      DWORD waitResult =
+          WaitForMultipleObjects(2, waitHandles, FALSE, waitMillis);
 
       if (waitResult == WAIT_OBJECT_0) {
         // Process handle signaled -> Process exited
@@ -180,23 +196,25 @@ protected:
         stopped_ = true;
         break;
       } else if (waitResult == WAIT_TIMEOUT) {
-         // Slice finished, check CPU usage
-         if (timeoutMs_ > 0) {
-            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting;
-            if (QueryInformationJobObject(hJob, JobObjectBasicAccountingInformation,
-                                          &accounting, sizeof(accounting), NULL)) {
-               // TotalTime = User + Kernel
-               ULONGLONG totalTime100ns = accounting.TotalUserTime.QuadPart + accounting.TotalKernelTime.QuadPart;
-               // Convert 100ns units to ms: / 10000
-               ULONGLONG totalTimeMs = totalTime100ns / 10000;
-               
-               if (totalTimeMs > timeoutMsLong) {
-                 timedOut_ = true;
-                 stopped_ = true;
-                 break;
-               }
+        // Slice finished, check CPU usage
+        if (timeoutMs_ > 0) {
+          JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting;
+          if (QueryInformationJobObject(
+                  hJob, JobObjectBasicAccountingInformation, &accounting,
+                  sizeof(accounting), NULL)) {
+            // TotalTime = User + Kernel
+            ULONGLONG totalTime100ns = accounting.TotalUserTime.QuadPart +
+                                       accounting.TotalKernelTime.QuadPart;
+            // Convert 100ns units to ms: / 10000
+            ULONGLONG totalTimeMs = totalTime100ns / 10000;
+
+            if (totalTimeMs > timeoutMsLong) {
+              timedOut_ = true;
+              stopped_ = true;
+              break;
             }
-         }
+          }
+        }
       } else {
         // Failed
         CloseHandle(hJob);
@@ -218,11 +236,13 @@ protected:
 
     // Get final timing info and peak memory
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION extendedInfo;
-    bool hasExtendedInfo = QueryInformationJobObject(hJob, JobObjectExtendedLimitInformation,
-                                                    &extendedInfo, sizeof(extendedInfo), NULL);
+    bool hasExtendedInfo =
+        QueryInformationJobObject(hJob, JobObjectExtendedLimitInformation,
+                                  &extendedInfo, sizeof(extendedInfo), NULL);
 
     if (hasExtendedInfo) {
-      peakMemoryBytes_ = static_cast<uint64_t>(extendedInfo.PeakProcessMemoryUsed);
+      peakMemoryBytes_ =
+          static_cast<uint64_t>(extendedInfo.PeakProcessMemoryUsed);
     } else {
       // Fallback to process memory counters if job query fails
       PROCESS_MEMORY_COUNTERS pmc;
@@ -248,7 +268,8 @@ protected:
     }
     exitCode_ = static_cast<int>(exitCode);
 
-    // Check if process was killed due to exceeding limits (STATUS_JOB_TERMINATED_AND_DID_NOT_EXIT)
+    // Check if process was killed due to exceeding limits
+    // (STATUS_JOB_TERMINATED_AND_DID_NOT_EXIT)
     if (exitCode == 0xC0000044 || exitCode == 0x705) {
       // Calculate CPU time from final process times
       ULARGE_INTEGER userTime;
@@ -257,7 +278,8 @@ protected:
       ULONGLONG totalUserTime100ns = userTime.QuadPart;
 
       if (timeoutMs_ > 0) {
-        ULONGLONG timeLimit100ns = static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
+        ULONGLONG timeLimit100ns =
+            static_cast<ULONGLONG>(timeoutMs_) * 10000ULL;
         // If we reached the time limit (or very close to it), it's a timeout
         if (totalUserTime100ns >= timeLimit100ns * 0.95) {
           timedOut_ = true;
@@ -291,43 +313,44 @@ protected:
     kernelTime.HighPart = ftKernelFinal.dwHighDateTime;
     userTime.LowPart = ftUserFinal.dwLowDateTime;
     userTime.HighPart = ftUserFinal.dwHighDateTime;
-    double rawElapsedMs = static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
+    double rawElapsedMs =
+        static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
     elapsedMs_ = std::round(rawElapsedMs);
   }
 
   void OnOK() override {
     Napi::Env env = Env();
     Napi::Object result = Napi::Object::New(env);
-    
+
     if (!errorMsg_.empty()) {
       deferred_.Reject(Napi::Error::New(env, errorMsg_).Value());
       return;
     }
-    
+
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
-    result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
-    
+    result.Set("peakMemoryBytes",
+               Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
+
     // Check if exit code indicates a crash:
     // 1. NTSTATUS/Exception codes (>= 0xC0000000)
     // 2. Node.js/Unix Signal Emulation (128 + Signal), Range 129-159
     //    e.g. SIGABRT (6) -> 134, SIGSEGV (11) -> 139
     if ((static_cast<unsigned int>(exitCode_) >= 0xC0000000) ||
         (exitCode_ >= 129 && exitCode_ < 160)) {
-       result.Set("exitCode", env.Null());
+      result.Set("exitCode", env.Null());
     } else {
-       result.Set("exitCode", Napi::Number::New(env, exitCode_));
+      result.Set("exitCode", Napi::Number::New(env, exitCode_));
     }
 
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
-    result.Set("memoryLimitExceeded", Napi::Boolean::New(env, memoryLimitExceeded_));
+    result.Set("memoryLimitExceeded",
+               Napi::Boolean::New(env, memoryLimitExceeded_));
     result.Set("stopped", Napi::Boolean::New(env, stopped_));
-    
+
     deferred_.Resolve(result);
   }
 
-  void OnError(const Napi::Error &e) override {
-    deferred_.Reject(e.Value());
-  }
+  void OnError(const Napi::Error &e) override { deferred_.Reject(e.Value()); }
 
 private:
   HANDLE hProcess_;
@@ -345,20 +368,23 @@ private:
   std::shared_ptr<SharedStopState> sharedState_;
 };
 
-
 // Helper to convert UTF-8 string to UTF-16 wstring for Windows APIs
-std::wstring ToWString(const std::string& utf8) {
-  if (utf8.empty()) return L"";
-  int size_needed = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), NULL, 0);
+std::wstring ToWString(const std::string &utf8) {
+  if (utf8.empty())
+    return L"";
+  int size_needed =
+      MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), NULL, 0);
   std::wstring wstrTo(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), &wstrTo[0], size_needed);
+  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), &wstrTo[0],
+                      size_needed);
   return wstrTo;
 }
 
 // Helper to quote arguments for Windows command line
-std::wstring QuoteArg(const std::wstring& arg) {
+std::wstring QuoteArg(const std::wstring &arg) {
   // If empty, return pair of quotes
-  if (arg.empty()) return L"\"\"";
+  if (arg.empty())
+    return L"\"\"";
 
   // Check if quoting is necessary (contains space, tab, quote, or newline)
   if (arg.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
@@ -393,7 +419,6 @@ std::wstring QuoteArg(const std::wstring& arg) {
   return quoted;
 }
 
-
 // Arguments:
 // 0: command (string)
 // 1: args (array of strings)
@@ -410,7 +435,8 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (info.Length() < 9) {
-    Napi::TypeError::New(env, "Expected 9 arguments").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "Expected 9 arguments")
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -424,11 +450,13 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   std::string pipeNameErr = info[7].As<Napi::String>().Utf8Value();
   Napi::Function onSpawn = info[8].As<Napi::Function>();
 
-  uint64_t memoryLimitBytes = static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
+  uint64_t memoryLimitBytes =
+      static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
 
   // Prepare command line (Windows expects a single string)
   std::wstring wCommand = ToWString(command);
-  std::wstring cmdLine = QuoteArg(wCommand); // Quote the command path too just in case
+  std::wstring cmdLine =
+      QuoteArg(wCommand); // Quote the command path too just in case
   for (uint32_t i = 0; i < argsArray.Length(); i++) {
     std::string arg = argsArray.Get(i).As<Napi::String>().Utf8Value();
     cmdLine += L" " + QuoteArg(ToWString(arg));
@@ -437,38 +465,37 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   // Connect to the Named Pipes
   // CAUTION: The server side (Node.js) must be listening already.
   // We use CreateFile to open the client end of the pipe.
-  
+
   SECURITY_ATTRIBUTES sa;
   sa.nLength = sizeof(SECURITY_ATTRIBUTES);
   sa.bInheritHandle = TRUE;
   sa.lpSecurityDescriptor = NULL;
 
-  auto openPipe = [&](const std::string& name, DWORD access) -> HANDLE {
+  auto openPipe = [&](const std::string &name, DWORD access) -> HANDLE {
     std::wstring wName = ToWString(name);
-    HANDLE hPipe = CreateFileW(
-      wName.c_str(),
-      access,
-      0, // No sharing
-      &sa,
-      OPEN_EXISTING,
-      FILE_ATTRIBUTE_NORMAL,
-      NULL
-    );
+    HANDLE hPipe = CreateFileW(wName.c_str(), access,
+                               0, // No sharing
+                               &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     return hPipe;
   };
 
   // stdout/stderr are WRITTEN to by child (GENERIC_WRITE)
   // stdin is READ by child (GENERIC_READ)
-  
+
   HANDLE hStdin = openPipe(pipeNameIn, GENERIC_READ);
   HANDLE hStdout = openPipe(pipeNameOut, GENERIC_WRITE);
   HANDLE hStderr = openPipe(pipeNameErr, GENERIC_WRITE);
 
-  if (hStdin == INVALID_HANDLE_VALUE || hStdout == INVALID_HANDLE_VALUE || hStderr == INVALID_HANDLE_VALUE) {
-    if (hStdin != INVALID_HANDLE_VALUE) CloseHandle(hStdin);
-    if (hStdout != INVALID_HANDLE_VALUE) CloseHandle(hStdout);
-    if (hStderr != INVALID_HANDLE_VALUE) CloseHandle(hStderr);
-    Napi::Error::New(env, "Failed to connect to named pipes").ThrowAsJavaScriptException();
+  if (hStdin == INVALID_HANDLE_VALUE || hStdout == INVALID_HANDLE_VALUE ||
+      hStderr == INVALID_HANDLE_VALUE) {
+    if (hStdin != INVALID_HANDLE_VALUE)
+      CloseHandle(hStdin);
+    if (hStdout != INVALID_HANDLE_VALUE)
+      CloseHandle(hStdout);
+    if (hStderr != INVALID_HANDLE_VALUE)
+      CloseHandle(hStderr);
+    Napi::Error::New(env, "Failed to connect to named pipes")
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -486,18 +513,10 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   std::wstring wCwd = ToWString(cwd);
   LPCWSTR lpCwd = wCwd.empty() ? NULL : wCwd.c_str();
 
-  BOOL success = CreateProcessW(
-    NULL, 
-    &cmdLine[0], 
-    NULL, 
-    NULL, 
-    TRUE, 
-    CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, 
-    NULL, 
-    lpCwd, 
-    &siStartInfo, 
-    &piProcInfo
-  );
+  BOOL success = CreateProcessW(NULL, &cmdLine[0], NULL, NULL, TRUE,
+                                CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT |
+                                    CREATE_NO_WINDOW,
+                                NULL, lpCwd, &siStartInfo, &piProcInfo);
 
   CloseHandle(hStdin);
   CloseHandle(hStdout);
@@ -508,48 +527,52 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     return env.Null();
   }
 
-  // NOTE: We do NOT create the Job Object here. 
-  // We defer that to the WaitForProcessWorker so it can manage the Job lifetime 
+  // NOTE: We do NOT create the Job Object here.
+  // We defer that to the WaitForProcessWorker so it can manage the Job lifetime
   // and query it for statistics (Peak Memory, etc).
-  // Although this introduces a small window where the process runs without limits,
-  // it avoids double-assignment errors and complexity sharing the handle.
+  // Although this introduces a small window where the process runs without
+  // limits, it avoids double-assignment errors and complexity sharing the
+  // handle.
 
   ResumeThread(piProcInfo.hThread);
   CloseHandle(piProcInfo.hThread);
-  
+
   DWORD pid = piProcInfo.dwProcessId;
   // Duplicate process handle for the background worker thread
   HANDLE hProcessDup = NULL;
-  DuplicateHandle(GetCurrentProcess(), piProcInfo.hProcess, GetCurrentProcess(), &hProcessDup,
-                  0, FALSE, DUPLICATE_SAME_ACCESS);
+  DuplicateHandle(GetCurrentProcess(), piProcInfo.hProcess, GetCurrentProcess(),
+                  &hProcessDup, 0, FALSE, DUPLICATE_SAME_ACCESS);
   CloseHandle(piProcInfo.hProcess);
 
   // Notify JS
   onSpawn.Call({});
-  
+
   auto sharedState = std::make_shared<SharedStopState>();
 
   // Start monitoring
-  auto worker = new WaitForProcessWorker(env, hProcessDup, pid, timeoutMs, memoryLimitBytes, sharedState);
+  auto worker = new WaitForProcessWorker(env, hProcessDup, pid, timeoutMs,
+                                         memoryLimitBytes, sharedState);
   auto promise = worker->GetPromise();
   worker->Queue();
 
   Napi::Object result = Napi::Object::New(env);
   result.Set("pid", Napi::Number::New(env, pid));
   result.Set("result", promise);
-  
+
   // Expose cancel function
   // We capture sharedState by value (shared_ptr copy) in the lambda
-  result.Set("cancel", Napi::Function::New(env, [sharedState](const Napi::CallbackInfo& info) {
-      sharedState->SignalStop();
-  }, "cancel"));
+  result.Set("cancel", Napi::Function::New(
+                           env,
+                           [sharedState](const Napi::CallbackInfo &info) {
+                             sharedState->SignalStop();
+                           },
+                           "cancel"));
 
   return result;
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  exports.Set("spawn",
-              Napi::Function::New(env, SpawnProcess, "spawn"));
+  exports.Set("spawn", Napi::Function::New(env, SpawnProcess, "spawn"));
   return exports;
 }
 
