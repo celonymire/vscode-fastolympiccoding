@@ -206,9 +206,18 @@ test("Memory limit enforcement", { timeout: 15000 }, async () => {
   // Windows Job Object kills with specific code.
   // We mainly want to ensure it DIED and didn't run forever, and reported usage.
 
-  // Check if it was killed or reported limit exceeded
-  const killedByLimit = res.memoryLimitExceeded || res.exitCode !== 0;
-  assert.ok(killedByLimit, "Should fail due to memory limit");
+  // Check that the addon correctly identified memory limit exhaustion
+  if (res.memoryLimitExceeded !== true) {
+    console.log("Memory limit test result:", {
+      exitCode: res.exitCode,
+      memoryLimitExceeded: res.memoryLimitExceeded,
+      timedOut: res.timedOut,
+      peakMemoryBytes: res.peakMemoryBytes,
+      elapsedMs: res.elapsedMs
+    });
+  }
+  assert.strictEqual(res.memoryLimitExceeded, true, "memoryLimitExceeded should be true");
+  assert.notStrictEqual(res.exitCode, 0, "exitCode should be non-zero");
 });
 
 test("Large Output (Deadlock prevention)", { timeout: 20000 }, async () => {
@@ -247,13 +256,16 @@ test("Concurrency stress test", { timeout: 60000 }, async () => {
 
 test("Wall Clock Timeout: Sleep", { timeout: 10000 }, async () => {
   // Tests that sleeping processes are killed by wall clock timeout
+  // Policy matches 2x timeoutMs for leniency
   const start = Date.now();
+  // Request 1000ms timeout -> Enforced as 2000ms wall limit
+  // Sleep for 3000ms -> Should die around 2000ms
   const res = await spawnPromise(["-e", "setTimeout(() => {}, 3000)"], { timeoutMs: 1000 });
   const duration = Date.now() - start;
 
-  // We expect it to be killed around 1000ms
   assert.strictEqual(res.timedOut, true, "Should have timed out (wall clock)");
-  assert.ok(duration < 2500, `Process took ${duration}ms, expected ~1000ms`);
+  assert.ok(duration >= 2000, `Process took ${duration}ms, expected >= 2000ms (2x policy)`);
+  assert.ok(duration < 3000, `Process took ${duration}ms, expected < 3000ms`);
 });
 
 test("Execution: Spaced Paths", { timeout: 10000 }, async () => {
