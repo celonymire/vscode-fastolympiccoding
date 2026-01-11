@@ -57,10 +57,24 @@ jobs:
           - name: macOS ARM64
             os: macos-latest
             vsceTarget: "darwin-arm64"
+          - name: Alpine Linux x64
+            os: ubuntu-latest
+            container: node:lts-alpine
+            vsceTarget: "alpine-x64"
+          - name: Alpine Linux ARM64
+            os: ubuntu-24.04-arm
+            container: node:lts-alpine
+            vsceTarget: "alpine-arm64"
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     env:
       npm_config_cache: ${{ github.workspace }}/.npm-cache
     steps:
+      - name: Install dependencies (Alpine)
+        if: matrix.container == 'node:lts-alpine'
+        run: |
+          apk add --no-cache python3 make g++ linux-headers git bash
+
       - name: Setup Dev Drive (Windows)
         if: runner.os == 'Windows'
         uses: samypr100/setup-dev-drive@v3
@@ -69,6 +83,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Node.js
+        # Setup Node.js is not needed in the Alpine container (it's already the node image)
+        # But we keep it conditional for others
+        if: matrix.container != 'node:lts-alpine'
         uses: actions/setup-node@v6
         with:
           node-version: lts/*
