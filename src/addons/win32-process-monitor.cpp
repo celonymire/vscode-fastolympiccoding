@@ -110,31 +110,73 @@ protected:
       return;
     }
 
-    // Wait for process to complete or be stopped externally
-    // We wait on both the process handle and the stop event
-    HANDLE waitHandles[2] = { hProcess, hStopEvent_ };
-    DWORD waitMillis = (timeoutMs_ > 0) ? timeoutMs_ : INFINITE;
-    DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, waitMillis);
-
-    bool processExited = false;
+    // Wait loop for process to complete or be stopped externally
+    // We poll to check for Total CPU Time (User + Kernel) and enforce Wall Clock limit (2x CPU limit)
     
-    if (waitResult == WAIT_OBJECT_0) {
-      // Process handle signaled -> Process exited
-      processExited = true;
-    } else if (waitResult == WAIT_OBJECT_0 + 1) {
-      // Stop event signaled -> External stop
-      stopped_ = true;
-    } else if (waitResult == WAIT_TIMEOUT) {
-        // Timeout signaled
-        if (timeoutMs_ > 0) {
-            timedOut_ = true;
-        }
-        stopped_ = true; // treat as stopped/finished
-    } else {
-      // Failed or other error
-      CloseHandle(hJob);
-      errorMsg_ = "WaitForMultipleObjects failed";
-      return;
+    DWORD startTime = GetTickCount();
+    unsigned long long timeoutMsLong = static_cast<unsigned long long>(timeoutMs_);
+    
+    // We keep the OS-level User Time limit (set above in jobLimits) as a backup.
+    
+    bool processExited = false;
+
+    while (!processExited && !stopped_) {
+      DWORD elapsedWall = GetTickCount() - startTime;
+      
+      // 1. Wall Clock Check (2x CPU Limit for leniency)
+      if (timeoutMs_ > 0 && elapsedWall >= timeoutMs_ * 2) {
+        timedOut_ = true;
+        stopped_ = true;
+        break;
+      }
+
+      // Calculate wait time for this slice
+      DWORD slice = 100; // Poll every 100ms
+      DWORD waitMillis = slice;
+      
+      if (timeoutMs_ > 0) {
+         // Don't sleep past the hard wall limit
+         DWORD remaining = (timeoutMs_ * 2) - elapsedWall;
+         if (remaining < slice) waitMillis = remaining;
+      } else {
+        waitMillis = slice;
+      }
+      
+      HANDLE waitHandles[2] = { hProcess, hStopEvent_ };
+      DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, waitMillis);
+
+      if (waitResult == WAIT_OBJECT_0) {
+        // Process handle signaled -> Process exited
+        processExited = true;
+        break;
+      } else if (waitResult == WAIT_OBJECT_0 + 1) {
+        // Stop event signaled -> External stop
+        stopped_ = true;
+        break;
+      } else if (waitResult == WAIT_TIMEOUT) {
+         // Slice finished, check CPU usage
+         if (timeoutMs_ > 0) {
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting;
+            if (QueryInformationJobObject(hJob, JobObjectBasicAccountingInformation,
+                                          &accounting, sizeof(accounting), NULL)) {
+               // TotalTime = User + Kernel
+               ULONGLONG totalTime100ns = accounting.TotalUserTime.QuadPart + accounting.TotalKernelTime.QuadPart;
+               // Convert 100ns units to ms: / 10000
+               ULONGLONG totalTimeMs = totalTime100ns / 10000;
+               
+               if (totalTimeMs > timeoutMsLong) {
+                 timedOut_ = true;
+                 stopped_ = true;
+                 break;
+               }
+            }
+         }
+      } else {
+        // Failed
+        CloseHandle(hJob);
+        errorMsg_ = "WaitForMultipleObjects failed";
+        return;
+      }
     }
 
     // Handle external stop request or timeout
@@ -194,6 +236,12 @@ protected:
           memoryLimitExceeded_ = true;
         }
       } else {
+        memoryLimitExceeded_ = true;
+      }
+    } else if (exitCode != 0 && memoryLimitBytes_ > 0) {
+      // If it failed for other reasons (like V8 aborting on OOM)
+      // check if we were close to or over the memory limit.
+      if (peakMemoryBytes_ >= memoryLimitBytes_ * 0.9) {
         memoryLimitExceeded_ = true;
       }
     }
