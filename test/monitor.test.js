@@ -379,3 +379,23 @@ test("Thread Pool Concurrency (libuv)", { timeout: 15000 }, async () => {
     `Total time ${totalTime}ms suggest thread pool exhaustion or serialization`
   );
 });
+
+test("Elapsed Time Accuracy", { timeout: 20000 }, async () => {
+  // Test busy loop CPU time measurement accuracy
+  const cases = [100, 500, 1200];
+  
+  for (const duration of cases) {
+    const res = await spawnPromise(
+        ["-e", `const start = Date.now(); while(Date.now() - start < ${duration});`]
+    );
+    
+    // Check that we're within reasonable bounds.
+    // elapsedMs should be at least the duration.
+    // Allowed overhead: 200ms (Node startup, shutdown, time slices)
+    assert.ok(res.elapsedMs >= duration, `Elapsed ${res.elapsedMs}ms < Duration ${duration}ms`);
+    assert.ok(
+        res.elapsedMs < duration + 200, 
+        `Elapsed ${res.elapsedMs}ms > Duration ${duration}ms + 200ms overhead`
+    );
+  }
+});
