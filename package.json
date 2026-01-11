@@ -426,14 +426,14 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json",
     "build": "rspack build --mode development",
     "prod": "rspack build --mode production",
-    "watch": "rspack build --watch --mode development"
+    "watch": "rspack build --watch --mode development",
+    "test": "node test/monitor.test.js"
   },
   "author": "Sam Huang",
   "license": "MIT",
   "devDependencies": {
     "@rspack/cli": "^1.6.7",
     "@types/node": "^22.19.2",
-    "@types/pidusage": "^2.0.5",
     "@types/vscode": "1.74.0",
     "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
@@ -456,7 +456,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "pidusage": "^4.0.1",
     "valibot": "^1.2.0"
   }
 }

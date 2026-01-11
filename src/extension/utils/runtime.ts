@@ -1,12 +1,10 @@
-import * as childProcess from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as net from "node:net";
+import os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-
-import pidusage from "pidusage";
 
 import { getFileRunSettings, ReadonlyTerminal } from "./vscode";
 import { getLogger } from "./logging";
@@ -21,13 +19,80 @@ function arrayEquals<T>(a: T[], b: T[]): boolean {
   return a.every((value, index) => value === b[index]);
 }
 
-type Win32MemoryAddon = {
-  getWin32MemoryStats: (pid: number) => { rss: number; peakRss: number };
+type AddonResult = {
+  elapsedMs: number;
+  peakMemoryBytes: number;
+  exitCode: number;
+  timedOut: boolean;
+  memoryLimitExceeded: boolean;
+  stopped: boolean;
 };
 
-type LinuxMemoryAddon = {
-  getLinuxMemoryStats: (pid: number) => { rss: number; peakRss: number };
+type NativeSpawnResult = {
+  pid: number;
+  stdio: [number, number, number]; // stdin, stdout, stderr FDs
+  result: Promise<AddonResult>;
 };
+
+type ProcessMonitorAddon = {
+  spawn: (
+    command: string,
+    args: string[],
+    cwd: string,
+    timeoutMs: number,
+    memoryLimitMB: number,
+    pipeIn: string,
+    pipeOut: string,
+    pipeErr: string,
+    onSpawn: () => void
+  ) => NativeSpawnResult;
+};
+
+let processMonitor: ProcessMonitorAddon | null = null;
+let processMonitorLoaded = false;
+
+function getNativeProcessMonitor(): ProcessMonitorAddon | null {
+  if (processMonitorLoaded) {
+    return processMonitor;
+  }
+
+  processMonitorLoaded = true;
+  let addonPath = "";
+
+  try {
+    if (process.platform === "linux") {
+      addonPath = path.join(__dirname, "linux-process-monitor.node");
+    } else if (process.platform === "darwin") {
+      addonPath = path.join(__dirname, "darwin-process-monitor.node");
+    } else if (process.platform === "win32") {
+      addonPath = path.join(__dirname, "win32-process-monitor.node");
+    } else {
+      return null;
+    }
+
+    if (!fs.existsSync(addonPath)) {
+      getLogger("runtime").warn(`Process monitor addon not found at ${addonPath}`);
+      return null;
+    }
+
+    const nodeRequire = createRequire(__filename);
+    const loaded: unknown = nodeRequire(addonPath);
+
+    if (loaded && typeof loaded === "object" && "spawn" in loaded) {
+      processMonitor = loaded as ProcessMonitorAddon;
+      return processMonitor;
+    }
+
+    getLogger("runtime").warn(`Process monitor addon found but invalid signature at ${addonPath}`);
+    return null;
+  } catch (err) {
+    const logger = getLogger("runtime");
+    logger.warn(
+      `Process monitor addon unavailable (${process.platform}), using fallback: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
 
 // ============================================================================
 // RunSession API Types
@@ -38,8 +103,7 @@ export type RunTermination =
   | "timeout" // killed by timeout
   | "memory" // killed by memory limit
   | "stopped" // stopped by caller
-  | "exit" // normal exit (zero exit code)
-  | "signal"; // killed by OS signal
+  | "exit"; // normal exit (zero exit code)
 
 export function terminationSeverityNumber(termination: RunTermination): number {
   switch (termination) {
@@ -49,12 +113,10 @@ export function terminationSeverityNumber(termination: RunTermination): number {
       return 1;
     case "error":
       return 2;
-    case "signal":
-      return 3;
     case "memory":
-      return 4;
+      return 3;
     case "timeout":
-      return 5;
+      return 4;
   }
 }
 
@@ -66,10 +128,8 @@ export function severityNumberToStatus(severity: number): Status {
     case 2:
       return "WA";
     case 3:
-      return "RE";
-    case 4:
       return "ML";
-    case 5:
+    case 4:
       return "TL";
     default:
       return "RE";
@@ -86,8 +146,6 @@ export function mapCompilationTermination(termination: RunTermination): Status {
       return "NA";
     case "error":
       return "CE";
-    case "signal":
-      return "RE";
     case "exit":
       return "NA";
     default:
@@ -105,78 +163,10 @@ export function mapTestcaseTermination(termination: RunTermination): Status {
       return "NA";
     case "error":
       return "RE";
-    case "signal":
-      return "RE";
     case "exit":
       return "NA";
     default:
       return "RE";
-  }
-}
-
-let win32MemoryAddon: Win32MemoryAddon | null = null;
-
-function getWin32MemoryAddon(): Win32MemoryAddon | null {
-  if (win32MemoryAddon !== null) {
-    return win32MemoryAddon;
-  }
-
-  try {
-    // Load from the bundled native addon in dist/
-    const addonPath = path.join(__dirname, "win32-memory-stats.node");
-    if (!fs.existsSync(addonPath)) {
-      return null;
-    }
-
-    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
-    const nodeRequire = createRequire(__filename);
-    const loaded: unknown = nodeRequire(addonPath);
-
-    if (loaded && typeof loaded === "object" && "getWin32MemoryStats" in loaded) {
-      win32MemoryAddon = loaded as Win32MemoryAddon;
-      return win32MemoryAddon;
-    }
-
-    return null;
-  } catch (err) {
-    const logger = getLogger("runtime");
-    logger.warn(
-      `Windows memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
-    );
-    return null;
-  }
-}
-
-let linuxMemoryAddon: LinuxMemoryAddon | null = null;
-
-function getLinuxMemoryAddon(): LinuxMemoryAddon | null {
-  if (linuxMemoryAddon !== null) {
-    return linuxMemoryAddon;
-  }
-
-  try {
-    // Load from the bundled native addon in dist/
-    const addonPath = path.join(__dirname, "linux-memory-stats.node");
-    if (!fs.existsSync(addonPath)) {
-      return null;
-    }
-
-    // IMPORTANT: use Node's real require; bundlers like rspack/webpack can rewrite `require()`.
-    const nodeRequire = createRequire(__filename);
-    const loaded: unknown = nodeRequire(addonPath);
-
-    if (loaded && typeof loaded === "object" && "getLinuxMemoryStats" in loaded) {
-      linuxMemoryAddon = loaded as LinuxMemoryAddon;
-      return linuxMemoryAddon;
-    }
-
-    return null;
-  } catch (err) {
-    const logger = getLogger("runtime");
-    logger.warn(
-      `Linux memory addon unavailable, using pidusage fallback (performance degraded): ${err instanceof Error ? err.message : String(err)}`
-    );
-    return null;
   }
 }
 
@@ -191,205 +181,276 @@ type ListenerCallback =
   | ((code: number | null, signal: NodeJS.Signals | null) => void)
   | ((err: Error) => void);
 
+import { EventEmitter } from "node:events";
+
+class NativeChildProcess extends EventEmitter {
+  pid: number;
+  stdin: net.Socket;
+  stdout: net.Socket;
+  stderr: net.Socket;
+  killed: boolean = false;
+  // The promise that resolves when the process exits
+  readonly result: Promise<AddonResult>;
+
+  constructor(
+    pid: number,
+    io: [net.Socket, net.Socket, net.Socket],
+    resultPromise: Promise<AddonResult>
+  ) {
+    super();
+    this.pid = pid;
+    this.result = resultPromise;
+
+    this.stdin = io[0];
+    this.stdout = io[1];
+    this.stderr = io[2];
+    this.stdout.setEncoding("utf-8");
+    this.stderr.setEncoding("utf-8");
+  }
+
+  kill(signal: NodeJS.Signals = "SIGTERM") {
+    try {
+      process.kill(this.pid, signal);
+      this.killed = true;
+    } catch {
+      // Ignore ESRCH
+    }
+  }
+}
+
+// Basic structural typing to match ChildProcess where we use it
+interface ChildProcessLike {
+  pid?: number;
+  stdin: NodeJS.WritableStream;
+  stdout: NodeJS.ReadableStream;
+  stderr: NodeJS.ReadableStream;
+  on(event: string, listener: ListenerCallback): this;
+  once(event: string, listener: ListenerCallback): this;
+  off(event: string, listener: ListenerCallback): this;
+  removeAllListeners(event?: string): this;
+  kill(signal?: NodeJS.Signals): boolean;
+}
+
 export class Runnable {
-  // Use a short interval to get more accurate peak memory usage.
-  private static readonly MEMORY_SAMPLE_INTERVAL_MS = 100;
-
-  private static readonly BYTES_PER_MEGABYTE = 1024 * 1024;
-
-  private _process: childProcess.ChildProcessWithoutNullStreams | undefined = undefined;
+  private _process: ChildProcessLike | undefined = undefined;
+  private _emitter = new EventEmitter();
   private _promise: Promise<void> | undefined = undefined;
   private _spawnPromise: Promise<boolean> | undefined = undefined;
   private _elapsed = 0;
-  private _signal: NodeJS.Signals | null = null;
-  private _abortController: AbortController | null = null;
-  private _combinedAbortSignal: AbortSignal | null = null;
   private _timedOut = false;
-  private _exitCode: number | null = 0;
-  private _memoryCancellationTokenSource: vscode.CancellationTokenSource | null = null;
-  private _memorySampleTimeout: NodeJS.Timeout | null = null;
+  private _exitCode: number | null = null;
   private _maxMemoryBytes = 0;
-  private _memoryLimitBytes = 0;
   private _memoryLimitExceeded = false;
+  private _stopped = false;
 
-  private async _sampleMemory(pid: number) {
-    try {
-      if (process.platform === "win32") {
-        const addon = getWin32MemoryAddon();
-        if (addon) {
-          const memStats = addon.getWin32MemoryStats(pid);
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-          return;
-        } else {
-          // fallback to pidusage if addon not available or the addon failed
-          // to get the memory stats
-        }
-      }
-
-      if (process.platform === "linux") {
-        const addon = getLinuxMemoryAddon();
-        if (addon) {
-          const memStats = addon.getLinuxMemoryStats(pid);
-          // Prefer kernel high-water mark when available (monotonic).
-          this._maxMemoryBytes = Math.max(this._maxMemoryBytes, memStats.peakRss);
-          return;
-        } else {
-          // fallback to pidusage if addon not available or the addon failed
-          // to get the memory stats
-        }
-      }
-
-      const stats = await pidusage(pid);
-      this._maxMemoryBytes = Math.max(this._maxMemoryBytes, stats.memory);
-    } catch {
-      // pidusage can throw if the process exits between samples. Treat as terminal.
-      return;
-    }
-  }
-
-  private async _sampleMemoryRepeatedly(pid: number, token: vscode.CancellationToken) {
-    if (token.isCancellationRequested) {
-      return;
-    }
-
-    await this._sampleMemory(pid);
-
-    if (this._memoryLimitBytes > 0 && this._maxMemoryBytes > this._memoryLimitBytes) {
-      this._memoryLimitExceeded = true;
-      this._memoryCancellationTokenSource?.cancel();
-      const logger = getLogger("runtime");
-      logger.debug(
-        `Memory limit exceeded, killing process (pid=${pid}, maxMemoryMB=${Math.round(this._maxMemoryBytes / Runnable.BYTES_PER_MEGABYTE)}, limitMB=${Math.round(this._memoryLimitBytes / Runnable.BYTES_PER_MEGABYTE)})`
-      );
-      this._process?.kill();
-      return;
-    }
-
-    if (!token.isCancellationRequested) {
-      this._memorySampleTimeout = setTimeout(() => {
-        void this._sampleMemoryRepeatedly(pid, token);
-      }, Runnable.MEMORY_SAMPLE_INTERVAL_MS);
-    }
-  }
-
-  /**
-   * Clean up listeners and ongoing operations without resetting statistics.
-   * Called after process completion to prevent listener accumulation on reuse.
-   * Preserves elapsed time, memory stats, and exit information.
-   */
   cleanup(): void {
-    this._memoryCancellationTokenSource?.cancel();
-    this._memoryCancellationTokenSource?.dispose();
-    this._memoryCancellationTokenSource = null;
-    if (this._memorySampleTimeout) {
-      clearTimeout(this._memorySampleTimeout);
-      this._memorySampleTimeout = null;
-    }
-
-    // Remove listeners to prevent accumulation when Runnable is reused
+    this._emitter.removeAllListeners();
     if (this._process) {
       this._process.removeAllListeners();
-      this._process.stdout.removeAllListeners();
-      this._process.stderr.removeAllListeners();
+      // Use logical check to see if we can remove listeners on streams
+      // (NativeChildProcess streams are Node streams so they have removeAllListeners)
+      if (typeof this._process.stdout.removeAllListeners === "function") {
+        this._process.stdout.removeAllListeners();
+      }
+      if (typeof this._process.stderr.removeAllListeners === "function") {
+        this._process.stderr.removeAllListeners();
+      }
     }
+  }
+
+  handleAddonResult(result: AddonResult): void {
+    this._elapsed = result.elapsedMs;
+    this._maxMemoryBytes = result.peakMemoryBytes;
+    this._exitCode = result.exitCode;
+    this._timedOut = result.timedOut;
+    this._memoryLimitExceeded = result.memoryLimitExceeded;
+    this._stopped = result.stopped;
+  }
+
+  handleMonitorError(error: unknown): void {
+    const logger = getLogger("runtime");
+    logger.error(
+      `Process monitor addon failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   run(command: string[], timeout: number, memoryLimit: number, cwd?: string) {
     if (command.length === 0) {
       throw new Error("Runnable.run requires at least one command element");
     }
+
     const [commandName, ...commandArgs] = command;
-    // Reset metrics for a fresh run. All other state is set by event handlers or reassigned below.
+
     this.cleanup();
+    this._elapsed = 0;
+    this._exitCode = null;
     this._timedOut = false;
     this._maxMemoryBytes = 0;
     this._memoryLimitExceeded = false;
-    this._memoryLimitBytes = memoryLimit * Runnable.BYTES_PER_MEGABYTE;
-    this._abortController = new AbortController();
+    this._stopped = false;
 
-    const signals = [this._abortController.signal];
-    const timeoutSignal = timeout > 0 ? AbortSignal.timeout(timeout) : null;
-    if (timeoutSignal) {
-      signals.push(timeoutSignal);
-    }
-    this._combinedAbortSignal = AbortSignal.any(signals);
-    this._process = childProcess.spawn(commandName, commandArgs, {
-      cwd,
-      signal: this._combinedAbortSignal,
-    });
-    this._process.stdout.setEncoding("utf-8");
-    this._process.stderr.setEncoding("utf-8");
-
-    // Create spawn promise that resolves when process spawns or errors
     let resolveSpawn: (value: boolean) => void;
     this._spawnPromise = new Promise((resolve) => {
       resolveSpawn = resolve;
     });
 
     this._promise = new Promise((resolve) => {
-      let startTime: [number, number];
-      this._process?.once("spawn", () => {
-        startTime = process.hrtime();
-        this._memoryCancellationTokenSource = new vscode.CancellationTokenSource();
-        setTimeout(() => {
-          if (this._process?.pid) {
-            this._sampleMemoryRepeatedly(
-              this._process.pid,
-              this._memoryCancellationTokenSource!.token
-            );
-          }
-        });
+      const streamClosePromises: Promise<void>[] = [];
+      const monitor = getNativeProcessMonitor();
+      if (monitor) {
+        // Platform specific pipe creation
+        const createPipeServer = (name: string): Promise<net.Server> => {
+          return new Promise((resolve, reject) => {
+            const server = net.createServer();
+            server.listen(name, () => resolve(server));
+            server.on("error", reject);
+          });
+        };
 
-        resolveSpawn(true);
-      });
-      this._process?.once("error", (err) => {
-        startTime = process.hrtime(); // necessary since an invalid command can lead to process not spawned
-        const logger = getLogger("runtime");
-        logger.error(
-          `Process spawn failed (command=${commandName}, args=${commandArgs}, cwd=${cwd ?? "undefined"}, error=${err instanceof Error ? err.message : String(err)})`
-        );
+        const id = crypto.randomBytes(8).toString("hex");
+        let pipeNameIn: string, pipeNameOut: string, pipeNameErr: string;
 
-        // We have to set error state here because of platform-dependent behavior
-        // For Linux exit isn't fired when process errors
-        const elapsed = process.hrtime(startTime);
-        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
-        this._signal = null;
-        this._exitCode = 1;
-        this._timedOut = false;
-
-        resolveSpawn(false);
-      });
-      this._process?.once("exit", (code, signal) => {
-        const elapsed = process.hrtime(startTime);
-        this._elapsed = Math.round(elapsed[0] * 1000 + elapsed[1] / 1_000_000);
-        this._signal = signal;
-        this._exitCode = code;
-        this._timedOut = timeoutSignal?.aborted ?? false;
-      });
-
-      this._process?.once("close", async () => {
-        this._memoryCancellationTokenSource?.cancel();
-        this._memoryCancellationTokenSource?.dispose();
-        if (this._memorySampleTimeout) {
-          clearTimeout(this._memorySampleTimeout);
-          this._memorySampleTimeout = null;
+        if (process.platform === "win32") {
+          pipeNameIn = `\\\\.\\pipe\\foc-${id}-in`;
+          pipeNameOut = `\\\\.\\pipe\\foc-${id}-out`;
+          pipeNameErr = `\\\\.\\pipe\\foc-${id}-err`;
+        } else {
+          const tmpDir = os.tmpdir();
+          pipeNameIn = path.join(tmpDir, `foc-${id}-in.sock`);
+          pipeNameOut = path.join(tmpDir, `foc-${id}-out.sock`);
+          pipeNameErr = path.join(tmpDir, `foc-${id}-err.sock`);
         }
 
-        this._memoryLimitExceeded =
-          this._maxMemoryBytes > this._memoryLimitBytes && this._memoryLimitBytes > 0;
+        let serverIn: net.Server, serverOut: net.Server, serverErr: net.Server;
+        let socketIn: net.Socket, socketOut: net.Socket, socketErr: net.Socket;
+
+        Promise.all([
+          createPipeServer(pipeNameIn),
+          createPipeServer(pipeNameOut),
+          createPipeServer(pipeNameErr),
+        ])
+          .then((servers) => {
+            [serverIn, serverOut, serverErr] = servers;
+
+            let connected = 0;
+            const onConnect = () => {
+              connected++;
+              if (connected === 3) {
+                // All connected, close listeners
+                serverIn.close();
+                serverOut.close();
+                serverErr.close();
+
+                // Create NativeChildProcess
+                const nativeProc = new NativeChildProcess(
+                  spawnResult.pid,
+                  [socketIn, socketOut, socketErr],
+                  spawnResult.result
+                );
+                this._process = nativeProc as unknown as ChildProcessLike;
+
+                // Proxy events from the native process to our internal emitter
+                nativeProc.once("spawn", () => this._emitter.emit("spawn"));
+                nativeProc.on("error", (err) => this._emitter.emit("error", err));
+                nativeProc.stdout.on("data", (data) => this._emitter.emit("stdout:data", data));
+                nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
+                nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
+                nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
+                nativeProc.once("close", (code, signal) =>
+                  this._emitter.emit("close", code, signal)
+                );
+
+                // Signal spawn success
+                nativeProc.emit("spawn");
+                resolveSpawn(true);
+
+                const logger = getLogger("runtime");
+
+                // Attach stream handlers
+                if (nativeProc.stdout) {
+                  nativeProc.stdout.resume();
+                  const p = new Promise<void>((resolve) => {
+                    if (nativeProc.stdout.destroyed) resolve();
+                    else nativeProc.stdout.once("close", resolve);
+                  });
+                  streamClosePromises.push(p);
+                }
+                if (nativeProc.stderr) {
+                  nativeProc.stderr.resume();
+                  const p = new Promise<void>((resolve) => {
+                    if (nativeProc.stderr.destroyed) resolve();
+                    else nativeProc.stderr.once("close", resolve);
+                  });
+                  streamClosePromises.push(p);
+                }
+
+                Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
+                  .then(([res]): void => {
+                    this.handleAddonResult(res);
+                    this._exitCode = res.exitCode;
+                    nativeProc.emit("exit", this._exitCode, null);
+                    nativeProc.emit("close", this._exitCode, null);
+                    resolve();
+                  })
+                  .catch((err: Error) => {
+                    logger.error("Process error: " + err.message);
+                    this.handleMonitorError(err);
+                    nativeProc.emit("error", err);
+                    resolve();
+                  });
+              }
+            };
+
+            serverIn.on("connection", (s) => {
+              s.setNoDelay(true);
+              socketIn = s;
+              onConnect();
+            });
+            serverOut.on("connection", (s) => {
+              s.setNoDelay(true);
+              socketOut = s;
+              onConnect();
+            });
+            serverErr.on("connection", (s) => {
+              s.setNoDelay(true);
+              socketErr = s;
+              onConnect();
+            });
+
+            // Call native spawn now that servers are listening
+            const spawnResult = monitor.spawn(
+              commandName,
+              commandArgs,
+              cwd || "",
+              timeout,
+              memoryLimit,
+              pipeNameIn,
+              pipeNameOut,
+              pipeNameErr,
+              () => {} // Callback unused in this flow setup
+            );
+          })
+          .catch((e) => {
+            getLogger("runtime").warn(`Native spawn preparation failed: ${e}`);
+            resolveSpawn(false);
+            resolve();
+          });
+      } else {
+        // Fallback or Error if monitor not available (but we expect it to be available)
+        // Since we don't have a fallback impl in this snippet, we just error.
+        getLogger("runtime").error(`Process monitor addon not found. Cannot spawn: ${commandName}`);
+        resolveSpawn(false);
         resolve();
-      });
+      }
     });
   }
 
   get process() {
     return this._process;
   }
+
   get elapsed(): number {
     return this._elapsed;
-  }
-  get signal(): NodeJS.Signals | null {
-    return this._signal;
   }
   get timedOut(): boolean {
     return this._timedOut;
@@ -412,13 +473,10 @@ export class Runnable {
   }
 
   stop() {
-    this._abortController?.abort();
+    this._process?.kill();
+    this._stopped = true;
   }
 
-  /**
-   * Attach a listener to a process event. Returns this for method chaining.
-   * Listeners are automatically removed on cleanup() or at the start of the next run().
-   */
   on(event: "spawn", listener: () => void): Runnable;
   on(event: "error", listener: (err: Error) => void): Runnable;
   on(event: "stderr:data" | "stdout:data", listener: (data: string) => void): Runnable;
@@ -428,40 +486,8 @@ export class Runnable {
     listener: (code: number | null, signal: NodeJS.Signals | null) => void
   ): Runnable;
   on(event: string, listener: ListenerCallback): Runnable {
-    this._attachListener(event, listener);
+    this._emitter.on(event, listener);
     return this;
-  }
-
-  private _attachListener(event: string, listener: ListenerCallback): void {
-    const proc = this._process;
-    if (!proc) return;
-
-    switch (event) {
-      case "spawn":
-        proc.once("spawn", listener as () => void);
-        break;
-      case "error":
-        proc.on("error", listener as (err: Error) => void);
-        break;
-      case "stderr:data":
-        proc.stderr.on("data", listener as (data: string) => void);
-        break;
-      case "stdout:data":
-        proc.stdout.on("data", listener as (data: string) => void);
-        break;
-      case "stderr:end":
-        proc.stderr.once("end", listener as () => void);
-        break;
-      case "stdout:end":
-        proc.stdout.once("end", listener as () => void);
-        break;
-      case "close":
-        proc.once(
-          "close",
-          listener as (code: number | null, signal: NodeJS.Signals | null) => void
-        );
-        break;
-    }
   }
 
   private _computeTermination(): RunTermination {
@@ -471,12 +497,8 @@ export class Runnable {
     if (this._memoryLimitExceeded) {
       return "memory";
     }
-    // Check this after timeout because timeout also sets this signal
-    if (this._combinedAbortSignal?.aborted) {
+    if (this._stopped) {
       return "stopped";
-    }
-    if (this._signal) {
-      return "signal";
     }
     if (this._exitCode === 0) {
       return "exit";
@@ -513,7 +535,6 @@ async function doCompile(
   if (!promise) {
     promise = (async () => {
       const logger = getLogger("compilation");
-      logger.info(`Compilation started: ${file} (${compileCommand})`);
 
       const compilationStatusItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
@@ -534,6 +555,9 @@ async function doCompile(
       runnable
         .on("stderr:data", (data) => {
           err += data;
+        })
+        .on("stdout:data", () => {
+          // Ignore stdout but listener ensures stream flows (prevents huge stdout blocking process)
         })
         .on("error", (data) => {
           err += data.stack;
@@ -567,7 +591,6 @@ async function doCompile(
       }
 
       lastCompiled.set(file, [currentChecksum, compileCommand]);
-      logger.info(`Compilation succeeded (file=${file})`);
       return 0;
     })();
     compilePromise.set(file, promise);
