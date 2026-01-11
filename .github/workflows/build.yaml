@@ -63,7 +63,6 @@ jobs:
             vsceTarget: "alpine-x64"
           - name: Alpine Linux ARM64
             os: ubuntu-24.04-arm
-            container: node:lts-alpine
             vsceTarget: "alpine-arm64"
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
@@ -92,15 +91,29 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        if: matrix.name != 'Alpine Linux ARM64'
         run: |
           npm cache clean --force
           npm ci
 
+      - name: Build and Package (Alpine ARM64)
+        if: matrix.name == 'Alpine Linux ARM64'
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ws -w /ws node:lts-alpine /bin/sh -c "
+            apk add --no-cache python3 make g++ linux-headers git bash &&
+            npm ci &&
+            npm test &&
+            npx --yes @vscode/vsce package --target alpine-arm64 &&
+            chown $(id -u):$(id -g) *.vsix
+          "
+
       - name: Test native addon
+        if: matrix.name != 'Alpine Linux ARM64'
         run: npm test
         continue-on-error: true
 
       - name: Package VSIX
+        if: matrix.name != 'Alpine Linux ARM64'
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
       - name: Detect VSIX filename
