@@ -430,9 +430,9 @@ test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
 
   // We need to accept connections
   // But for this test we don't care about IO much, just that it runs
-  serverIn.on("connection", (s) => { });
-  serverOut.on("connection", (s) => { });
-  serverErr.on("connection", (s) => { });
+  serverIn.on("connection", () => { });
+  serverOut.on("connection", () => { });
+  serverErr.on("connection", () => { });
 
   const spawnRes = monitor.spawn(
     process.execPath,
@@ -469,21 +469,16 @@ test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
 });
 
 test("Execution: Crashes do not set stopped flag", { timeout: 10000 }, async () => {
-  try {
-    const res = await spawnPromise(
-      ["-e", "process.abort()"],
-      { timeoutMs: 5000 }
-    );
+  const res = await spawnPromise(
+    ["-e", "process.abort()"],
+    { timeoutMs: 5000 }
+  );
 
-    assert.notStrictEqual(res.exitCode, 0, "Exit code should be non-zero");
-    assert.strictEqual(res.exitCode, null, "Exit code should be null on crash (signal)");
-    assert.strictEqual(res.stopped, false, "Should have stopped=false for crash");
-    assert.strictEqual(res.timedOut, false, "Should not be timed out");
-    assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
-  } catch (err) {
-    // If spawnPromise throws (it shouldn't for non-zero exit code unless we changed it), fail
-    throw err;
-  }
+  assert.notStrictEqual(res.exitCode, 0, "Exit code should be non-zero");
+  assert.strictEqual(res.exitCode, null, "Exit code should be null on crash (signal)");
+  assert.strictEqual(res.stopped, false, "Should have stopped=false for crash");
+  assert.strictEqual(res.timedOut, false, "Should not be timed out");
+  assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
 });
 
 test("Execution: Non-zero exit code", { timeout: 10000 }, async () => {
