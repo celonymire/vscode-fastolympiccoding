@@ -146,7 +146,6 @@ public:
                        std::shared_ptr<SharedStopState> sharedState)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
         memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
-        memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
         exitCode_(0), termSignal_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
         sharedState_(sharedState) {}
   
@@ -501,17 +500,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     close(sockIn);
     close(sockOut);
     close(sockErr);
-
-    // Set resource limits
-    if (timeoutMs > 0) {
-      struct rlimit cpuLimit;
-      rlim_t seconds = (timeoutMs + 999) / 1000;
-      if (seconds == 0) seconds = 1;
-      cpuLimit.rlim_cur = seconds;
-      cpuLimit.rlim_max = seconds;
-      prlimit(0, RLIMIT_CPU, &cpuLimit, nullptr);
-    }
-
 
     // Change directory
     if (!cwd.empty()) {
