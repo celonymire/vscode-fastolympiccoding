@@ -476,10 +476,9 @@ export function initializeRunSettingsWatcher(context: vscode.ExtensionContext): 
   // Watch for runSettings.json files in all workspace folders
   _runSettingsWatcher = vscode.workspace.createFileSystemWatcher("**/runSettings.json");
 
-  const clearCache = (uri: vscode.Uri) => {
+  const clearCache = () => {
     _runSettingsCache.clear();
   };
-
   _runSettingsWatcher.onDidCreate(clearCache);
   _runSettingsWatcher.onDidChange(clearCache);
   _runSettingsWatcher.onDidDelete(clearCache);

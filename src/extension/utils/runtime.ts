@@ -295,8 +295,6 @@ export class Runnable {
     });
 
     this._promise = new Promise((resolve) => {
-      let nativeSpawned = false;
-
       const streamClosePromises: Promise<void>[] = [];
       const monitor = getNativeProcessMonitor();
       if (monitor) {
@@ -361,8 +359,6 @@ export class Runnable {
                 nativeProc.once("close", (code, signal) =>
                   this._emitter.emit("close", code, signal)
                 );
-
-                nativeSpawned = true;
 
                 // Signal spawn success
                 nativeProc.emit("spawn");
