@@ -76,7 +76,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm clean-cache --force
+          npm cache clean --force
           npm ci
 
       - name: Test native addon
