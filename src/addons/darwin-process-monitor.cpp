@@ -226,12 +226,6 @@ private:
   int kq_;
 };
 
-
-
-
-// External declaration for environ
-extern char **environ;
-
 // Helper to convert Napi::Value to std::string
 std::string ToString(Napi::Value value) {
   if (value.IsString()) {
