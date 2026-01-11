@@ -15,10 +15,10 @@ import {
   findAvailablePort,
   mapTestcaseTermination,
   Runnable,
-  severityNumberToStatus,
+  severityNumberToInteractiveStatus,
   terminationSeverityNumber,
 } from "../utils/runtime";
-import type { RunTermination } from "../utils/runtime";
+import type { RunTermination, Severity } from "../utils/runtime";
 import {
   getFileRunSettings,
   openInNewEditor,
@@ -105,11 +105,11 @@ function updateInteractiveTestcaseFromTermination(
 ) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
-  state.status = severityNumberToStatus(
+  state.status = severityNumberToInteractiveStatus(
     Math.max(
-      terminationSeverityNumber(termination),
-      terminationSeverityNumber(interactorTermination)
-    )
+      terminationSeverityNumber(termination) as number,
+      terminationSeverityNumber(interactorTermination) as number
+    ) as Severity
   );
   if (state.status === "WA") {
     // Either judge or interactor returned non-zero error code, so we have 2 cases:

@@ -11,34 +11,59 @@
 // Windows implementation using Job Objects for resource limit enforcement
 // Job Objects allow the OS to enforce time and memory limits directly
 // Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number, exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped: boolean }
+// Shared state for synchronization between worker and JS thread
+struct SharedStopState {
+    HANDLE hStopEvent = NULL;
+    std::mutex mutex;
+    bool closed = false;
+    
+    SharedStopState() {
+        hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL); // Manual reset, initially nonsignaled
+    }
+    
+    ~SharedStopState() {
+        if (hStopEvent != NULL) {
+            CloseHandle(hStopEvent);
+            hStopEvent = NULL;
+        }
+    }
+    
+    // Called by worker when it's done
+    void Close() {
+        std::lock_guard<std::mutex> lock(mutex);
+        closed = true;
+    }
+    
+    // Called by JS 'cancel' function
+    bool SignalStop() {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (closed || hStopEvent == NULL) return false;
+        
+        return SetEvent(hStopEvent);
+    }
+};
+
+// Windows implementation using Job Objects for resource limit enforcement
+// Job Objects allow the OS to enforce time and memory limits directly
+// Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number, exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped: boolean }
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
-  WaitForProcessWorker(Napi::Env &env, HANDLE hProcess, DWORD pid, DWORD timeoutMs, uint64_t memoryLimitBytes)
+  WaitForProcessWorker(Napi::Env &env, HANDLE hProcess, DWORD pid, DWORD timeoutMs, uint64_t memoryLimitBytes,
+                       std::shared_ptr<SharedStopState> sharedState)
       : Napi::AsyncWorker(env), hProcess_(hProcess), pid_(pid), timeoutMs_(timeoutMs), 
         memoryLimitBytes_(memoryLimitBytes), deferred_(env),
         elapsedMs_(0.0), peakMemoryBytes_(0), exitCode_(0),
-        timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_("") {
-          hStopEvent_ = CreateEvent(NULL, TRUE, FALSE, NULL); // Manual reset, initially nonsignaled
-        }
+        timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
+        sharedState_(sharedState) {}
 
   ~WaitForProcessWorker() {
     if (hProcess_ != NULL) {
       CloseHandle(hProcess_);
     }
-    if (hStopEvent_ != NULL) {
-      CloseHandle(hStopEvent_);
-    }
+    // Shared state handles the event handle
   }
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
-
-  // Allow external stop request
-  void Stop() {
-    stopped_ = true;
-    if (hStopEvent_ != NULL) {
-      SetEvent(hStopEvent_);
-    }
-  }
 
 protected:
   void Execute() override {
@@ -50,8 +75,9 @@ protected:
       return;
     }
 
-    if (hStopEvent_ == NULL) {
-      errorMsg_ = "Failed to create stop event";
+    HANDLE hStopEvent = sharedState_->hStopEvent;
+    if (hStopEvent == NULL) {
+      errorMsg_ = "Failed to create stop event (in shared state)";
       return;
     }
 
@@ -142,7 +168,7 @@ protected:
         waitMillis = slice;
       }
       
-      HANDLE waitHandles[2] = { hProcess, hStopEvent_ };
+      HANDLE waitHandles[2] = { hProcess, hStopEvent };
       DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, waitMillis);
 
       if (waitResult == WAIT_OBJECT_0) {
@@ -178,6 +204,9 @@ protected:
         return;
       }
     }
+
+    // Mark shared state as closed so cancel() becomes no-op
+    sharedState_->Close();
 
     // Handle external stop request or timeout
     if (stopped_ && !processExited) {
@@ -277,7 +306,14 @@ protected:
     
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
-    result.Set("exitCode", Napi::Number::New(env, exitCode_));
+    
+    // Check if exit code indicates a crash (Exception code >= 0xC0000000)
+    if (static_cast<unsigned int>(exitCode_) >= 0xC0000000) {
+       result.Set("exitCode", env.Null());
+    } else {
+       result.Set("exitCode", Napi::Number::New(env, exitCode_));
+    }
+
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
     result.Set("memoryLimitExceeded", Napi::Boolean::New(env, memoryLimitExceeded_));
     result.Set("stopped", Napi::Boolean::New(env, stopped_));
@@ -291,7 +327,6 @@ protected:
 
 private:
   HANDLE hProcess_;
-  HANDLE hStopEvent_;
   DWORD pid_;
   DWORD timeoutMs_;
   uint64_t memoryLimitBytes_;
@@ -303,6 +338,7 @@ private:
   bool memoryLimitExceeded_;
   bool stopped_;
   std::string errorMsg_;
+  std::shared_ptr<SharedStopState> sharedState_;
 };
 
 
@@ -486,15 +522,23 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
 
   // Notify JS
   onSpawn.Call({});
+  
+  auto sharedState = std::make_shared<SharedStopState>();
 
   // Start monitoring
-  auto worker = new WaitForProcessWorker(env, hProcessDup, pid, timeoutMs, memoryLimitBytes);
+  auto worker = new WaitForProcessWorker(env, hProcessDup, pid, timeoutMs, memoryLimitBytes, sharedState);
   auto promise = worker->GetPromise();
   worker->Queue();
 
   Napi::Object result = Napi::Object::New(env);
   result.Set("pid", Napi::Number::New(env, pid));
   result.Set("result", promise);
+  
+  // Expose cancel function
+  // We capture sharedState by value (shared_ptr copy) in the lambda
+  result.Set("cancel", Napi::Function::New(env, [sharedState](const Napi::CallbackInfo& info) {
+      sharedState->SignalStop();
+  }, "cancel"));
 
   return result;
 }

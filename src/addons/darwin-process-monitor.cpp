@@ -104,32 +104,57 @@ static ProcessStats GetProcessStats(pid_t pid) {
 }
 
 // AsyncWorker for waiting on process completion
+// Shared state for synchronization between worker and JS thread
+struct SharedStopState {
+    int kq = -1;
+    std::mutex mutex;
+    bool closed = false;
+    
+    SharedStopState() {
+        kq = kqueue();
+    }
+    
+    ~SharedStopState() {
+        if (kq >= 0) {
+            close(kq);
+            kq = -1;
+        }
+    }
+    
+    // Called by worker when it's done
+    void Close() {
+        std::lock_guard<std::mutex> lock(mutex);
+        closed = true;
+    }
+    
+    // Called by JS 'cancel' function
+    bool SignalStop() {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (closed || kq < 0) return false;
+        
+        struct kevent kev;
+        EV_SET(&kev, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
+        int ret = kevent(kq, &kev, 1, nullptr, 0, nullptr);
+        return (ret == 0);
+    }
+};
+
+// AsyncWorker for waiting on process completion
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
-  WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes)
+  WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes,
+                       std::shared_ptr<SharedStopState> sharedState)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
         memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
-        exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
-        kq_(-1) {}
+        memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
+        exitCode_(0), termSignal_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
+        sharedState_(sharedState) {}
   
   ~WaitForProcessWorker() {
-    if (kq_ >= 0) {
-      close(kq_);
-    }
+      // no-op, shared state destructor handles fd
   }
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
-
-  // Allow external stop request
-  void Stop() {
-    stopped_ = true;
-    // Trigger the user event to wake up kevent()
-    if (kq_ >= 0) {
-      struct kevent kev;
-      EV_SET(&kev, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
-      kevent(kq_, &kev, 1, nullptr, 0, nullptr);
-    }
-  }
 
 protected:
   void Execute() override {
@@ -139,11 +164,10 @@ protected:
     int status = 0;
     struct rusage rusage;
     
-    // Create kqueue for efficient process monitoring
-    kq_ = kqueue();
-    if (kq_ == -1) {
-      errorMsg_ = "Failed to create kqueue: ";
-      errorMsg_ += std::strerror(errno);
+    // Use the SHARED kqueue
+    int kq = sharedState_->kq;
+    if (kq == -1) {
+      errorMsg_ = "Failed to create kqueue (in shared state)";
       return;
     }
     
@@ -157,7 +181,7 @@ protected:
     bool shouldWait = true;
 
     // Check if process already exited/doesn't exist before waiting.
-    if (kevent(kq_, kevs, 2, nullptr, 0, nullptr) == -1) {
+    if (kevent(kq, kevs, 2, nullptr, 0, nullptr) == -1) {
         if (errno == ESRCH) {
             shouldWait = false;
         } else {
@@ -197,7 +221,7 @@ protected:
          timeoutPtr = &timeout;
 
          // Wait
-         nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
+         nev = kevent(kq, nullptr, 0, &event, 1, timeoutPtr);
         
          if (nev == -1) {
             if (errno != EINTR && errno != ESRCH) {
@@ -211,6 +235,7 @@ protected:
          if (nev > 0) {
              if (event.filter == EVFILT_USER) {
                  // Stop signal
+                 stopped_ = true;
                  kill(pid_, SIGKILL);
                  break;
              }
@@ -262,7 +287,10 @@ protected:
        }
     }
 
-    // Check if stopped before process exit
+    // Mark shared state as closed so cancel() becomes no-op
+    sharedState_->Close();
+
+    // Check if stopped before process exit (redundant but safe)
     if (stopped_) {
       kill(pid_, SIGKILL);
     }
@@ -289,6 +317,7 @@ protected:
     // Analyze exit status
     if (WIFSIGNALED(status)) {
       int signal = WTERMSIG(status);
+      termSignal_ = signal;
       
       if (signal == SIGXCPU) {
         // Process was killed by SIGXCPU - CPU time limit exceeded
@@ -330,7 +359,13 @@ protected:
     Napi::Object result = Napi::Object::New(env);
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
-    result.Set("exitCode", Napi::Number::New(env, exitCode_));
+    
+    if (termSignal_ > 0) {
+      result.Set("exitCode", env.Null());
+    } else {
+      result.Set("exitCode", Napi::Number::New(env, exitCode_));
+    }
+
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
     result.Set("memoryLimitExceeded", Napi::Boolean::New(env, memoryLimitExceeded_));
     result.Set("stopped", Napi::Boolean::New(env, stopped_));
@@ -350,12 +385,15 @@ private:
   double elapsedMs_;
   uint64_t peakMemoryBytes_;
   int exitCode_;
+  int termSignal_;
   bool timedOut_;
   bool memoryLimitExceeded_;
   bool stopped_;
   std::string errorMsg_;
-  int kq_;
+  std::shared_ptr<SharedStopState> sharedState_;
 };
+
+
 
 // Helper to convert Napi::Value to std::string
 std::string ToString(Napi::Value value) {
@@ -409,6 +447,7 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   Napi::Function onSpawn = info[8].As<Napi::Function>();
 
   // Pre-convert JS values to C++ strings/vectors in the parent process.
+  // DO NOT access 'info', 'argsArray' in the child process after fork().
   std::vector<std::string> args = ToArgv(argsArray);
 
   pid_t pid = fork();
@@ -438,11 +477,11 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
         return sock;
     };
 
-    // Stdin: Read from socket
+    // Stdin: Read from socket (from parent)
     int sockIn = connectSocket(pipeNameIn);
-    // Stdout: Write to socket
+    // Stdout: Write to socket (to parent)
     int sockOut = connectSocket(pipeNameOut);
-    // Stderr: Write to socket
+    // Stderr: Write to socket (to parent)
     int sockErr = connectSocket(pipeNameErr);
 
     if (sockIn < 0 || sockOut < 0 || sockErr < 0) {
@@ -458,10 +497,21 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
       _exit(1);
     }
 
-    // Close sockets
+    // Close original socket FDs
     close(sockIn);
     close(sockOut);
     close(sockErr);
+
+    // Set resource limits
+    if (timeoutMs > 0) {
+      struct rlimit cpuLimit;
+      rlim_t seconds = (timeoutMs + 999) / 1000;
+      if (seconds == 0) seconds = 1;
+      cpuLimit.rlim_cur = seconds;
+      cpuLimit.rlim_max = seconds;
+      prlimit(0, RLIMIT_CPU, &cpuLimit, nullptr);
+    }
+
 
     // Change directory
     if (!cwd.empty()) {
@@ -489,14 +539,22 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   // Notify JS that the process has spawned
   onSpawn.Call({});
 
+  auto sharedState = std::make_shared<SharedStopState>();
+
   // Start monitoring immediataely
-  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
+  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes, sharedState);
   auto promise = worker->GetPromise();
   worker->Queue();
 
   Napi::Object result = Napi::Object::New(env);
   result.Set("pid", Napi::Number::New(env, pid));
   result.Set("result", promise);
+  
+  // Expose cancel function
+  // We capture sharedState by value (shared_ptr copy) in the lambda
+  result.Set("cancel", Napi::Function::New(env, [sharedState](const Napi::CallbackInfo& info) {
+      sharedState->SignalStop();
+  }, "cancel"));
   
   return result;
 }

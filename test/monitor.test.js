@@ -134,7 +134,7 @@ function spawnPromise(args, options = {}) {
           pipeNameIn,
           pipeNameOut,
           pipeNameErr,
-          () => {} // onSpawn
+          () => { } // onSpawn
         );
       } catch (err) {
         if (serverIn) serverIn.close();
@@ -385,19 +385,115 @@ test("Thread Pool Concurrency (libuv)", { timeout: 15000 }, async () => {
 test("Elapsed Time Accuracy", { timeout: 20000 }, async () => {
   // Test busy loop CPU time measurement accuracy
   const cases = [100, 500, 1200];
-  
+
   for (const duration of cases) {
     const res = await spawnPromise(
-        ["-e", `const start = Date.now(); while(Date.now() - start < ${duration});`]
+      ["-e", `const start = Date.now(); while(Date.now() - start < ${duration});`]
     );
-    
+
     // Check that we're within reasonable bounds.
     // elapsedMs should be reasonable close to duration.
     // Relaxed check: Allow 80% - 100% + 500ms overhead
     assert.ok(res.elapsedMs >= duration * 0.8, `Elapsed ${res.elapsedMs}ms < Duration ${duration}ms * 0.8`);
     assert.ok(
-        res.elapsedMs < duration + 500, 
-        `Elapsed ${res.elapsedMs}ms > Duration ${duration}ms + 500ms overhead`
+      res.elapsedMs < duration + 500,
+      `Elapsed ${res.elapsedMs}ms > Duration ${duration}ms + 500ms overhead`
     );
   }
 });
+
+test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
+  // Spawn a long running process
+  // We need to access the 'cancel' method on the spawn result,
+  // but "spawnPromise" wraps it and awaits the result.
+  // So we need to use monitor.spawn directly to get the handle.
+
+  // Helper to setup pipes manually (simplified version of spawnPromise)
+  const id = crypto.randomBytes(8).toString("hex");
+  let pipeNameIn, pipeNameOut, pipeNameErr;
+  const os = require("node:os");
+  const tmpDir = os.tmpdir();
+
+  if (process.platform === "win32") {
+    pipeNameIn = `\\\\.\\pipe\\foc-stop-${id}-in`;
+    pipeNameOut = `\\\\.\\pipe\\foc-stop-${id}-out`;
+    pipeNameErr = `\\\\.\\pipe\\foc-stop-${id}-err`;
+  } else {
+    pipeNameIn = path.join(tmpDir, `foc-stop-${id}-in.sock`);
+    pipeNameOut = path.join(tmpDir, `foc-stop-${id}-out.sock`);
+    pipeNameErr = path.join(tmpDir, `foc-stop-${id}-err.sock`);
+  }
+
+  const serverIn = await createPipeServer(pipeNameIn);
+  const serverOut = await createPipeServer(pipeNameOut);
+  const serverErr = await createPipeServer(pipeNameErr);
+
+  // We need to accept connections
+  // But for this test we don't care about IO much, just that it runs
+  serverIn.on("connection", (s) => { });
+  serverOut.on("connection", (s) => { });
+  serverErr.on("connection", (s) => { });
+
+  const spawnRes = monitor.spawn(
+    process.execPath,
+    ["-e", "setTimeout(() => {}, 5000)"],
+    process.cwd(),
+    0, // no timeout
+    0, // no memory limit
+    pipeNameIn,
+    pipeNameOut,
+    pipeNameErr,
+    () => { }
+  );
+
+  // Wait a bit to ensure it started
+  await new Promise(r => setTimeout(r, 500));
+
+  // CALL CANCEL
+  if (typeof spawnRes.cancel === "function") {
+    spawnRes.cancel();
+  } else {
+    throw new Error("spawnRes.cancel is not a function");
+  }
+
+  // Await the result
+  const res = await spawnRes.result;
+
+  serverIn.close();
+  serverOut.close();
+  serverErr.close();
+
+  assert.strictEqual(res.stopped, true, "Should have stopped=true");
+  assert.strictEqual(res.timedOut, false, "Should not be timed out");
+  assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
+});
+
+test("Execution: Crashes do not set stopped flag", { timeout: 10000 }, async () => {
+  try {
+    const res = await spawnPromise(
+      ["-e", "process.abort()"],
+      { timeoutMs: 5000 }
+    );
+
+    assert.notStrictEqual(res.exitCode, 0, "Exit code should be non-zero");
+    assert.strictEqual(res.exitCode, null, "Exit code should be null on crash (signal)");
+    assert.strictEqual(res.stopped, false, "Should have stopped=false for crash");
+    assert.strictEqual(res.timedOut, false, "Should not be timed out");
+    assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
+  } catch (err) {
+    // If spawnPromise throws (it shouldn't for non-zero exit code unless we changed it), fail
+    throw err;
+  }
+});
+
+test("Execution: Non-zero exit code", { timeout: 10000 }, async () => {
+  const res = await spawnPromise(
+    ["-e", "process.exit(42)"]
+  );
+
+  assert.strictEqual(res.exitCode, 42, "Exit code should be 42");
+  assert.strictEqual(res.stopped, false, "Should have stopped=false");
+  assert.strictEqual(res.timedOut, false, "Should not be timed out");
+  assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
+});
+

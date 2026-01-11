@@ -57,34 +57,56 @@ static long GetPeakRSS(pid_t pid) {
 }
 
 // AsyncWorker for waiting on process completion
+// Shared state for synchronization between worker and JS thread
+struct SharedStopState {
+    int stopEventFd = -1;
+    std::mutex mutex;
+    bool closed = false;
+    
+    SharedStopState() {
+        stopEventFd = eventfd(0, EFD_NONBLOCK);
+    }
+    
+    ~SharedStopState() {
+        if (stopEventFd >= 0) {
+            close(stopEventFd);
+            stopEventFd = -1;
+        }
+    }
+    
+    // Called by worker when it's done
+    void Close() {
+        std::lock_guard<std::mutex> lock(mutex);
+        closed = true;
+    }
+    
+    // Called by JS 'cancel' function
+    bool SignalStop() {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (closed || stopEventFd < 0) return false;
+        
+        uint64_t val = 1;
+        ssize_t ret = write(stopEventFd, &val, sizeof(val));
+        return (ret == sizeof(val));
+    }
+};
+
+// AsyncWorker for waiting on process completion
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
-  WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes)
+  WaitForProcessWorker(Napi::Env &env, pid_t pid, uint32_t timeoutMs, uint64_t memoryLimitBytes,
+                       std::shared_ptr<SharedStopState> sharedState)
       : Napi::AsyncWorker(env), pid_(pid), timeoutMs_(timeoutMs),
         memoryLimitBytes_(memoryLimitBytes), deferred_(env), elapsedMs_(0.0), peakMemoryBytes_(0),
-        exitCode_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
-        stopEventFd_(-1) {
-    // Create eventfd for stop signaling
-    stopEventFd_ = eventfd(0, EFD_NONBLOCK);
+        exitCode_(0), termSignal_(0), timedOut_(false), memoryLimitExceeded_(false), stopped_(false), errorMsg_(""),
+        sharedState_(sharedState) {
   }
   
   ~WaitForProcessWorker() {
-    if (stopEventFd_ >= 0) {
-      close(stopEventFd_);
-    }
+      // no-op, shared state destructor handles fd
   }
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
-
-  // Allow external stop request
-  void Stop() {
-    stopped_ = true;
-    // Signal the eventfd to wake up poll()
-    if (stopEventFd_ >= 0) {
-      uint64_t val = 1;
-      write(stopEventFd_, &val, sizeof(val));
-    }
-  }
 
 protected:
   void Execute() override {
@@ -114,7 +136,7 @@ protected:
       struct pollfd pfds[2];
       pfds[0].fd = pidfd;
       pfds[0].events = POLLIN;
-      pfds[1].fd = stopEventFd_;
+      pfds[1].fd = sharedState_->stopEventFd;
       pfds[1].events = POLLIN;
       
       // We loop to implement polling for memory limits
@@ -147,6 +169,7 @@ protected:
           if (pfds[1].revents & POLLIN) {
             // External stop requested
             close(pidfd);
+            stopped_ = true;
             kill(pid_, SIGKILL);
             break;
           }
@@ -184,6 +207,9 @@ protected:
         }
       }
     }
+    
+    // Mark shared state as closed so cancel() becomes no-op
+    sharedState_->Close();
 
     // Collect exit status and resource usage
     std::memset(&rusage, 0, sizeof(rusage));
@@ -207,6 +233,7 @@ protected:
     // Analyze exit status
     if (WIFSIGNALED(status)) {
       int signal = WTERMSIG(status);
+      termSignal_ = signal;
       
       if (signal == SIGXCPU) {
         // Process was killed by SIGXCPU - CPU time limit exceeded
@@ -258,7 +285,13 @@ protected:
     Napi::Object result = Napi::Object::New(env);
     result.Set("elapsedMs", Napi::Number::New(env, elapsedMs_));
     result.Set("peakMemoryBytes", Napi::Number::New(env, static_cast<double>(peakMemoryBytes_)));
-    result.Set("exitCode", Napi::Number::New(env, exitCode_));
+    
+    if (termSignal_ > 0) {
+      result.Set("exitCode", env.Null());
+    } else {
+      result.Set("exitCode", Napi::Number::New(env, exitCode_));
+    }
+
     result.Set("timedOut", Napi::Boolean::New(env, timedOut_));
     result.Set("memoryLimitExceeded", Napi::Boolean::New(env, memoryLimitExceeded_));
     result.Set("stopped", Napi::Boolean::New(env, stopped_));
@@ -278,11 +311,12 @@ private:
   double elapsedMs_;
   uint64_t peakMemoryBytes_;
   int exitCode_;
+  int termSignal_;
   bool timedOut_;
   bool memoryLimitExceeded_;
   bool stopped_;
   std::string errorMsg_;
-  int stopEventFd_;
+  std::shared_ptr<SharedStopState> sharedState_;
 };
 
 
@@ -430,9 +464,11 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   // Parent process
   // Notify JS that the process has spawned
   onSpawn.Call({});
+  
+  auto sharedState = std::make_shared<SharedStopState>();
 
   // Start monitoring immediataely
-  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes);
+  auto worker = new WaitForProcessWorker(env, pid, timeoutMs, memoryLimitBytes, sharedState);
   auto promise = worker->GetPromise();
   worker->Queue();
 
@@ -440,7 +476,11 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   result.Set("pid", Napi::Number::New(env, pid));
   result.Set("result", promise);
   
-  // Note: We no longer return FDs (stdio array) as we rely on the caller creating servers.
+  // Expose cancel function
+  // We capture sharedState by value (shared_ptr copy) in the lambda
+  result.Set("cancel", Napi::Function::New(env, [sharedState](const Napi::CallbackInfo& info) {
+      sharedState->SignalStop();
+  }, "cancel"));
   
   return result;
 }

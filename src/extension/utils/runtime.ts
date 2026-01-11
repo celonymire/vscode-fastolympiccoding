@@ -22,7 +22,7 @@ function arrayEquals<T>(a: T[], b: T[]): boolean {
 type AddonResult = {
   elapsedMs: number;
   peakMemoryBytes: number;
-  exitCode: number;
+  exitCode: number | null;
   timedOut: boolean;
   memoryLimitExceeded: boolean;
   stopped: boolean;
@@ -32,6 +32,7 @@ type NativeSpawnResult = {
   pid: number;
   stdio: [number, number, number]; // stdin, stdout, stderr FDs
   result: Promise<AddonResult>;
+  cancel: () => void;
 };
 
 type ProcessMonitorAddon = {
@@ -105,7 +106,9 @@ export type RunTermination =
   | "stopped" // stopped by caller
   | "exit"; // normal exit (zero exit code)
 
-export function terminationSeverityNumber(termination: RunTermination): number {
+export type Severity = 0 | 1 | 2 | 3 | 4;
+
+export function terminationSeverityNumber(termination: RunTermination): Severity {
   switch (termination) {
     case "exit":
       return 0;
@@ -120,19 +123,18 @@ export function terminationSeverityNumber(termination: RunTermination): number {
   }
 }
 
-export function severityNumberToStatus(severity: number): Status {
+export function severityNumberToInteractiveStatus(severity: Severity): Status {
   switch (severity) {
     case 0:
-    case 1:
       return "AC";
+    case 1:
+      return "NA";
     case 2:
       return "WA";
     case 3:
       return "ML";
     case 4:
       return "TL";
-    default:
-      return "RE";
   }
 }
 
@@ -188,18 +190,20 @@ class NativeChildProcess extends EventEmitter {
   stdin: net.Socket;
   stdout: net.Socket;
   stderr: net.Socket;
-  killed: boolean = false;
   // The promise that resolves when the process exits
   readonly result: Promise<AddonResult>;
+  private _cancel: () => void;
 
   constructor(
     pid: number,
     io: [net.Socket, net.Socket, net.Socket],
-    resultPromise: Promise<AddonResult>
+    resultPromise: Promise<AddonResult>,
+    cancel: () => void
   ) {
     super();
     this.pid = pid;
     this.result = resultPromise;
+    this._cancel = cancel;
 
     this.stdin = io[0];
     this.stdout = io[1];
@@ -208,10 +212,13 @@ class NativeChildProcess extends EventEmitter {
     this.stderr.setEncoding("utf-8");
   }
 
+  stop() {
+    this._cancel();
+  }
+
   kill(signal: NodeJS.Signals = "SIGTERM") {
     try {
       process.kill(this.pid, signal);
-      this.killed = true;
     } catch {
       // Ignore ESRCH
     }
@@ -229,6 +236,7 @@ interface ChildProcessLike {
   off(event: string, listener: ListenerCallback): this;
   removeAllListeners(event?: string): this;
   kill(signal?: NodeJS.Signals): boolean;
+  stop(): void;
 }
 
 export class Runnable {
@@ -261,10 +269,10 @@ export class Runnable {
   handleAddonResult(result: AddonResult): void {
     this._elapsed = result.elapsedMs;
     this._maxMemoryBytes = result.peakMemoryBytes;
-    this._exitCode = result.exitCode;
     this._timedOut = result.timedOut;
     this._memoryLimitExceeded = result.memoryLimitExceeded;
     this._stopped = result.stopped;
+    this._exitCode = result.exitCode;
   }
 
   handleMonitorError(error: unknown): void {
@@ -345,7 +353,8 @@ export class Runnable {
                 const nativeProc = new NativeChildProcess(
                   spawnResult.pid,
                   [socketIn, socketOut, socketErr],
-                  spawnResult.result
+                  spawnResult.result,
+                  spawnResult.cancel
                 );
                 this._process = nativeProc as unknown as ChildProcessLike;
 
@@ -387,7 +396,6 @@ export class Runnable {
                 Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
                   .then(([res]): void => {
                     this.handleAddonResult(res);
-                    this._exitCode = res.exitCode;
                     nativeProc.emit("exit", this._exitCode, null);
                     nativeProc.emit("close", this._exitCode, null);
                     resolve();
@@ -427,7 +435,7 @@ export class Runnable {
               pipeNameIn,
               pipeNameOut,
               pipeNameErr,
-              () => {} // Callback unused in this flow setup
+              () => { } // Callback unused in this flow setup
             );
           })
           .catch((e) => {
@@ -473,7 +481,7 @@ export class Runnable {
   }
 
   stop() {
-    this._process?.kill();
+    this._process?.stop();
     this._stopped = true;
   }
 

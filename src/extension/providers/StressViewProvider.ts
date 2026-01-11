@@ -8,6 +8,7 @@ import {
   mapTestcaseTermination,
   Runnable,
   terminationSeverityNumber,
+  type Severity,
 } from "../utils/runtime";
 import {
   getFileRunSettings,
@@ -462,10 +463,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const judgePromise = executionPromise(this._judgeState);
 
       const severities = await Promise.all([generatorPromise, solutionPromise, judgePromise]);
-      const maxSeverity = Math.max(...severities);
+      const maxSeverity = Math.max(...severities) as Severity;
 
       if (this._interactiveMode) {
-        if (maxSeverity <= 1) {
+        if (maxSeverity === 0) {
           // All the processes finished successfully, therefore the judge
           // returned 0 so the answer is correct
           this._solutionState.status = "AC";
@@ -474,8 +475,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
             id: this._solutionState.state,
             status: this._solutionState.status,
           });
-        } else if (this._judgeState.process.exitCode === null) {
-          // The judge crashed
+        } else if (maxSeverity === 1) {
+          // The stress tester was stopped
+          break;
+        } else if (this._solutionState.process.exitCode === null || this._judgeState.process.exitCode === null) {
+          // The one of the two processes crashed.
           break;
         } else if (this._judgeState.process.exitCode !== 0) {
           // Judge returned non-zero code which means answer is invalid
@@ -494,8 +498,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           break;
         }
       } else {
-        if (maxSeverity > 1) {
-          // Something had gone wrong so stop
+        if (maxSeverity > 0) {
+          // Either the stress tester was stopped or something had gone wrong
           break;
         } else if (this._solutionState.stdout.data !== this._judgeState.stdout.data) {
           this._solutionState.status = "WA";
