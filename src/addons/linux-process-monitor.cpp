@@ -16,6 +16,8 @@
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <chrono>
+#include <algorithm>
 
 // Linux implementation using kernel-enforced resource limits for process monitoring
 // Combined with pidfd_open + poll for efficient waiting and wait4 for stats
@@ -30,6 +32,29 @@ static int pidfd_open(pid_t pid, unsigned int flags) {
 }
 
 namespace {
+
+// AsyncWorker for waiting on process completion
+// Helper to get Peak Resident Set Size (VmHWM) in bytes from /proc/[pid]/status
+static long GetPeakRSS(pid_t pid) {
+  std::string path = "/proc/" + std::to_string(pid) + "/status";
+  FILE* f = fopen(path.c_str(), "r");
+  if (!f) return 0;
+  
+  char line[256];
+  long hwm = 0;
+  while (fgets(line, sizeof(line), f)) {
+    if (strncmp(line, "VmHWM:", 6) == 0) {
+      // Format: "VmHWM:    1234 kB"
+      long kb;
+      if (sscanf(line + 6, "%ld", &kb) == 1) {
+        hwm = kb * 1024;
+      }
+      break;
+    }
+  }
+  fclose(f);
+  return hwm;
+}
 
 // AsyncWorker for waiting on process completion
 class WaitForProcessWorker : public Napi::AsyncWorker {
@@ -63,8 +88,8 @@ public:
 
 protected:
   void Execute() override {
-    // Note: Resource limits (RLIMIT_CPU, RLIMIT_AS) are set in the child process
-    // prior to exec(). We don't need to use prlimit() here.
+    // Note: Resource limits (RLIMIT_CPU) are set in the child process
+    // prior to exec(). RLIMIT_AS is NOT set because we enforce RSS via polling.
 
     int status = 0;
     struct rusage rusage;
@@ -92,32 +117,70 @@ protected:
       pfds[1].fd = stopEventFd_;
       pfds[1].events = POLLIN;
       
-      // Wait for process exit, stop signal, or timeout
-      // Use 2x timeout for Wall Clock leniency (CPU limit is enforced by RLIMIT_CPU)
-      int pollTimeout = (timeoutMs_ > 0) ? static_cast<int>(timeoutMs_ * 2) : -1;
-      int pollResult = poll(pfds, 2, pollTimeout);
+      // We loop to implement polling for memory limits
+      auto startTime = std::chrono::steady_clock::now();
       
-      if (pollResult == -1) {
-        close(pidfd);
-        errorMsg_ = "poll failed: ";
-        errorMsg_ += std::strerror(errno);
-        return;
-      }
-      
-      if (pollResult == 0) {
-        // Timeout occurred (Wall clock)
-        timedOut_ = true;
-        kill(pid_, SIGKILL);
-        close(pidfd);
-      } else {
-        // Event signaled
-        if (pfds[1].revents & POLLIN) {
-          // External stop requested
+      while (true) {
+        // Calculate remaining timeout if applicable
+        int pollTimeout = -1;
+        
+        // 50ms poll interval for memory checking
+        int intervalMs = 50; 
+        
+        // Use fixed interval polling to avoid complex timeout math and busy loops.
+        // We check for timeout manually after poll returns.
+        pollTimeout = intervalMs;
+
+        // Wait for process exit, stop signal, or timeout/interval
+        int pollResult = poll(pfds, 2, pollTimeout);
+        
+        if (pollResult == -1) {
+          if (errno == EINTR) continue;
           close(pidfd);
-          kill(pid_, SIGKILL);
-        } else {
-          // Process exited or state changed
-          close(pidfd);
+          errorMsg_ = "poll failed: ";
+          errorMsg_ += std::strerror(errno);
+          return;
+        }
+        
+        // Check exit/stop FIRST
+        if (pollResult > 0) {
+          if (pfds[1].revents & POLLIN) {
+            // External stop requested
+            close(pidfd);
+            kill(pid_, SIGKILL);
+            break;
+          }
+          if (pfds[0].revents & POLLIN) {
+            // Process exited
+            close(pidfd);
+            break;
+          }
+        }
+        
+        // Timeout or Interval Wakeup - CHECK MEMORY/TIMEOUT
+        
+        // Check Memory
+        if (memoryLimitBytes_ > 0) {
+           long peakRSS = GetPeakRSS(pid_);
+           if (peakRSS > (long)memoryLimitBytes_) {
+               memoryLimitExceeded_ = true;
+               kill(pid_, SIGKILL);
+               close(pidfd);
+               break;
+           }
+        }
+        
+        // Check Wall Clock Timeout
+        if (timeoutMs_ > 0) {
+             auto now = std::chrono::steady_clock::now();
+             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
+             // 2x leniency for wall clock vs CPU time
+             if (elapsed > (long)timeoutMs_ * 2) {
+                 timedOut_ = true;
+                 kill(pid_, SIGKILL);
+                 close(pidfd);
+                 break;
+             }
         }
       }
     }
@@ -136,7 +199,12 @@ protected:
     // Get peak memory (in kilobytes on Linux, convert to bytes)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss) * 1024ULL;
 
-    // Analyze exit status to determine if limits were exceeded
+    // Post-mortem Memory Check: Catch spikes that happened between poll intervals
+    if (memoryLimitBytes_ > 0 && peakMemoryBytes_ > memoryLimitBytes_) {
+        memoryLimitExceeded_ = true;
+    }
+
+    // Analyze exit status
     if (WIFSIGNALED(status)) {
       int signal = WTERMSIG(status);
       
@@ -145,10 +213,8 @@ protected:
         timedOut_ = true;
         exitCode_ = 128 + signal;
       } else if (signal == SIGKILL) {
-        // Process was killed by SIGKILL - could be:
-        // 1. Memory limit (RLIMIT_AS causes SIGKILL)
-        // 2. SIGXCPU was upgraded to SIGKILL (if RLIMIT_CPU hard limit reached)
-        // 3. External stop request
+        // Process was killed by SIGKILL.
+        // Could be our manual kill (timeout/memory/stop) or external OOM.
         
         // Check for timeout: if CPU time is close to the limit, it was likely timeout
         if (timeoutMs_ > 0) {
@@ -159,15 +225,14 @@ protected:
             timedOut_ = true;
           }
         }
-        
-        // Check for memory limit: if peak memory is close to the limit
-        if (!timedOut_ && memoryLimitBytes_ > 0) {
-          // RLIMIT_AS uses 1.5x the memory limit
-          rlim_t memLimit = static_cast<rlim_t>(memoryLimitBytes_ * 1.5);
-          // If peak memory is within 90% of the virtual address space limit
-          if (peakMemoryBytes_ >= memLimit * 0.6) { // 0.6 = 0.9 / 1.5
-            memoryLimitExceeded_ = true;
-          }
+
+        // If we already flagged it, good.
+        // If not, and we didn't stop it, and it wasn't a timeout...
+        if (!timedOut_ && !memoryLimitExceeded_ && !stopped_) {
+            // It was an external SIGKILL (e.g. system OOM killer).
+            // We can't be sure it was THIS limit, but if peak memory is high
+            // we might suspect it. But without RLIMIT_AS, random SIGKILLs are rarer.
+            // For now, leave flags as is (false).
         }
         
         exitCode_ = 128 + signal;
@@ -219,7 +284,6 @@ private:
   std::string errorMsg_;
   int stopEventFd_;
 };
-
 
 
 
@@ -340,13 +404,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
       prlimit(0, RLIMIT_CPU, &cpuLimit, nullptr);
     }
 
-    if (memoryLimitBytes > 0) {
-      struct rlimit memLimit;
-      rlim_t limit = static_cast<rlim_t>(memoryLimitBytes);
-      memLimit.rlim_cur = limit;
-      memLimit.rlim_max = limit;
-      prlimit(0, RLIMIT_AS, &memLimit, nullptr);
-    }
 
     // Change directory
     if (!cwd.empty()) {

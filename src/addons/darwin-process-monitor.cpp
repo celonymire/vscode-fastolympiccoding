@@ -18,6 +18,8 @@
 #include <vector>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <chrono>
+#include <algorithm>
 
 // macOS implementation using kqueue for efficient process monitoring
 // Combined with resource limits enforced by rlimit-wrapper and wait4 for stats
@@ -27,6 +29,16 @@
 //
 
 namespace {
+
+// AsyncWorker for waiting on process completion
+// Helper to get Resident Set Size (RSS) in bytes
+static long GetRSS(pid_t pid) {
+  struct proc_taskinfo pti;
+  if (proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &pti, sizeof(pti)) == sizeof(pti)) {
+    return pti.pti_resident_size;
+  }
+  return 0;
+}
 
 // AsyncWorker for waiting on process completion
 class WaitForProcessWorker : public Napi::AsyncWorker {
@@ -58,6 +70,9 @@ public:
 
 protected:
   void Execute() override {
+    // Note: Resource limits (RLIMIT_CPU) are set in the child process
+    // prior to exec(). RLIMIT_AS is NOT set because we enforce RSS via polling.
+
     int status = 0;
     struct rusage rusage;
     
@@ -91,36 +106,81 @@ protected:
     
     // Wait for either process exit, stop signal, or timeout
     if (shouldWait) {
-        struct kevent event;
-        int nev = -1;
-        
-        // Use timespec for wall clock timeout
-        struct timespec timeout;
-        struct timespec* timeoutPtr = nullptr;
-        if (timeoutMs_ > 0) {
-            // Use 2x timeout for Wall Clock leniency (CPU limit is enforced by RLIMIT_CPU)
-            // RLIMIT_CPU has second granularity and rounds up.
-            // We round up here too to ensure Wall Clock limit >= CPU limit (with 2x factor it will be >)
-            uint32_t seconds = (timeoutMs_ + 999) / 1000;
-            timeout.tv_sec = seconds * 2;
-            timeout.tv_nsec = 0;
-            timeoutPtr = &timeout;
-        }
+       auto startTime = std::chrono::steady_clock::now();
+       
+       while (true) {
+         struct kevent event;
+         int nev = -1;
+         struct timespec timeout;
+         struct timespec* timeoutPtr = nullptr;
+         
+         // 50ms poll interval
+         long intervalMs = 50;
+         long waitMs = intervalMs;
+         
+         if (timeoutMs_ > 0) {
+              auto now = std::chrono::steady_clock::now();
+              auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
+              long remaining = (long)timeoutMs_ - elapsed;
+              if (remaining <= 0) {
+                  waitMs = 0; // Check one last time
+              } else {
+                  waitMs = std::min(intervalMs, remaining);
+              }
+         }
+         
+         timeout.tv_sec = waitMs / 1000;
+         timeout.tv_nsec = (waitMs % 1000) * 1000000;
+         timeoutPtr = &timeout;
 
-        // Wait
-        nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
+         // Wait
+         nev = kevent(kq_, nullptr, 0, &event, 1, timeoutPtr);
         
-        if (nev == -1) {
+         if (nev == -1) {
             if (errno != EINTR && errno != ESRCH) {
                  errorMsg_ = "kevent failed: ";
                  errorMsg_ += std::strerror(errno);
                  return;
             }
-        } else if (nev == 0) {
-            // Timeout
-            timedOut_ = true;
-            kill(pid_, SIGKILL);
-        }
+         }
+
+         // Check events
+         if (nev > 0) {
+             if (event.filter == EVFILT_USER) {
+                 // Stop signal
+                 kill(pid_, SIGKILL);
+                 break;
+             }
+             if (event.filter == EVFILT_PROC) {
+                 // Process exited
+                 break;
+             }
+         }
+         
+         // Timeout or Interval Wakeup
+         if (nev == 0) {
+             // Check Memory
+             if (memoryLimitBytes_ > 0) {
+                 long rss = GetRSS(pid_);
+                 if (rss > (long)memoryLimitBytes_) {
+                     memoryLimitExceeded_ = true;
+                     kill(pid_, SIGKILL);
+                     break;
+                 }
+             }
+             
+             // Check Wall Clock Timeout
+             if (timeoutMs_ > 0) {
+                 auto now = std::chrono::steady_clock::now();
+                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
+                 if (elapsed > (long)timeoutMs_ * 2) {
+                     timedOut_ = true;
+                     kill(pid_, SIGKILL);
+                     break;
+                 }
+             }
+         }
+       }
     }
 
     // Check if stopped before process exit
@@ -142,7 +202,12 @@ protected:
     // Get peak memory (ru_maxrss is in bytes on macOS)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss);
 
-    // Analyze exit status to determine if limits were exceeded
+    // Post-mortem Memory Check: Catch spikes that happened between poll intervals
+    if (memoryLimitBytes_ > 0 && peakMemoryBytes_ > memoryLimitBytes_) {
+        memoryLimitExceeded_ = true;
+    }
+
+    // Analyze exit status
     if (WIFSIGNALED(status)) {
       int signal = WTERMSIG(status);
       
@@ -151,29 +216,16 @@ protected:
         timedOut_ = true;
         exitCode_ = 128 + signal;
       } else if (signal == SIGKILL) {
-        // Process was killed by SIGKILL - could be:
-        // 1. Memory limit (RLIMIT_AS causes SIGKILL)
-        // 2. SIGXCPU was upgraded to SIGKILL (if RLIMIT_CPU hard limit reached)
-        // 3. External stop request
+        // Process was killed by SIGKILL.
+        // Could be our manual kill (timeout/memory/stop) or external OOM.
         
-        // Check for timeout: if CPU time is close to the limit, it was likely timeout
-        if (timeoutMs_ > 0) {
-          rlim_t limitSeconds = (timeoutMs_ + 999) / 1000;
-          double cpuSeconds = elapsedMs_ / 1000.0;
-          // If CPU time is within 90% of limit, consider it a timeout
-          if (cpuSeconds >= limitSeconds * 0.9) {
-            timedOut_ = true;
-          }
-        }
-        
-        // Check for memory limit: if peak memory is close to the limit
-        if (!timedOut_ && memoryLimitBytes_ > 0) {
-          // RLIMIT_AS uses 1.5x the memory limit
-          rlim_t memLimit = static_cast<rlim_t>(memoryLimitBytes_ * 1.5);
-          // If peak memory is within 90% of the virtual address space limit
-          if (peakMemoryBytes_ >= memLimit * 0.6) { // 0.6 = 0.9 / 1.5
-            memoryLimitExceeded_ = true;
-          }
+        // If we already flagged it, good.
+        // If not, and we didn't stop it, and it wasn't a timeout...
+        if (!timedOut_ && !memoryLimitExceeded_ && !stopped_) {
+            // It was an external SIGKILL (e.g. system OOM killer).
+            // We can't be sure it was THIS limit, but if peak memory is high
+            // we might suspect it. But without RLIMIT_AS, random SIGKILLs are rarer.
+            // For now, leave flags as is (false).
         }
         
         exitCode_ = 128 + signal;
@@ -342,13 +394,6 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
       setrlimit(RLIMIT_CPU, &cpuLimit);
     }
 
-    if (memoryLimitBytes > 0) {
-      struct rlimit memLimit;
-      rlim_t limit = static_cast<rlim_t>(memoryLimitBytes);
-      memLimit.rlim_cur = limit;
-      memLimit.rlim_max = limit;
-      setrlimit(RLIMIT_AS, &memLimit);
-    }
 
     // Change directory
     if (!cwd.empty()) {
