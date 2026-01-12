@@ -36,27 +36,8 @@ namespace {
 
 // AsyncWorker for waiting on process completion
 // Helper to get Peak Resident Set Size (VmHWM) in bytes from /proc/[pid]/status
-static long GetPeakRSS(pid_t pid) {
-  std::string path = "/proc/" + std::to_string(pid) + "/status";
-  FILE *f = fopen(path.c_str(), "r");
-  if (!f)
-    return 0;
+// Moved to member function with persistent file handle
 
-  char line[256];
-  long hwm = 0;
-  while (fgets(line, sizeof(line), f)) {
-    if (strncmp(line, "VmHWM:", 6) == 0) {
-      // Format: "VmHWM:    1234 kB"
-      long kb;
-      if (sscanf(line + 6, "%ld", &kb) == 1) {
-        hwm = kb * 1024;
-      }
-      break;
-    }
-  }
-  fclose(f);
-  return hwm;
-}
 
 // AsyncWorker for waiting on process completion
 // Shared state for synchronization between worker and JS thread
@@ -105,6 +86,10 @@ public:
         sharedState_(sharedState) {}
 
   ~WaitForProcessWorker() {
+    if (procStatusFile_) {
+      fclose(procStatusFile_);
+      procStatusFile_ = nullptr;
+    }
     // no-op, shared state destructor handles fd
   }
 
@@ -142,6 +127,10 @@ protected:
       pfds[0].events = POLLIN;
       pfds[1].fd = sharedState_->stopEventFd;
       pfds[1].events = POLLIN;
+
+      // Open /proc/[pid]/status and keep it open
+      std::string procPath = "/proc/" + std::to_string(pid_) + "/status";
+      procStatusFile_ = fopen(procPath.c_str(), "r");
 
       // We loop to implement polling for memory limits
       auto startTime = std::chrono::steady_clock::now();
@@ -188,7 +177,7 @@ protected:
         // Timeout or Interval Wakeup - CHECK MEMORY/TIMEOUT
 
         // Check Memory
-        long peakRSS = GetPeakRSS(pid_);
+        long peakRSS = GetPeakRSSFromHandle();
 
         // Update peak memory statistics
         if (peakRSS > (long)peakMemoryBytes_) {
@@ -227,7 +216,10 @@ protected:
     // Capture final VmHWM from the zombie process BEFORE reaping it with wait4.
     // This is critical for short-lived processes where the poll loop exits
     // immediately.
-    long finalRSS = GetPeakRSS(pid_);
+    // Capture final VmHWM from the zombie process BEFORE reaping it with wait4.
+    // This is critical for short-lived processes where the poll loop exits
+    // immediately.
+    long finalRSS = GetPeakRSSFromHandle();
     if (finalRSS > (long)peakMemoryBytes_) {
       peakMemoryBytes_ = finalRSS;
     }
@@ -341,6 +333,27 @@ private:
   bool stopped_;
   std::string errorMsg_;
   std::shared_ptr<SharedStopState> sharedState_;
+  FILE *procStatusFile_ = nullptr;
+
+  long GetPeakRSSFromHandle() {
+    if (!procStatusFile_)
+      return 0;
+    
+    rewind(procStatusFile_);
+    char line[256];
+    long hwm = 0;
+    while (fgets(line, sizeof(line), procStatusFile_)) {
+      if (strncmp(line, "VmHWM:", 6) == 0) {
+        // Format: "VmHWM:    1234 kB"
+        long kb;
+        if (sscanf(line + 6, "%ld", &kb) == 1) {
+          hwm = kb * 1024;
+        }
+        break;
+      }
+    }
+    return hwm;
+  }
 };
 
 // Helper to convert Napi::Value to std::string
