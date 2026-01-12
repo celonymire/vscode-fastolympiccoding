@@ -206,7 +206,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return false;
     }
 
-    testcase.status = "COMPILING";
     super._postMessage({
       type: "SET",
       id,
@@ -238,7 +237,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _prepareRunningState(id: number, testcase: State) {
-    testcase.status = "RUNNING";
     super._postMessage({
       type: "SET",
       id,

@@ -390,11 +390,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         state.stdout.reset();
         state.stderr.reset();
 
-        state.status = "RUNNING";
         super._postMessage({
           type: "STATUS",
           id: state.state,
-          status: state.status,
+          status: "RUNNING",
         });
       }
       const seed = Math.round(Math.random() * 9007199254740991);
