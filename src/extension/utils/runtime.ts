@@ -322,151 +322,157 @@ export class Runnable {
       resolveSpawn = resolve;
     });
 
-    this._promise = new Promise(async (resolve) => {
-      const streamClosePromises: Promise<void>[] = [];
-      const monitor = getNativeProcessMonitor();
-      if (monitor) {
-        try {
-          // Initialize pipes if needed
-          if (!this._pipeServers) {
-            const createPipeServer = (name: string): Promise<net.Server> => {
-              return new Promise((resolve, reject) => {
-                const server = net.createServer();
-                server.listen(name, () => resolve(server));
-                server.on("error", reject);
-              });
+    this._promise = new Promise((resolve) => {
+      void (async () => {
+        const streamClosePromises: Promise<void>[] = [];
+        const monitor = getNativeProcessMonitor();
+        if (monitor) {
+          try {
+            // Initialize pipes if needed
+            if (!this._pipeServers) {
+              const createPipeServer = (name: string): Promise<net.Server> => {
+                return new Promise((resolve, reject) => {
+                  const server = net.createServer();
+                  server.listen(name, () => resolve(server));
+                  server.on("error", reject);
+                });
+              };
+
+              const id = crypto.randomBytes(8).toString("hex");
+              let pipeNameIn: string, pipeNameOut: string, pipeNameErr: string;
+
+              if (process.platform === "win32") {
+                pipeNameIn = `\\\\.\\pipe\\foc-${id}-in`;
+                pipeNameOut = `\\\\.\\pipe\\foc-${id}-out`;
+                pipeNameErr = `\\\\.\\pipe\\foc-${id}-err`;
+              } else {
+                const tmpDir = os.tmpdir();
+                pipeNameIn = path.join(tmpDir, `foc-${id}-in.sock`);
+                pipeNameOut = path.join(tmpDir, `foc-${id}-out.sock`);
+                pipeNameErr = path.join(tmpDir, `foc-${id}-err.sock`);
+              }
+
+              const servers = await Promise.all([
+                createPipeServer(pipeNameIn),
+                createPipeServer(pipeNameOut),
+                createPipeServer(pipeNameErr),
+              ]);
+              this._pipeServers = servers as [net.Server, net.Server, net.Server];
+              this._pipePaths = [pipeNameIn, pipeNameOut, pipeNameErr];
+            }
+
+            const [serverIn, serverOut, serverErr] = this._pipeServers!;
+            const [pipeNameIn, pipeNameOut, pipeNameErr] = this._pipePaths!;
+
+            let socketIn: net.Socket, socketOut: net.Socket, socketErr: net.Socket;
+            let connected = 0;
+
+            const onConnect = () => {
+              connected++;
+              if (connected === 3) {
+                // Create NativeChildProcess
+                const nativeProc = new NativeChildProcess(
+                  spawnResult.pid,
+                  [socketIn, socketOut, socketErr],
+                  spawnResult.result,
+                  spawnResult.cancel
+                );
+                this._process = nativeProc as unknown as ChildProcessLike;
+
+                // Proxy events from the native process to our internal emitter
+                nativeProc.once("spawn", () => this._emitter.emit("spawn"));
+                nativeProc.on("error", (err) => this._emitter.emit("error", err));
+                nativeProc.stdout.on("data", (data) => this._emitter.emit("stdout:data", data));
+                nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
+                nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
+                nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
+                nativeProc.once("close", (code, signal) =>
+                  this._emitter.emit("close", code, signal)
+                );
+
+                // Signal spawn success
+                nativeProc.emit("spawn");
+                resolveSpawn(true);
+
+                const logger = getLogger("runtime");
+
+                // Attach stream handlers
+                if (nativeProc.stdout) {
+                  nativeProc.stdout.resume();
+                  const p = new Promise<void>((resolve) => {
+                    if (nativeProc.stdout.destroyed) resolve();
+                    else nativeProc.stdout.once("close", resolve);
+                  });
+                  streamClosePromises.push(p);
+                }
+                if (nativeProc.stderr) {
+                  nativeProc.stderr.resume();
+                  const p = new Promise<void>((resolve) => {
+                    if (nativeProc.stderr.destroyed) resolve();
+                    else nativeProc.stderr.once("close", resolve);
+                  });
+                  streamClosePromises.push(p);
+                }
+
+                Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
+                  .then(([res]): void => {
+                    this.handleAddonResult(res);
+                    nativeProc.emit("exit", this._exitCode, null);
+                    nativeProc.emit("close", this._exitCode, null);
+                    resolve();
+                  })
+                  .catch((err: Error) => {
+                    logger.error("Process error: " + err.message);
+                    this.handleMonitorError(err);
+                    nativeProc.emit("error", err);
+                    resolve();
+                  });
+              }
             };
 
-            const id = crypto.randomBytes(8).toString("hex");
-            let pipeNameIn: string, pipeNameOut: string, pipeNameErr: string;
+            serverIn.once("connection", (s) => {
+              s.setNoDelay(true);
+              socketIn = s;
+              onConnect();
+            });
+            serverOut.once("connection", (s) => {
+              s.setNoDelay(true);
+              socketOut = s;
+              onConnect();
+            });
+            serverErr.once("connection", (s) => {
+              s.setNoDelay(true);
+              socketErr = s;
+              onConnect();
+            });
 
-            if (process.platform === "win32") {
-              pipeNameIn = `\\\\.\\pipe\\foc-${id}-in`;
-              pipeNameOut = `\\\\.\\pipe\\foc-${id}-out`;
-              pipeNameErr = `\\\\.\\pipe\\foc-${id}-err`;
-            } else {
-              const tmpDir = os.tmpdir();
-              pipeNameIn = path.join(tmpDir, `foc-${id}-in.sock`);
-              pipeNameOut = path.join(tmpDir, `foc-${id}-out.sock`);
-              pipeNameErr = path.join(tmpDir, `foc-${id}-err.sock`);
-            }
-
-            const servers = await Promise.all([
-              createPipeServer(pipeNameIn),
-              createPipeServer(pipeNameOut),
-              createPipeServer(pipeNameErr),
-            ]);
-            this._pipeServers = servers as [net.Server, net.Server, net.Server];
-            this._pipePaths = [pipeNameIn, pipeNameOut, pipeNameErr];
+            // Call native spawn now that listeners are setup
+            const spawnResult = monitor.spawn(
+              commandName,
+              commandArgs,
+              cwd || "",
+              timeout,
+              memoryLimit,
+              pipeNameIn,
+              pipeNameOut,
+              pipeNameErr,
+              () => {} // Callback unused in this flow setup
+            );
+          } catch (e) {
+            getLogger("runtime").warn(`Native spawn preparation failed: ${e}`);
+            resolveSpawn(false);
+            resolve();
           }
-
-          const [serverIn, serverOut, serverErr] = this._pipeServers!;
-          const [pipeNameIn, pipeNameOut, pipeNameErr] = this._pipePaths!;
-
-          let socketIn: net.Socket, socketOut: net.Socket, socketErr: net.Socket;
-          let connected = 0;
-
-          const onConnect = () => {
-            connected++;
-            if (connected === 3) {
-              // Create NativeChildProcess
-              const nativeProc = new NativeChildProcess(
-                spawnResult.pid,
-                [socketIn, socketOut, socketErr],
-                spawnResult.result,
-                spawnResult.cancel
-              );
-              this._process = nativeProc as unknown as ChildProcessLike;
-
-              // Proxy events from the native process to our internal emitter
-              nativeProc.once("spawn", () => this._emitter.emit("spawn"));
-              nativeProc.on("error", (err) => this._emitter.emit("error", err));
-              nativeProc.stdout.on("data", (data) => this._emitter.emit("stdout:data", data));
-              nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
-              nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
-              nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
-              nativeProc.once("close", (code, signal) => this._emitter.emit("close", code, signal));
-
-              // Signal spawn success
-              nativeProc.emit("spawn");
-              resolveSpawn(true);
-
-              const logger = getLogger("runtime");
-
-              // Attach stream handlers
-              if (nativeProc.stdout) {
-                nativeProc.stdout.resume();
-                const p = new Promise<void>((resolve) => {
-                  if (nativeProc.stdout.destroyed) resolve();
-                  else nativeProc.stdout.once("close", resolve);
-                });
-                streamClosePromises.push(p);
-              }
-              if (nativeProc.stderr) {
-                nativeProc.stderr.resume();
-                const p = new Promise<void>((resolve) => {
-                  if (nativeProc.stderr.destroyed) resolve();
-                  else nativeProc.stderr.once("close", resolve);
-                });
-                streamClosePromises.push(p);
-              }
-
-              Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
-                .then(([res]): void => {
-                  this.handleAddonResult(res);
-                  nativeProc.emit("exit", this._exitCode, null);
-                  nativeProc.emit("close", this._exitCode, null);
-                  resolve();
-                })
-                .catch((err: Error) => {
-                  logger.error("Process error: " + err.message);
-                  this.handleMonitorError(err);
-                  nativeProc.emit("error", err);
-                  resolve();
-                });
-            }
-          };
-
-          serverIn.once("connection", (s) => {
-            s.setNoDelay(true);
-            socketIn = s;
-            onConnect();
-          });
-          serverOut.once("connection", (s) => {
-            s.setNoDelay(true);
-            socketOut = s;
-            onConnect();
-          });
-          serverErr.once("connection", (s) => {
-            s.setNoDelay(true);
-            socketErr = s;
-            onConnect();
-          });
-
-          // Call native spawn now that listeners are setup
-          const spawnResult = monitor.spawn(
-            commandName,
-            commandArgs,
-            cwd || "",
-            timeout,
-            memoryLimit,
-            pipeNameIn,
-            pipeNameOut,
-            pipeNameErr,
-            () => {} // Callback unused in this flow setup
+        } else {
+          // Fallback or Error if monitor not available (but we expect it to be available)
+          // Since we don't have a fallback impl in this snippet, we just error.
+          getLogger("runtime").error(
+            `Process monitor addon not found. Cannot spawn: ${commandName}`
           );
-        } catch (e) {
-          getLogger("runtime").warn(`Native spawn preparation failed: ${e}`);
           resolveSpawn(false);
           resolve();
         }
-      } else {
-        // Fallback or Error if monitor not available (but we expect it to be available)
-        // Since we don't have a fallback impl in this snippet, we just error.
-        getLogger("runtime").error(`Process monitor addon not found. Cannot spawn: ${commandName}`);
-        resolveSpawn(false);
-        resolve();
-      }
+      })();
     });
   }
 
