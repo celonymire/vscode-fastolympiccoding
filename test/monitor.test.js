@@ -472,15 +472,32 @@ test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
   assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
 });
 
-test("Execution: Crashes do not set stopped flag", { timeout: 10000 }, async () => {
-  const res = await spawnPromise(["-e", "process.abort()"], { timeoutMs: 5000 });
+test(
+  "Execution: Crashes do not set stopped flag",
+  { timeout: 10000, skip: process.platform === "win32" },
+  async () => {
+    const res = await spawnPromise(["-e", "process.abort()"], { timeoutMs: 5000 });
 
-  assert.notStrictEqual(res.exitCode, 0, "Exit code should be non-zero");
-  assert.strictEqual(res.exitCode, null, "Exit code should be null on crash (signal)");
-  assert.strictEqual(res.stopped, false, "Should have stopped=false for crash");
-  assert.strictEqual(res.timedOut, false, "Should not be timed out");
-  assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
-});
+    assert.notStrictEqual(res.exitCode, 0, "Exit code should be non-zero");
+    assert.strictEqual(res.exitCode, null, "Exit code should be null on crash (signal)");
+    assert.strictEqual(res.stopped, false, "Should have stopped=false for crash");
+    assert.strictEqual(res.timedOut, false, "Should not be timed out");
+    assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
+  }
+);
+
+test(
+  "Execution: Native Windows Crash Simulation",
+  { timeout: 10000, skip: process.platform !== "win32" },
+  async () => {
+    // On Windows, exit code 0xC0000005 is STATUS_ACCESS_VIOLATION.
+    // We can simulate a native crash by exiting with this NTSTATUS code.
+    // This verifies that the addon correctly identifies codes >= 0xC0000000 as crashes.
+    const res = await spawnPromise(["-e", "process.exit(0xC0000005)"]);
+    assert.strictEqual(res.exitCode, null, "Exit code should be null for simulated native crash");
+    assert.strictEqual(res.stopped, false, "Should have stopped=false");
+  }
+);
 
 test("Execution: Non-zero exit code", { timeout: 10000 }, async () => {
   const res = await spawnPromise(["-e", "process.exit(42)"]);
