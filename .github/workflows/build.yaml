@@ -107,6 +107,8 @@ jobs:
 
       - name: Package VSIX
         if: matrix.name != 'Alpine Linux ARM64'
+        env:
+          VSCE_STORE: file
         run: npx --yes @vscode/vsce package --target ${{ matrix.vsceTarget }}
 
       - name: Detect VSIX filename
