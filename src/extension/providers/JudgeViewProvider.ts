@@ -510,11 +510,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
-    super.onDispose();
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
     this._fileCancellation = undefined;
-    this.stopAll();
+
+    for (const testcase of this._state) {
+      testcase.process.stop();
+      testcase.interactorProcess.stop();
+      void testcase.process.dispose();
+      void testcase.interactorProcess.dispose();
+    }
+
+    super.onDispose();
   }
 
   onShow() {
@@ -1127,6 +1134,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._stop(id);
     super._postMessage({ type: "DELETE", id });
     const idx = this._state.findIndex((t) => t.id === id);
+    const state = this._state[idx];
+
+    state.process.dispose();
+    state.interactorProcess.dispose();
+
     if (idx !== -1) {
       this._state.splice(idx, 1);
     }

@@ -106,8 +106,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
-    super.onDispose();
     this.stop();
+    this._judgeState.process.dispose();
+    this._solutionState.process.dispose();
+    this._generatorState.process.dispose();
+
+    super.onDispose();
   }
 
   onShow() {
