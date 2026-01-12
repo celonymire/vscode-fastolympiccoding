@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
+import * as crypto from "crypto";
 
 import { StatusSchema, type Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
@@ -396,7 +397,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           status: "RUNNING",
         });
       }
-      const seed = Math.round(Math.random() * 9007199254740991);
+      const seed = crypto.randomBytes(8).readBigUInt64BE();
       this._interactiveSecretPromise = new Promise<void>((resolve) => {
         this._interactorSecretResolver = resolve;
       });
