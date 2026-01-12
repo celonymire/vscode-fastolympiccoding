@@ -794,10 +794,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  saveAll() {
-    super._postMessage({ type: "SAVE_ALL" });
-  }
-
   toggleWebviewSettings() {
     super._postMessage({ type: "SETTINGS_TOGGLE" });
   }

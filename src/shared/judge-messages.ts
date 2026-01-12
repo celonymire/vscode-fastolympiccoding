@@ -157,10 +157,6 @@ export const DeleteMessageSchema = v.object({
   id: v.number(),
 });
 
-export const SaveAllMessageSchema = v.object({
-  type: v.literal("SAVE_ALL"),
-});
-
 export const ShowMessageSchema = v.object({
   type: v.literal("SHOW"),
   visible: v.boolean(),
@@ -181,7 +177,6 @@ export const WebviewMessageSchema = v.union([
   SetMessageSchema,
   StdioMessageSchema,
   DeleteMessageSchema,
-  SaveAllMessageSchema,
   ShowMessageSchema,
   InitialStateSchema,
   SettingsToggleSchema,

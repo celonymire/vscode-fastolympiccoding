@@ -89,25 +89,6 @@
     }
   }
 
-  function handleSaveAll() {
-    for (const { id, data: tc } of testcases) {
-      if (tc.status === "EDITING") {
-        postProviderMessage({
-          type: "SAVE",
-          id,
-          stdio: "STDIN",
-          data: tc.stdin,
-        });
-        postProviderMessage({
-          type: "SAVE",
-          id,
-          stdio: "ACCEPTED_STDOUT",
-          data: tc.acceptedStdout,
-        });
-      }
-    }
-  }
-
   function handleShow({ visible }: v.InferOutput<typeof ShowMessageSchema>) {
     show = visible;
   }
@@ -172,9 +153,6 @@
           break;
         case "DELETE":
           handleDelete(msg.data);
-          break;
-        case "SAVE_ALL":
-          handleSaveAll();
           break;
         case "SHOW":
           handleShow(msg.data);

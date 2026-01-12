@@ -45,11 +45,6 @@
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.saveAll",
-          "group": "navigation@5",
-          "when": "view == fastolympiccoding.judge"
-        },
-        {
           "command": "fastolympiccoding.toggleJudgeSettings",
           "group": "navigation@6",
           "when": "view == fastolympiccoding.judge"
@@ -314,12 +309,6 @@
         "icon": "$(clear-all)"
       },
       {
-        "command": "fastolympiccoding.saveAll",
-        "title": "Save All Testcases",
-        "category": "Fast Olympic Coding",
-        "icon": "$(save-all)"
-      },
-      {
         "command": "fastolympiccoding.startStressTest",
         "title": "Start Stress Test",
         "category": "Fast Olympic Coding",
@@ -394,11 +383,6 @@
       {
         "command": "fastolympiccoding.deleteAll",
         "key": "ctrl+alt+d",
-        "when": "view.fastolympiccoding.judge.visible"
-      },
-      {
-        "command": "fastolympiccoding.saveAll",
-        "key": "ctrl+alt+s",
         "when": "view.fastolympiccoding.judge.visible"
       },
       {
