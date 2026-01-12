@@ -3,6 +3,12 @@
 ![Testcases Gif](media/banner.png)
 
 <p align="center">
+<img src="https://custom-icon-badges.demolab.com/badge/Windows-0078D6?logo=windows11&logoColor=white">
+<img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black">
+<img src="https://img.shields.io/badge/Alpine%20Linux-0D597F?logo=alpinelinux&logoColor=fff">
+<img src="https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=F0F0F0">
+</p>
+<p align="center">
 <img src="https://vsmarketplacebadges.dev/version-short/sam20908.vscode-fastolympiccoding.svg">
 <img src="https://vsmarketplacebadges.dev/installs-short/sam20908.vscode-fastolympiccoding.svg">
 <img src="https://vsmarketplacebadges.dev/rating-short/sam20908.vscode-fastolympiccoding.svg">
@@ -307,13 +313,12 @@ We need to tell the extension the name of our interactor file. Here is the defau
 
 Due to the lack of standardization of interactor's results, I have taken the middle ground of various online judges' interactor's behavior. **The exit code of the interactor will be used to determine the acceptance of the solution**. Below lists the exit codes and the verdict:
 
-| Code                      | Verdict          |
-| ------------------------- | ---------------- |
-| 0                         | ✅ Accepted      |
-| Non-zero                  | ❌ Wrong Answer  |
-| _null_ (often from crash) | ⚠️ Runtime Error |
-
-**ℹ️ Partial points are not supported!**
+| Verdict           | Code              |
+| ----------------- | ----------------- |
+| ✅ Accepted       | 0                 |
+| ❌ Wrong Answer   | Non-zero          |
+| 💥 Runtime Error  | **OS Specific**   |
+| 🟡 Partial Points | **Not Supported** |
 
 Interactive testcases have a special badge to make them distinguishable. If there is no set secret, the testcase will ask you to provide one. **This is a multi-line textbox because you have to give all the data in one go!**
 
