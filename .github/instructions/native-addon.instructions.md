@@ -1,30 +1,52 @@
 ---
-applyTo: "binding.gyp,src/addons/**/*.cpp,src/extension/utils/runtime.ts,rspack.config.ts,package.json"
+applyTo: "src/addons/**/*.cpp"
 ---
 
-This repo includes optional **platform-specific** native addons used for efficient process memory tracking (e.g., memory limits in Judge/Stress):
+This repo includes **platform-specific** native addons used for efficient process execution and monitoring. These addons replace Node.js `child_process` for running user code to strictly enforce time and memory limits and provide accurate resource usage statistics.
 
-- **Windows:** `win32-memory-stats` – uses Win32 APIs (`Windows.h`, `psapi.lib`)
-- **Linux:** `linux-memory-stats` – reads `/proc/<pid>/status` for peak RSS (`VmHWM`)
+- **Windows:** `win32-process-monitor` – uses **Job Objects** and efficient completion ports/events.
+- **Linux:** `linux-process-monitor` – uses **pidfd** (kernel 5.3+) and polling for memory limits.
+- **macOS:** `darwin-process-monitor` – uses **kqueue** for process events and **proc_pid_rusage** for accurate stats.
 
-When working on files matched by this pattern:
+When working on these files:
 
-- **Platform-specific:** Each addon is built and runs only on its target platform. Non-matching platforms should degrade gracefully (no hard failures) by falling back to `pidusage`.
-- **Build pipeline:** The addons are built via `node-gyp` using [binding.gyp](../../binding.gyp) and produce:
-  - `build/Release/win32-memory-stats.node` (Windows)
-  - `build/Release/linux-memory-stats.node` (Linux)
-- **Bundling:** [rspack.config.ts](../../rspack.config.ts) conditionally copies the built `.node` files into `dist/` based on `process.platform`. This ensures builds on non-matching platforms don't fail due to missing addon files.
-- **Runtime loading:** [src/extension/utils/runtime.ts](../../src/extension/utils/runtime.ts) provides lazy-loading functions (`getWin32MemoryAddon()`, `getLinuxMemoryAddon()`) that:
-  - Check if the bundled `.node` file exists before attempting to load it
-  - Use Node's `createRequire(__filename)` to load the addon (bundlers like rspack/webpack can rewrite `require()`)
-  - Treat load failure as "addon unavailable" and fall back to `pidusage` for memory stats (with degraded performance)
-  - Log a warning when the addon is unavailable but continue running the extension
-  - Cache the loaded addon for subsequent calls
-- **Memory sampling:** The `Runnable` class in `runtime.ts` uses `_sampleMemory()` to:
-  - Prefer the native addon when available for accurate peak RSS tracking
-  - Fall back to `pidusage` when the addon is unavailable or fails
-  - Sample memory at regular intervals (`MEMORY_SAMPLE_INTERVAL_MS`) to track peak usage
-  - Kill the process when memory limit is exceeded (`_memoryLimitExceeded`)
-- **Native builds are detached:** `npm run build` / `npm run watch` do **not** invoke `node-gyp`. Use `npm run build:addon` to build the addon explicitly (intended for CI targeted packaging). Use `node-gyp clean` to clean the addon build output.
-- **CI packaging:** CI performs addon builds explicitly only for **targeted** VSIX packaging runs (e.g. `linux-x64`, `win32-x64`); the universal VSIX does not build the addon.
-- **Version/ABI:** Be careful when changing the Node target/ABI used by the addon build scripts in `package.json`; mismatches can break runtime loading.
+### 1. Unified Spawn & Monitor
+The addons export a `spawn` function that handles the entire lifecycle:
+-   **Spawning**: Forks/Creates the process with the correct flags (e.g., suspended on Windows).
+-   **Limits**: Enforces Time and Memory limits natively.
+    -   *Windows*: Job Object limits (Hard enforcement).
+    -   *Linux/macOS*: Polling (50ms interval) for memory; `SIGXCPU` / wall-clock checks for time.
+-   **Waiting**: Uses non-blocking OS primitives (`pidfd_open`+`poll`, `kqueue`, `WaitForMultipleObjects`) in a `Napi::AsyncWorker`.
+-   **IPC**: Communicates stdio via Named Pipes (Windows) or Unix Sockets (Linux/macOS) established *before* execution.
+
+### 2. Platform Implementation Details (Parity Required)
+Functionality must be consistent across all three platforms.
+
+#### Linux (`linux-process-monitor.cpp`)
+-   **Mechanism**: Uses `pidfd_open` (available in Linux 5.3+) to avoid PID reuse races.
+-   **Memory**: Polls `/proc/[pid]/status` for `VmHWM` (Peak Resident Set Size). This is preferred over `RLIMIT_AS` which is unreliable for V8/Node runtimes.
+-   **Zombie Handling**: MUST capture `VmHWM` *before* reaping the zombie logic, as the entry disappears or resets after `wait4`.
+
+#### macOS (`darwin-process-monitor.cpp`)
+-   **Mechanism**: Uses `kqueue` with `EVFILT_PROC` (for exit) and `EVFILT_USER` (for cancellation).
+-   **Stats**: Uses `proc_pid_rusage` to get `phys_footprint` (most accurate memory metric) and nanosecond-precision CPU time.
+-   **Timebase**: Handles Mach absolute time conversion for Apple Silicon correctness.
+
+#### Windows (`win32-process-monitor.cpp`)
+-   **Mechanism**: Uses **Job Objects** to group the process. This allows the OS to automatically terminate the process if it exceeds hard memory/CPU limits.
+-   **Unicode**: usage of Wide String APIs (`CreateProcessW`, `std::wstring`) is mandatory.
+
+### 3. Runtime Integration (`src/extension/utils/runtime.ts`)
+-   The `Runnable` class delegates execution entirely to the native addon when available.
+-   **No Fallback**: Unlike previous versions, we do *not* fallback to `child_process` + `pidusage` for these heavy tasks, as strict limit enforcement is required.
+-   **Cancellation**: The addon exposes a `cancel()` function that sets an event/writes to a generic FD to wake up the worker thread immediately.
+
+### 4. Build & Distribution
+-   **Commands**: `npm run build:addon` builds via `node-gyp`.
+-   **CI**: GitHub Actions builds the specific addon for the target platform (Linux/Windows/macOS) during the VSIX packaging step.
+-   **Bundling**: `rspack.config.ts` copies the appropriate `.node` file to `dist/` based on the generic platform.
+
+### 5. Code Style
+-   **Safety**: Always check return codes (`errno`, `GetLastError`) and return meaningful errors to JS.
+-   **Non-blocking**: Changes must preserve the asynchronous nature of the worker. Never block the main thread.
+-   **Memory**: Use `std::shared_ptr` for state shared between the main thread (cancellation) and the worker thread.
