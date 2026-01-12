@@ -1442,7 +1442,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       type: "SET",
       id,
       property,
-      value,
+      value: value.trimEnd(),
     });
   }
 
