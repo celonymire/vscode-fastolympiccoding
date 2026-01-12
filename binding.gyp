@@ -1,9 +1,9 @@
 {
   "targets": [
     {
-      "target_name": "win32-memory-stats",
+      "target_name": "win32-process-monitor",
       "sources": [
-        "src/addons/win32-memory-stats.cpp"
+        "src/addons/win32-process-monitor.cpp"
       ],
       "include_dirs": [
         "<!(node -p \"require('node-addon-api').include_dir\")"
@@ -19,9 +19,9 @@
       ]
     },
     {
-      "target_name": "linux-memory-stats",
+      "target_name": "linux-process-monitor",
       "sources": [
-        "src/addons/linux-memory-stats.cpp"
+        "src/addons/linux-process-monitor.cpp"
       ],
       "include_dirs": [
         "<!(node -p \"require('node-addon-api').include_dir\")"
@@ -34,6 +34,24 @@
       "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
       "conditions": [
         ["OS != \"linux\"", { "type": "none" }]
+      ]
+    },
+    {
+      "target_name": "darwin-process-monitor",
+      "sources": [
+        "src/addons/darwin-process-monitor.cpp"
+      ],
+      "include_dirs": [
+        "<!(node -p \"require('node-addon-api').include_dir\")"
+      ],
+      "dependencies": [
+        "<!(node -p \"require('node-addon-api').gyp\")"
+      ],
+      "cflags!": [ "-fno-exceptions" ],
+      "cflags_cc!": [ "-fno-exceptions" ],
+      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
+      "conditions": [
+        ["OS != \"mac\"", { "type": "none" }]
       ]
     }
   ]

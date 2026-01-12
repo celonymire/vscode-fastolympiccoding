@@ -454,7 +454,6 @@ function getSchemaDefaults(): Record<string, string> {
       }
     }
 
-    logger.info(`Loaded default runSettings!`);
     return _schemaDefaults;
   } catch (error) {
     logger.error(`Failed to load schema defaults: ${error}`);
@@ -477,11 +476,9 @@ export function initializeRunSettingsWatcher(context: vscode.ExtensionContext): 
   // Watch for runSettings.json files in all workspace folders
   _runSettingsWatcher = vscode.workspace.createFileSystemWatcher("**/runSettings.json");
 
-  const clearCache = (uri: vscode.Uri) => {
-    logger.info(`runSettings.json changed at ${uri.fsPath}, clearing cache`);
+  const clearCache = () => {
     _runSettingsCache.clear();
   };
-
   _runSettingsWatcher.onDidCreate(clearCache);
   _runSettingsWatcher.onDidChange(clearCache);
   _runSettingsWatcher.onDidDelete(clearCache);
@@ -548,7 +545,6 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
     }
 
     _runSettingsCache.set(cacheKey, parsed as Record<string, unknown>);
-    logger.info(`Loaded runSettings.json from ${runSettingsPath}`);
     return parsed as Record<string, unknown>;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {

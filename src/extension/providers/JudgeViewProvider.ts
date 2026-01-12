@@ -15,10 +15,10 @@ import {
   findAvailablePort,
   mapTestcaseTermination,
   Runnable,
-  severityNumberToStatus,
+  severityNumberToInteractiveStatus,
   terminationSeverityNumber,
 } from "../utils/runtime";
-import type { RunTermination } from "../utils/runtime";
+import type { RunTermination, Severity } from "../utils/runtime";
 import {
   getFileRunSettings,
   openInNewEditor,
@@ -105,11 +105,11 @@ function updateInteractiveTestcaseFromTermination(
 ) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
-  state.status = severityNumberToStatus(
+  state.status = severityNumberToInteractiveStatus(
     Math.max(
-      terminationSeverityNumber(termination),
-      terminationSeverityNumber(interactorTermination)
-    )
+      terminationSeverityNumber(termination) as number,
+      terminationSeverityNumber(interactorTermination) as number
+    ) as Severity
   );
   if (state.status === "WA") {
     // Either judge or interactor returned non-zero error code, so we have 2 cases:
@@ -293,17 +293,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       cwd
     );
 
-    const proc = testcase.process.process;
-    if (!proc) {
-      return;
-    }
-
     testcase.process
       .on("spawn", () => {
         if (token.isCancellationRequested) {
           return;
         }
-        proc.stdin.write(testcase.stdin.data);
+        testcase.process.process?.stdin.write(testcase.stdin.data);
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
       .on("stdout:data", (data: string) => testcase.stdout.write(data, "batch"))
@@ -383,12 +378,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // Don't restrict the interactor's time and memory limit
     testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
 
-    const proc = testcase.process.process;
-    const interactorProc = testcase.interactorProcess.process;
-    if (!proc || !interactorProc) {
-      return;
-    }
-
     // Pass the secret input before the outputs of the solution
     // This is a deliberate design choice to allow minimal changes to adapt
     // to various online judges, where the secret answer can come from various
@@ -406,12 +395,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           testcase.interactorSecretResolver?.();
           testcase.interactorSecretResolver = undefined;
         }
-        interactorProc.stdin.write(testcase.interactorSecret.data);
+        testcase.interactorProcess.process?.stdin.write(testcase.interactorSecret.data);
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
       .on("stdout:data", (data: string) => {
         testcase.stdin.write(data, "force");
-        proc.stdin.write(data);
+        testcase.process.process?.stdin.write(data);
       })
       .on("error", (data: Error) => {
         if (token.isCancellationRequested) {
@@ -423,7 +412,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
 
-        testcase.process.process?.kill();
+        testcase.process.stop();
       })
       .on("close", () => {
         testcase.process.process?.stdin.end();
@@ -436,7 +425,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           await secretPromise;
         }
         testcase.stdout.write(data, "force");
-        interactorProc.stdin.write(data);
+        testcase.interactorProcess.process?.stdin.write(data);
       })
       .on("error", (data: Error) => {
         if (token.isCancellationRequested) {
@@ -447,7 +436,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
 
-        testcase.interactorProcess.process?.kill();
+        testcase.interactorProcess.stop();
       })
       .on("close", () => {
         testcase.interactorProcess.process?.stdin.end();
@@ -521,11 +510,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
-    super.onDispose();
     this._fileCancellation?.cancel();
     this._fileCancellation?.dispose();
     this._fileCancellation = undefined;
-    this.stopAll();
+
+    for (const testcase of this._state) {
+      testcase.process.stop();
+      testcase.interactorProcess.stop();
+      void testcase.process.dispose();
+      void testcase.interactorProcess.dispose();
+    }
+
+    super.onDispose();
   }
 
   onShow() {
@@ -1130,14 +1126,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       void vscode.debug.stopDebugging(vscode.debug.activeDebugSession);
     }
 
-    testcase.process.process?.kill();
-    testcase.interactorProcess.process?.kill();
+    testcase.process.stop();
+    testcase.interactorProcess.stop();
   }
 
   private _delete(id: number) {
     this._stop(id);
     super._postMessage({ type: "DELETE", id });
     const idx = this._state.findIndex((t) => t.id === id);
+    const state = this._state[idx];
+
+    state.process.dispose();
+    state.interactorProcess.dispose();
+
     if (idx !== -1) {
       this._state.splice(idx, 1);
     }

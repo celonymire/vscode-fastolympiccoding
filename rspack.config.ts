@@ -23,25 +23,37 @@ function addonCopyPlugins(): Configuration["plugins"] {
   const plugins: Configuration["plugins"] = [];
 
   if (process.platform === "win32") {
-    const winPath = path.join("build", "Release", "win32-memory-stats.node");
+    const winMonitorPath = path.join("build", "Release", "win32-process-monitor.node");
     plugins.push(
       new CopyRspackPlugin({
         patterns: [
           {
-            from: winPath,
-            to: "win32-memory-stats.node",
+            from: winMonitorPath,
+            to: "win32-process-monitor.node",
           },
         ],
       })
     );
   } else if (process.platform === "linux") {
-    const linuxPath = path.join("build", "Release", "linux-memory-stats.node");
+    const linuxMonitorPath = path.join("build", "Release", "linux-process-monitor.node");
     plugins.push(
       new CopyRspackPlugin({
         patterns: [
           {
-            from: linuxPath,
-            to: "linux-memory-stats.node",
+            from: linuxMonitorPath,
+            to: "linux-process-monitor.node",
+          },
+        ],
+      })
+    );
+  } else if (process.platform === "darwin") {
+    const darwinMonitorPath = path.join("build", "Release", "darwin-process-monitor.node");
+    plugins.push(
+      new CopyRspackPlugin({
+        patterns: [
+          {
+            from: darwinMonitorPath,
+            to: "darwin-process-monitor.node",
           },
         ],
       })
