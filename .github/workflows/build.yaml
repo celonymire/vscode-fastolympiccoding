@@ -110,7 +110,6 @@ jobs:
       - name: Test native addon
         if: matrix.name != 'Alpine Linux ARM64'
         run: npm test
-        continue-on-error: true
 
       - name: Package VSIX
         if: matrix.name != 'Alpine Linux ARM64'
