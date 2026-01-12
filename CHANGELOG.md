@@ -8,3 +8,7 @@
 - Trim off trailing whitespaces when requesting full data
 - Don't save ongoing running statuses to avoid blocking interacting with testcase on malfunction
 - Removed unused save all functionality
+
+### Fixed
+
+- Leading newline when adding real-time inputs to empty saved input

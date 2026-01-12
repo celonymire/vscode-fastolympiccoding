@@ -1308,7 +1308,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     switch (stdio) {
       case "STDIN":
         testcase.stdin.reset();
-        testcase.stdin.write(data, "final");
+        // We don't append newline if stdin is empty because online inputs in the future
+        // will get affected by the newline
+        testcase.stdin.write(data, data === "" ? "force" : "final");
         break;
       case "ACCEPTED_STDOUT":
         testcase.acceptedStdout.reset();
