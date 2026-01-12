@@ -215,8 +215,9 @@
         <AutoresizeTextarea
           bind:value={newStdin}
           placeholder="Online input..."
+          ctrlEnterNewline={true}
           onkeyup={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !e.ctrlKey) {
               postProviderMessage({ type: "STDIN", id, data: newStdin });
               newStdin = "";
             }

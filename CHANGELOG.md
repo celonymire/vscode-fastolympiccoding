@@ -3,6 +3,7 @@
 ### Added
 
 - Ctrl+Enter hotkey to save currently edited textarea
+- Ctrl+Enter to append newline instead of sending current online input
 
 ### Changed
 

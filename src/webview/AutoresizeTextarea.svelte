@@ -16,6 +16,7 @@
     oncancel?: () => void;
     variant?: Variant;
     actions?: Snippet;
+    ctrlEnterNewline?: boolean;
   }
 
   let {
@@ -31,6 +32,7 @@
     oncancel,
     variant = "default",
     actions,
+    ctrlEnterNewline = false,
   }: Props = $props();
 
   let textarea: HTMLTextAreaElement | undefined = $state();
@@ -91,10 +93,26 @@
 
   function handleKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey && event.key === "Enter") {
-      event.preventDefault();
-      if (editing) {
-        editing = false;
-        onsave?.();
+      event.preventDefault(); // Prevent default in both cases now.
+      if (ctrlEnterNewline) {
+        // Insert newline
+        if (!textarea) return;
+        const { selectionStart, selectionEnd } = textarea;
+        const newValue = value.slice(0, selectionStart) + "\n" + value.slice(selectionEnd);
+        value = newValue;
+
+        requestAnimationFrame(() => {
+          if (textarea) {
+            textarea.selectionStart = textarea.selectionEnd = selectionStart + 1;
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        });
+      } else {
+        // Save
+        if (editing) {
+          editing = false;
+          onsave?.();
+        }
       }
     }
   }
