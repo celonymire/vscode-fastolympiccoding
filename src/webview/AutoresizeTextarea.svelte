@@ -89,6 +89,16 @@
     }
   }
 
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.ctrlKey && event.key === "Enter") {
+      event.preventDefault();
+      if (editing) {
+        editing = false;
+        onsave?.();
+      }
+    }
+  }
+
   function handleKeyUp(event: KeyboardEvent) {
     onkeyup?.(event);
     checkCursorOverlap();
@@ -211,6 +221,7 @@
         data-variant={variant}
         {placeholder}
         bind:value
+        onkeydown={handleKeyDown}
         onkeyup={handleKeyUp}
         onblur={handleBlur}
         onpointerup={checkCursorOverlap}
@@ -252,7 +263,7 @@
         {#if onsave}
           <button
             type="button"
-            data-tooltip="Save"
+            data-tooltip="Save (Ctrl+Enter)"
             aria-label="Save"
             class="action-button codicon codicon-save"
             onclick={() => {

@@ -1,5 +1,9 @@
 # 4.0.0
 
+### Added
+
+- Ctrl+Enter hotkey to save currently edited textarea
+
 ### Changed
 
 - Use native addons to run solutions and enforce limits instead of using child_process. This bypasses the event loop and allows for more accurate limits as well as accurate metrics. Using native addons also means we effectively restrict this extension to only run on Windows, Linux, and macOS, which are the platforms that VSCode supports
