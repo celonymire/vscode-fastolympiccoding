@@ -216,9 +216,6 @@ protected:
     // Capture final VmHWM from the zombie process BEFORE reaping it with wait4.
     // This is critical for short-lived processes where the poll loop exits
     // immediately.
-    // Capture final VmHWM from the zombie process BEFORE reaping it with wait4.
-    // This is critical for short-lived processes where the poll loop exits
-    // immediately.
     long finalRSS = GetPeakRSSFromHandle();
     if (finalRSS > (long)peakMemoryBytes_) {
       peakMemoryBytes_ = finalRSS;

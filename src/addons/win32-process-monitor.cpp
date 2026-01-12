@@ -46,11 +46,7 @@ struct SharedStopState {
   }
 };
 
-// Windows implementation using Job Objects for resource limit enforcement
-// Job Objects allow the OS to enforce time and memory limits directly
-// Returns: { elapsedMs: number, cpuMs: number, peakMemoryBytes: number,
-// exitCode: number, timedOut: boolean, memoryLimitExceeded: boolean, stopped:
-// boolean }
+
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
   WaitForProcessWorker(Napi::Env &env, HANDLE hProcess, DWORD pid,
