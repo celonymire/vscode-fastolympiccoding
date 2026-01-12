@@ -204,8 +204,8 @@ protected:
         struct timespec timeout;
         struct timespec *timeoutPtr = nullptr;
 
-        // 50ms poll interval
-        long intervalMs = 50;
+        // 10ms poll interval
+        long intervalMs = 10;
         long waitMs = intervalMs;
 
         if (timeoutMs_ > 0) {

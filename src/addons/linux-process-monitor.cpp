@@ -19,15 +19,12 @@
 #include <unistd.h>
 #include <vector>
 
-// Linux implementation using kernel-enforced resource limits for process
-// monitoring Combined with pidfd_open + poll for efficient waiting and wait4
-// for stats
+// Linux process monitoring implementation using pidfd_open, poll, and wait4.
 //
 // Exports:
 //   spawn(...) -> { pid: number, result: Promise<AddonResult> }
 //
 
-// pidfd_open syscall wrapper (available since Linux 5.3)
 static int pidfd_open(pid_t pid, unsigned int flags) {
   return syscall(SYS_pidfd_open, pid, flags);
 }
@@ -35,12 +32,7 @@ static int pidfd_open(pid_t pid, unsigned int flags) {
 namespace {
 
 // AsyncWorker for waiting on process completion
-// Helper to get Peak Resident Set Size (VmHWM) in bytes from /proc/[pid]/status
-// Moved to member function with persistent file handle
 
-
-// AsyncWorker for waiting on process completion
-// Shared state for synchronization between worker and JS thread
 struct SharedStopState {
   int stopEventFd = -1;
   std::mutex mutex;
@@ -86,10 +78,7 @@ public:
         sharedState_(sharedState) {}
 
   ~WaitForProcessWorker() {
-    if (procStatusFile_) {
-      fclose(procStatusFile_);
-      procStatusFile_ = nullptr;
-    }
+
     // no-op, shared state destructor handles fd
   }
 
@@ -97,13 +86,9 @@ public:
 
 protected:
   void Execute() override {
-    // Note: Resource limits (RLIMIT_CPU) are set in the child process
-    // prior to exec(). RLIMIT_AS is NOT set because we enforce RSS via polling.
-
     int status = 0;
     struct rusage rusage;
 
-    // Open pidfd for efficient waiting (requires Linux 5.3+)
     int pidfd = pidfd_open(pid_, 0);
     bool shouldWait = true;
 
@@ -128,10 +113,6 @@ protected:
       pfds[1].fd = sharedState_->stopEventFd;
       pfds[1].events = POLLIN;
 
-      // Open /proc/[pid]/status and keep it open
-      std::string procPath = "/proc/" + std::to_string(pid_) + "/status";
-      procStatusFile_ = fopen(procPath.c_str(), "r");
-
       // We loop to implement polling for memory limits
       auto startTime = std::chrono::steady_clock::now();
 
@@ -139,8 +120,8 @@ protected:
         // Calculate remaining timeout if applicable
         int pollTimeout = -1;
 
-        // 50ms poll interval for memory checking
-        int intervalMs = 50;
+        // 10ms poll interval for memory checking
+        int intervalMs = 10;
 
         // Use fixed interval polling to avoid complex timeout math and busy
         // loops. We check for timeout manually after poll returns.
@@ -177,7 +158,7 @@ protected:
         // Timeout or Interval Wakeup - CHECK MEMORY/TIMEOUT
 
         // Check Memory
-        long peakRSS = GetPeakRSSFromHandle();
+        long peakRSS = GetPeakRSS();
 
         // Update peak memory statistics
         if (peakRSS > (long)peakMemoryBytes_) {
@@ -213,14 +194,6 @@ protected:
     // Mark shared state as closed so cancel() becomes no-op
     sharedState_->Close();
 
-    // Capture final VmHWM from the zombie process BEFORE reaping it with wait4.
-    // This is critical for short-lived processes where the poll loop exits
-    // immediately.
-    long finalRSS = GetPeakRSSFromHandle();
-    if (finalRSS > (long)peakMemoryBytes_) {
-      peakMemoryBytes_ = finalRSS;
-    }
-
     // Collect exit status and resource usage
     std::memset(&rusage, 0, sizeof(rusage));
     if (wait4(pid_, &status, 0, &rusage) == -1) {
@@ -232,9 +205,6 @@ protected:
         (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
         (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
     elapsedMs_ = std::round(static_cast<double>(cpuUs) / 1000.0);
-
-    // We don't use the rusage.ru_maxrss field because it is not always
-    // accurate, and it is not always available. We use the peak RSS instead.
 
     // Post-mortem Memory Check: Catch spikes that happened between poll
     // intervals
@@ -330,18 +300,17 @@ private:
   bool stopped_;
   std::string errorMsg_;
   std::shared_ptr<SharedStopState> sharedState_;
-  FILE *procStatusFile_ = nullptr;
 
-  long GetPeakRSSFromHandle() {
-    if (!procStatusFile_)
+  long GetPeakRSS() {
+    std::string path = "/proc/" + std::to_string(pid_) + "/status";
+    FILE *f = fopen(path.c_str(), "r");
+    if (!f)
       return 0;
-    
-    rewind(procStatusFile_);
+
     char line[256];
     long hwm = 0;
-    while (fgets(line, sizeof(line), procStatusFile_)) {
+    while (fgets(line, sizeof(line), f)) {
       if (strncmp(line, "VmHWM:", 6) == 0) {
-        // Format: "VmHWM:    1234 kB"
         long kb;
         if (sscanf(line + 6, "%ld", &kb) == 1) {
           hwm = kb * 1024;
@@ -349,6 +318,7 @@ private:
         break;
       }
     }
+    fclose(f);
     return hwm;
   }
 };
@@ -395,9 +365,9 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   std::string command = ToString(info[0]);
   Napi::Array argsArray = info[1].As<Napi::Array>();
   std::string cwd = ToString(info[2]);
-  uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
+  volatile uint32_t timeoutMs = info[3].As<Napi::Number>().Uint32Value();
   double memoryLimitMB = info[4].As<Napi::Number>().DoubleValue();
-  uint64_t memoryLimitBytes =
+  volatile uint64_t memoryLimitBytes =
       static_cast<uint64_t>(memoryLimitMB * 1024.0 * 1024.0);
 
   std::string pipeNameIn = ToString(info[5]);
@@ -410,18 +380,25 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   // DO NOT access 'info', 'argsArray' in the child process after fork().
   std::vector<std::string> args = ToArgv(argsArray);
 
-  pid_t pid = fork();
+  std::vector<char *> argv;
+  argv.push_back(const_cast<char *>(command.c_str()));
+  for (auto &arg : args) {
+    argv.push_back(const_cast<char *>(arg.c_str()));
+  }
+  argv.push_back(nullptr);
+
+  pid_t pid = vfork();
 
   if (pid < 0) {
-    Napi::Error::New(env, "fork failed").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "vfork failed").ThrowAsJavaScriptException();
     return env.Null();
   }
 
   if (pid == 0) {
-    // Child process
+    // Child process (Caution: shares memory with parent until exec)
 
     // Connect to Unix Domain Sockets for stdio
-    auto connectSocket = [](const std::string &path) -> int {
+    auto connectSocket = [](const char *path) -> int {
       int sock = socket(AF_UNIX, SOCK_STREAM, 0);
       if (sock < 0)
         return -1;
@@ -429,7 +406,7 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
       struct sockaddr_un addr;
       memset(&addr, 0, sizeof(addr));
       addr.sun_family = AF_UNIX;
-      strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
+      strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 
       if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(sock);
@@ -439,21 +416,20 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     };
 
     // Stdin: Read from socket (from parent)
-    int sockIn = connectSocket(pipeNameIn);
+    int sockIn = connectSocket(pipeNameIn.c_str());
     // Stdout: Write to socket (to parent)
-    int sockOut = connectSocket(pipeNameOut);
+    int sockOut = connectSocket(pipeNameOut.c_str());
     // Stderr: Write to socket (to parent)
-    int sockErr = connectSocket(pipeNameErr);
+    int sockErr = connectSocket(pipeNameErr.c_str());
 
     if (sockIn < 0 || sockOut < 0 || sockErr < 0) {
-      perror("Failed to connect to stdio sockets");
+      // Avoid printf/perror in vfork child if possible, or keep it minimal
       _exit(1);
     }
 
     // Redirect stdio
     if (dup2(sockIn, STDIN_FILENO) < 0 || dup2(sockOut, STDOUT_FILENO) < 0 ||
         dup2(sockErr, STDERR_FILENO) < 0) {
-      perror("dup2 failed");
       _exit(1);
     }
 
@@ -478,20 +454,10 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
       chdir(cwd.c_str());
     }
 
-    // Prepare argv
-    std::vector<char *> argv;
-    argv.push_back(const_cast<char *>(command.c_str()));
-    for (auto &arg : args) {
-      argv.push_back(const_cast<char *>(arg.c_str()));
-    }
-    argv.push_back(nullptr);
-
     // Execute
-    // Use execvp to inherit environment
     execvp(command.c_str(), argv.data());
 
     // If exec fails
-    perror("exec failed");
     _exit(1);
   }
 
