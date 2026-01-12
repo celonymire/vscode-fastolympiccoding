@@ -74,10 +74,6 @@ jobs:
         run: |
           apk add --no-cache python3 make g++ linux-headers git bash
 
-      - name: Setup Dev Drive (Windows)
-        if: runner.os == 'Windows'
-        uses: samypr100/setup-dev-drive@v3
-
       - name: Checkout repository
         uses: actions/checkout@v6
 
@@ -92,9 +88,7 @@ jobs:
 
       - name: Install dependencies
         if: matrix.name != 'Alpine Linux ARM64'
-        run: |
-          npm cache clean --force
-          npm ci
+        run: npm ci
 
       - name: Build and Package (Alpine ARM64)
         if: matrix.name == 'Alpine Linux ARM64'
