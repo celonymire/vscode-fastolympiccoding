@@ -134,7 +134,7 @@ function spawnPromise(args, options = {}) {
           pipeNameIn,
           pipeNameOut,
           pipeNameErr,
-          () => { } // onSpawn
+          () => {} // onSpawn
         );
       } catch (err) {
         if (serverIn) serverIn.close();
@@ -209,7 +209,7 @@ test("Memory limit enforcement", { timeout: 15000 }, async () => {
       memoryLimitExceeded: res.memoryLimitExceeded,
       timedOut: res.timedOut,
       peakMemoryBytes: res.peakMemoryBytes,
-      elapsedMs: res.elapsedMs
+      elapsedMs: res.elapsedMs,
     });
   }
   assert.strictEqual(res.memoryLimitExceeded, true, "memoryLimitExceeded should be true");
@@ -262,7 +262,11 @@ test("Wall Clock Timeout: Sleep", { timeout: 10000 }, async () => {
   assert.strictEqual(res.timedOut, true, "Should have timed out (wall clock)");
   // It checks every 50ms, so it should be around 2000ms.
   // Allow a broad range for CI variability.
-  assert.ok(duration >= 2000, `Process took ${duration}ms, expected >= 2000ms`);
+  // Give 10ms of leniency on lower bound for timer resolution.
+  assert.ok(
+    duration >= 2000 - 10,
+    `Process took ${duration}ms, expected >= 2000ms (10ms leniency)`
+  );
   assert.ok(duration < 3000, `Process took ${duration}ms, expected < 3000ms`);
 });
 
@@ -383,14 +387,18 @@ test("Elapsed Time Accuracy", { timeout: 20000 }, async () => {
   const cases = [100, 500, 1200];
 
   for (const duration of cases) {
-    const res = await spawnPromise(
-      ["-e", `const start = Date.now(); while(Date.now() - start < ${duration});`]
-    );
+    const res = await spawnPromise([
+      "-e",
+      `const start = Date.now(); while(Date.now() - start < ${duration});`,
+    ]);
 
     // Check that we're within reasonable bounds.
     // elapsedMs should be reasonable close to duration.
     // Relaxed check: Allow 80% - 100% + 500ms overhead
-    assert.ok(res.elapsedMs >= duration * 0.8, `Elapsed ${res.elapsedMs}ms < Duration ${duration}ms * 0.8`);
+    assert.ok(
+      res.elapsedMs >= duration * 0.8,
+      `Elapsed ${res.elapsedMs}ms < Duration ${duration}ms * 0.8`
+    );
     assert.ok(
       res.elapsedMs < duration + 500,
       `Elapsed ${res.elapsedMs}ms > Duration ${duration}ms + 500ms overhead`
@@ -426,9 +434,9 @@ test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
 
   // We need to accept connections
   // But for this test we don't care about IO much, just that it runs
-  serverIn.on("connection", () => { });
-  serverOut.on("connection", () => { });
-  serverErr.on("connection", () => { });
+  serverIn.on("connection", () => {});
+  serverOut.on("connection", () => {});
+  serverErr.on("connection", () => {});
 
   const spawnRes = monitor.spawn(
     process.execPath,
@@ -439,11 +447,11 @@ test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
     pipeNameIn,
     pipeNameOut,
     pipeNameErr,
-    () => { }
+    () => {}
   );
 
   // Wait a bit to ensure it started
-  await new Promise(r => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 500));
 
   // CALL CANCEL
   if (typeof spawnRes.cancel === "function") {
@@ -465,10 +473,7 @@ test("External Stop: Sets stopped flag", { timeout: 10000 }, async () => {
 });
 
 test("Execution: Crashes do not set stopped flag", { timeout: 10000 }, async () => {
-  const res = await spawnPromise(
-    ["-e", "process.abort()"],
-    { timeoutMs: 5000 }
-  );
+  const res = await spawnPromise(["-e", "process.abort()"], { timeoutMs: 5000 });
 
   assert.notStrictEqual(res.exitCode, 0, "Exit code should be non-zero");
   assert.strictEqual(res.exitCode, null, "Exit code should be null on crash (signal)");
@@ -478,13 +483,10 @@ test("Execution: Crashes do not set stopped flag", { timeout: 10000 }, async () 
 });
 
 test("Execution: Non-zero exit code", { timeout: 10000 }, async () => {
-  const res = await spawnPromise(
-    ["-e", "process.exit(42)"]
-  );
+  const res = await spawnPromise(["-e", "process.exit(42)"]);
 
   assert.strictEqual(res.exitCode, 42, "Exit code should be 42");
   assert.strictEqual(res.stopped, false, "Should have stopped=false");
   assert.strictEqual(res.timedOut, false, "Should not be timed out");
   assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
 });
-
