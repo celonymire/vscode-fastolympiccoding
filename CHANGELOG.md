@@ -7,3 +7,4 @@
 - The extension excludes the web platform support explicitly and will not provide a "universal" VSIX. It would have failed implicity in the past, but now this restriction is enforced to platform specific VSIX.
 - Trim off trailing whitespaces when requesting full data
 - Don't save ongoing running statuses to avoid blocking interacting with testcase on malfunction
+- Removed unused save all functionality
