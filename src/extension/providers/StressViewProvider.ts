@@ -400,12 +400,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._interactorSecretResolver = resolve;
       });
 
-      this._judgeState.process.run(
-        judgeSettings.languageSettings.runCommand,
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
-        solutionSettings.languageSettings.currentWorkingDirectory
-      );
       this._judgeState.process
         .on("error", this._judgeState.errorHandler)
         .on("stdout:data", this._judgeState.stdoutDataHandler)
@@ -413,13 +407,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:data", this._judgeState.stderrDataHandler)
         .on("stderr:end", this._judgeState.stderrEndHandler)
         .on("close", this._judgeState.closeHandler);
-
-      this._generatorState.process.run(
-        generatorSettings.languageSettings.runCommand,
-        0,
-        0,
+      this._judgeState.process.run(
+        judgeSettings.languageSettings.runCommand,
+        testcaseTimeLimit,
+        testcaseMemoryLimit,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
+
       this._generatorState.process
         .on("spawn", () => {
           this._generatorState.process.process?.stdin.write(`${seed}\n`);
@@ -430,13 +424,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:data", this._generatorState.stderrDataHandler)
         .on("stderr:end", this._generatorState.stderrEndHandler)
         .on("close", this._generatorState.closeHandler);
-
-      this._solutionState.process.run(
-        solutionSettings.languageSettings.runCommand,
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
+      this._generatorState.process.run(
+        generatorSettings.languageSettings.runCommand,
+        0,
+        0,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
+
       this._solutionState.process
         .on("error", this._solutionState.errorHandler)
         .on("stdout:data", this._solutionState.stdoutDataHandler)
@@ -444,6 +438,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:data", this._solutionState.stderrDataHandler)
         .on("stderr:end", this._solutionState.stderrEndHandler)
         .on("close", this._solutionState.closeHandler);
+      this._solutionState.process.run(
+        solutionSettings.languageSettings.runCommand,
+        testcaseTimeLimit,
+        testcaseMemoryLimit,
+        solutionSettings.languageSettings.currentWorkingDirectory
+      );
 
       const executionPromise = (state: State) => {
         return new Promise<number>((resolve) => {
