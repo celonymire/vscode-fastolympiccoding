@@ -640,15 +640,9 @@ const compilePromise: Map<string, Promise<number>> = new Map();
 export function compile(file: string, context: vscode.ExtensionContext): Promise<number> | null {
   errorTerminal.get(file)?.dispose();
 
-  if (!fs.existsSync(file)) {
-    vscode.window.showErrorMessage(`${file} does not exist`);
-    return Promise.resolve(1);
-  }
-
   const settings = getFileRunSettings(file);
   if (!settings) {
-    vscode.window.showErrorMessage(`No run settings found for ${file}`);
-    return Promise.resolve(1);
+    return null;
   }
 
   const extension = path.extname(file);

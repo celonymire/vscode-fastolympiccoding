@@ -565,6 +565,20 @@ export function getFileRunSettings(
   file: string,
   extraVariables?: Record<string, string>
 ): FileRunSettings | null {
+  if (!fs.existsSync(file)) {
+    vscode.window
+      .showErrorMessage(`${file} does not exist`, "Create File", "Close")
+      .then((choice) => {
+        if (choice === "Create File") {
+          fs.writeFileSync(file, "");
+          vscode.workspace.openTextDocument(file).then((doc) => {
+            vscode.window.showTextDocument(doc);
+          });
+        }
+      });
+    return null;
+  }
+
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
   if (!workspaceFolder) {
     logger.error(`No workspace folder found for file ${file}`);
