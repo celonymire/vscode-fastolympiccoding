@@ -297,9 +297,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     const generatorSettings = getFileRunSettings(solutionSettings.generatorFile!);
-    if (!generatorSettings) {
-      return;
-    }
 
     let judgeSettings: FileRunSettings | null;
     if (this._interactiveMode) {
@@ -307,7 +304,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     } else {
       judgeSettings = getFileRunSettings(solutionSettings.goodSolutionFile!);
     }
-    if (!judgeSettings) {
+
+    if (!generatorSettings || !judgeSettings) {
       return;
     }
 
