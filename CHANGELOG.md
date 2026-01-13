@@ -4,6 +4,7 @@
 
 - Ctrl+Enter hotkey to save currently edited textarea
 - Ctrl+Enter to append newline instead of sending current online input
+- Automatically show notification to check changelog when extension is updated
 
 ### Changed
 
