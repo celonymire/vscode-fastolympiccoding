@@ -38,12 +38,10 @@ function createPipeServer(pipeName) {
 }
 
 function spawnPromise(args, options = {}) {
-  const { timeoutMs = 0, memoryLimitMB = 0, input = null } = options;
+  const { timeoutMs = 0, memoryLimitMB = 0, input = null, command = process.execPath } = options;
 
   return new Promise((resolve, reject) => {
     (async () => {
-      const command = process.execPath;
-
       // Generate unique pipe names
       const id = crypto.randomBytes(8).toString("hex");
       let pipeNameIn, pipeNameOut, pipeNameErr;
@@ -506,4 +504,15 @@ test("Execution: Non-zero exit code", { timeout: 10000 }, async () => {
   assert.strictEqual(res.stopped, false, "Should have stopped=false");
   assert.strictEqual(res.timedOut, false, "Should not be timed out");
   assert.strictEqual(res.memoryLimitExceeded, false, "Should not be memory limited");
+});
+
+test("Execution: Invalid Command", { timeout: 10000 }, async () => {
+  try {
+    // Attempt to run a non-existent command
+    await spawnPromise([], { command: "/non-existent-executable-123" });
+    assert.fail("Should have thrown error for non-existent command");
+  } catch (err) {
+    // Error message should come from the addon. Just check if there is any message.
+    assert.notStrictEqual(err.message, "");
+  }
 });
