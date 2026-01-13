@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <libproc.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -461,9 +462,28 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   // DO NOT access 'info', 'argsArray' in the child process after fork().
   std::vector<std::string> args = ToArgv(argsArray);
 
+  // Create a pipe to communicate errors from child to parent
+  int err_pipe[2];
+  if (pipe(err_pipe) == -1) {
+    Napi::Error::New(env, "pipe failed: " + std::string(std::strerror(errno)))
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  // Set close-on-exec for write end so it closes if exec succeeds
+  if (fcntl(err_pipe[1], F_SETFD, FD_CLOEXEC) == -1) {
+    close(err_pipe[0]);
+    close(err_pipe[1]);
+    Napi::Error::New(env, "fcntl failed: " + std::string(std::strerror(errno)))
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
   pid_t pid = fork();
 
   if (pid < 0) {
+    close(err_pipe[0]);
+    close(err_pipe[1]);
     Napi::Error::New(env, "fork failed: " + std::string(std::strerror(errno)))
         .ThrowAsJavaScriptException();
     return env.Null();
@@ -471,6 +491,7 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
 
   if (pid == 0) {
     // Child process
+    close(err_pipe[0]); // Close read end
 
     // Connect to Unix Domain Sockets for stdio
     auto connectSocket = [](const std::string &path) -> int {
@@ -498,14 +519,16 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     int sockErr = connectSocket(pipeNameErr);
 
     if (sockIn < 0 || sockOut < 0 || sockErr < 0) {
-      perror("Failed to connect to stdio sockets");
+      int err = errno;
+      write(err_pipe[1], &err, sizeof(err));
       _exit(1);
     }
 
     // Redirect stdio
     if (dup2(sockIn, STDIN_FILENO) < 0 || dup2(sockOut, STDOUT_FILENO) < 0 ||
         dup2(sockErr, STDERR_FILENO) < 0) {
-      perror("dup2 failed");
+      int err = errno;
+      write(err_pipe[1], &err, sizeof(err));
       _exit(1);
     }
 
@@ -516,7 +539,11 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
 
     // Change directory
     if (!cwd.empty()) {
-      chdir(cwd.c_str());
+      if (chdir(cwd.c_str()) == -1) {
+        int err = errno;
+        write(err_pipe[1], &err, sizeof(err));
+        _exit(1);
+      }
     }
 
     // Prepare argv
@@ -532,11 +559,27 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     execvp(command.c_str(), argv.data());
 
     // If exec fails
-    perror("exec failed");
+    int err = errno;
+    write(err_pipe[1], &err, sizeof(err));
     _exit(1);
   }
 
   // Parent process
+  close(err_pipe[1]); // Close write end in parent
+
+  // Check if child reported an error
+  int childErr = 0;
+  ssize_t count = read(err_pipe[0], &childErr, sizeof(childErr));
+  close(err_pipe[0]);
+
+  if (count > 0) {
+    // Child reported an error
+    // We should wait for the child to reap it (it exited with 1)
+    int status;
+    waitpid(pid, &status, 0);
+    Napi::Error::New(env, std::strerror(childErr)).ThrowAsJavaScriptException();
+    return env.Null();
+  }
   // Notify JS that the process has spawned
   onSpawn.Call({});
 

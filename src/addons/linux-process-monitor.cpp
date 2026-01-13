@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <fcntl.h>
 #include <poll.h>
 #include <string>
 #include <sys/eventfd.h>
@@ -387,9 +388,19 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   }
   argv.push_back(nullptr);
 
+  // Create a pipe to communicate errors from child to parent
+  int err_pipe[2];
+  if (pipe2(err_pipe, O_CLOEXEC) == -1) {
+    Napi::Error::New(env, "pipe2 failed: " + std::string(std::strerror(errno)))
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
   pid_t pid = vfork();
 
   if (pid < 0) {
+    close(err_pipe[0]);
+    close(err_pipe[1]);
     Napi::Error::New(env, "vfork failed: " + std::string(std::strerror(errno)))
         .ThrowAsJavaScriptException();
     return env.Null();
@@ -458,11 +469,28 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     // Execute
     execvp(command.c_str(), argv.data());
 
-    // If exec fails
+    // If exec fails, communicate errno to parent
+    int err = errno;
+    write(err_pipe[1], &err, sizeof(err));
     _exit(1);
   }
 
   // Parent process
+  close(err_pipe[1]); // Close write end in parent
+
+  // Check if child reported an error
+  int childErr = 0;
+  ssize_t count = read(err_pipe[0], &childErr, sizeof(childErr));
+  close(err_pipe[0]);
+
+  if (count > 0) {
+    // Child reported an error
+    // We should wait for the child to reap it (it exited with 1)
+    int status;
+    waitpid(pid, &status, 0);
+    Napi::Error::New(env, std::strerror(childErr)).ThrowAsJavaScriptException();
+    return env.Null();
+  }
   // Notify JS that the process has spawned
   onSpawn.Call({});
 
