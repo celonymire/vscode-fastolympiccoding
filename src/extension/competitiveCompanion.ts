@@ -17,7 +17,7 @@ class ProblemQueue {
   private queue: Problem[] = [];
   private processing = false;
 
-  constructor(private processor: (problem: Problem) => Promise<void>) { }
+  constructor(private processor: (problem: Problem) => Promise<void>) {}
 
   enqueue(problem: Problem): void {
     this.queue.push(problem);

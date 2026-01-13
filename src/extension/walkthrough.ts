@@ -2,39 +2,120 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { deepMerge } from "./utils/vscode";
+
 const languageTemplates: Record<string, object> = {
   "C++": {
     ".cpp": {
       compileCommand: ["g++", "${file}", "-o", "${fileDirname}/${fileBasenameNoExtension}"],
       runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
+      debugCommand: [
+        "gdbserver",
+        "localhost:${debugPort}",
+        "${fileDirname}/${fileBasenameNoExtension}",
+      ],
+      debugAttachConfig: "C++: Attach",
     },
   },
   Python: {
     ".py": {
       runCommand: ["python", "${file}"],
+      debugCommand: [
+        "python",
+        "-m",
+        "debugpy",
+        "--listen",
+        "localhost:${debugPort}",
+        "--wait-for-client",
+        "${file}",
+      ],
+      debugAttachConfig: "Python: Attach",
     },
   },
   Java: {
     ".java": {
       compileCommand: ["javac", "${file}"],
       runCommand: ["java", "-cp", "${fileDirname}", "${fileBasenameNoExtension}"],
+      debugCommand: [
+        "java",
+        "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}",
+        "-cp",
+        "${fileDirname}",
+        "${fileBasenameNoExtension}",
+      ],
+      debugAttachConfig: "Java: Attach",
     },
   },
 };
+
+const launchTemplates: Record<string, vscode.DebugConfiguration> = {
+  "C++": {
+    name: "C++: Attach",
+    type: "cppdbg",
+    request: "launch",
+    MIMode: "gdb",
+    miDebuggerServerAddress: "localhost:${debugPort}",
+    program: "${fileDirname}/${fileBasenameNoExtension}",
+    cwd: "${fileDirname}",
+  },
+  Python: {
+    name: "Python: Attach",
+    type: "python",
+    request: "attach",
+    connect: {
+      host: "localhost",
+      port: "${debugPort}",
+    },
+  },
+  Java: {
+    name: "Java: Attach",
+    type: "java",
+    request: "attach",
+    hostName: "localhost",
+    port: "${debugPort}",
+  },
+};
+
+const recommendedDebugExtensions: Record<string, string> = {
+  "C++": "webfreak.debug",
+  Python: "ms-python.python",
+  Java: "redhat.java",
+};
+
+function getDefaultTemplatesPreview(): Record<string, object> {
+  let previewSettings = {};
+  // We have to trim off the language name from the language templates
+  for (const [, languageTemplate] of Object.entries(languageTemplates)) {
+    previewSettings = { ...previewSettings, ...languageTemplate };
+  }
+  return previewSettings;
+}
 
 function createGenericTemplate(extension: string): object {
   return {
     [extension]: {
       runCommand: ["TODO"],
       compileCommand: ["TODO! REMOVE IF NOT NEEDED"],
+      debugCommand: ["TODO! (Optional) Command to start debug server on ${debugPort}"],
+      debugAttachConfig: "TODO! (Optional) Name of launch.json attach configuration",
     },
   };
 }
 
-function getLanguageTemplateForExtension(extension: string): object | null {
-  for (const languageTemplate of Object.values(languageTemplates)) {
+function getLanguageTemplateForExtension(extension: string): {
+  runSettings: object;
+  launchConfig?: vscode.DebugConfiguration;
+  language: string;
+} | null {
+  for (const [language, languageTemplate] of Object.entries(languageTemplates)) {
     if (extension in languageTemplate) {
-      return { [extension]: languageTemplate[extension as keyof typeof languageTemplate] };
+      return {
+        runSettings: {
+          [extension]: languageTemplate[extension as keyof typeof languageTemplate],
+        },
+        launchConfig: launchTemplates[language],
+        language,
+      };
     }
   }
   return null;
@@ -50,8 +131,50 @@ async function mergeSettingsIntoFile(runSettingsPath: string, newSettings: objec
     // File doesn't exist or is invalid, start fresh
   }
 
-  const mergedSettings = { ...existingSettings, ...newSettings };
+  // We want to keep the user's existing settings and only add the new settings,
+  // thus the direction of the merge is reversed
+  const mergedSettings = deepMerge(newSettings as Record<string, unknown>, existingSettings);
   await fs.writeFile(runSettingsPath, JSON.stringify(mergedSettings, null, 2));
+}
+
+async function mergeLaunchConfigIntoFile(
+  launchJsonPath: string,
+  newConfig: vscode.DebugConfiguration
+): Promise<void> {
+  let existingLaunch: { version?: string; configurations?: vscode.DebugConfiguration[] } = {};
+
+  try {
+    const content = await fs.readFile(launchJsonPath, "utf8");
+    existingLaunch = JSON.parse(content);
+  } catch {
+    // defaults
+    existingLaunch = {
+      version: "0.2.0",
+      configurations: [],
+    };
+  }
+
+  if (!existingLaunch.configurations) {
+    existingLaunch.configurations = [];
+  }
+
+  const existingConfigIndex = existingLaunch.configurations.findIndex(
+    (c) => c.name === newConfig.name
+  );
+
+  if (existingConfigIndex !== -1) {
+    // Update existing configuration
+    existingLaunch.configurations[existingConfigIndex] = {
+      ...newConfig,
+      ...existingLaunch.configurations[existingConfigIndex],
+    };
+  } else {
+    // Add new configuration
+    existingLaunch.configurations.push(newConfig);
+  }
+
+  // Use 4 spaces as indent to align with VSCode's default tab space
+  await fs.writeFile(launchJsonPath, JSON.stringify(existingLaunch, null, 4));
 }
 
 function getActiveFileExtension(): string | null {
@@ -89,25 +212,63 @@ export function registerWalkthroughCommands(context: vscode.ExtensionContext): v
         }
 
         const runSettingsPath = path.join(workspaceFolder.uri.fsPath, "runSettings.json");
+        const dotVscodeDir = path.join(workspaceFolder.uri.fsPath, ".vscode");
+        const launchJsonPath = path.join(dotVscodeDir, "launch.json");
+
         const fileExists = await fs
           .access(runSettingsPath)
           .then(() => true)
           .catch(() => false);
 
+        // Check if the user installed the recommended extension for the file extension
+        const checkRecommendedExtensions = async (fileExtension: string) => {
+          if (fileExtension in recommendedDebugExtensions) {
+            const extensionId = recommendedDebugExtensions[fileExtension];
+            const extension = vscode.extensions.getExtension(extensionId);
+            if (!extension) {
+              const choice = await vscode.window.showInformationMessage(
+                `The '${extensionId}' extension is recommended for debugging support.`,
+                "View Extension",
+                "Close"
+              );
+              if (choice === "View Extension") {
+                void vscode.commands.executeCommand("extension.open", extensionId);
+              }
+            }
+          }
+        };
+
+        // Function to apply template updates
+        const applyTemplate = async (
+          template: object,
+          language: string,
+          launchConfig?: vscode.DebugConfiguration
+        ) => {
+          // Ensure .vscode directory exists for launch.json
+          await fs.mkdir(dotVscodeDir, { recursive: true });
+
+          // Merge run settings
+          await mergeSettingsIntoFile(runSettingsPath, template);
+
+          // Merge launch.json if we have a template for this language
+          if (launchConfig) {
+            await mergeLaunchConfigIntoFile(launchJsonPath, launchConfig);
+          }
+
+          // Check for recommended extension in the applied template
+          void checkRecommendedExtensions(language);
+        };
+
         // If extension is provided (auto-add scenario), merge settings and open file
         if (options?.extension) {
-          const template =
-            getLanguageTemplateForExtension(options.extension) ??
-            createGenericTemplate(options.extension);
+          const result = getLanguageTemplateForExtension(options.extension);
+          const template = result?.runSettings ?? createGenericTemplate(options.extension);
 
-          await mergeSettingsIntoFile(runSettingsPath, template);
+          await applyTemplate(template, result?.language ?? "", result?.launchConfig);
 
           const doc = await vscode.workspace.openTextDocument(runSettingsPath);
           await vscode.window.showTextDocument(doc);
 
-          void vscode.window.showInformationMessage(
-            `Added ${options.extension} settings to run settings`
-          );
           return;
         }
 
@@ -122,7 +283,7 @@ export function registerWalkthroughCommands(context: vscode.ExtensionContext): v
           if (choice === "Preview Examples") {
             const preview = await vscode.workspace.openTextDocument({
               language: "json",
-              content: JSON.stringify(languageTemplates, undefined, 2),
+              content: JSON.stringify(getDefaultTemplatesPreview(), undefined, 2),
             });
             void vscode.window.showTextDocument(preview);
             return;
@@ -135,18 +296,14 @@ export function registerWalkthroughCommands(context: vscode.ExtensionContext): v
         // Try to auto-detect language from active file
         const activeExtension = getActiveFileExtension();
         if (activeExtension) {
-          const template =
-            getLanguageTemplateForExtension(activeExtension) ??
-            createGenericTemplate(activeExtension);
+          const result = getLanguageTemplateForExtension(activeExtension);
+          const template = result?.runSettings ?? createGenericTemplate(activeExtension);
 
-          await mergeSettingsIntoFile(runSettingsPath, template);
+          await applyTemplate(template, result?.language ?? "", result?.launchConfig);
 
           const doc = await vscode.workspace.openTextDocument(runSettingsPath);
           await vscode.window.showTextDocument(doc);
 
-          void vscode.window.showInformationMessage(
-            `Added ${activeExtension} settings to run settings`
-          );
           return;
         }
 
@@ -159,12 +316,11 @@ export function registerWalkthroughCommands(context: vscode.ExtensionContext): v
           return;
         }
 
-        const template: Record<string, unknown> = {};
         for (const language of languageChoices) {
-          Object.assign(template, languageTemplates[language]);
+          const template = languageTemplates[language];
+          const launchConfig = launchTemplates[language];
+          await applyTemplate(template, language, launchConfig);
         }
-
-        await mergeSettingsIntoFile(runSettingsPath, template);
 
         const doc = await vscode.workspace.openTextDocument(runSettingsPath);
         await vscode.window.showTextDocument(doc);

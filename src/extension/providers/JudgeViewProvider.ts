@@ -176,7 +176,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (!interactorRunCommand) {
         const logger = getLogger("judge");
         logger.error(`No run command for ${settings.interactorFile!}`);
-        showOpenRunSettingsErrorWindow(`No run command for ${settings.interactorFile!}`);
+        showOpenRunSettingsErrorWindow(
+          `No run command for ${settings.interactorFile!}`,
+          settings.interactorFile!
+        );
         return null;
       }
       interactorArgs = interactorRunCommand;
@@ -273,7 +276,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
       logger.error(`No run command for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`, this._currentFile);
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
@@ -356,7 +359,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
       logger.error(`No run command for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`, this._currentFile);
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
@@ -1023,13 +1026,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!ctx.languageSettings.debugCommand) {
       const logger = getLogger("judge");
       logger.error(`No debug command for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(`No debug command for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(
+        `No debug command for ${this._currentFile}`,
+        this._currentFile
+      );
       return;
     }
     if (!ctx.languageSettings.debugAttachConfig) {
       const logger = getLogger("judge");
       logger.error(`No debug attach configuration for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(`No debug attach configuration for ${this._currentFile}`);
+      showOpenRunSettingsErrorWindow(
+        `No debug attach configuration for ${this._currentFile}`,
+        this._currentFile
+      );
       return;
     }
 
@@ -1047,7 +1056,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`
       );
       showOpenRunSettingsErrorWindow(
-        `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`
+        `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`,
+        this._currentFile
       );
       return;
     }
