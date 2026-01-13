@@ -361,27 +361,29 @@ export class Runnable {
             const [serverIn, serverOut, serverErr] = this._pipeServers!;
             const [pipeNameIn, pipeNameOut, pipeNameErr] = this._pipePaths!;
 
-            const pIn = new Promise<net.Socket>((resolve, reject) => {
-              serverIn.once("connection", (s) => {
-                s.setNoDelay(true);
-                resolve(s);
+            const waitForConnection = (server: net.Server): Promise<net.Socket> => {
+              return new Promise<net.Socket>((resolve, reject) => {
+                const cleanup = () => {
+                  server.off("connection", onConn);
+                  server.off("error", onError);
+                };
+                const onConn = (s: net.Socket) => {
+                  cleanup();
+                  s.setNoDelay(true);
+                  resolve(s);
+                };
+                const onError = (err: Error) => {
+                  cleanup();
+                  reject(err);
+                };
+                server.once("connection", onConn);
+                server.once("error", onError);
               });
-              serverIn.once("error", reject);
-            });
-            const pOut = new Promise<net.Socket>((resolve, reject) => {
-              serverOut.once("connection", (s) => {
-                s.setNoDelay(true);
-                resolve(s);
-              });
-              serverOut.once("error", reject);
-            });
-            const pErr = new Promise<net.Socket>((resolve, reject) => {
-              serverErr.once("connection", (s) => {
-                s.setNoDelay(true);
-                resolve(s);
-              });
-              serverErr.once("error", reject);
-            });
+            };
+
+            const pIn = waitForConnection(serverIn);
+            const pOut = waitForConnection(serverOut);
+            const pErr = waitForConnection(serverErr);
 
             // Call native spawn now that listeners are setup
             const spawnResult = monitor.spawn(
