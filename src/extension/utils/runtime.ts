@@ -425,6 +425,7 @@ export class Runnable {
                     logger.error("Process error: " + err.message);
                     this.handleMonitorError(err);
                     nativeProc.emit("error", err);
+                    nativeProc.emit("close", this._exitCode, null);
                     resolve();
                   });
               }
@@ -459,16 +460,18 @@ export class Runnable {
               () => {} // Callback unused in this flow setup
             );
           } catch (e) {
-            getLogger("runtime").warn(`Native spawn preparation failed: ${e}`);
+            getLogger("runtime").error(`Native addon failed: ${e}`);
+            this._emitter.emit("error", new Error(`Native addon failed: ${e}`));
+            this._emitter.emit("close", this._exitCode, null);
             resolveSpawn(false);
             resolve();
           }
         } else {
           // Fallback or Error if monitor not available (but we expect it to be available)
           // Since we don't have a fallback impl in this snippet, we just error.
-          getLogger("runtime").error(
-            `Process monitor addon not found. Cannot spawn: ${commandName}`
-          );
+          getLogger("runtime").error("Native addon not found");
+          this._emitter.emit("error", new Error("Native addon not found"));
+          this._emitter.emit("close", this._exitCode, null);
           resolveSpawn(false);
           resolve();
         }
