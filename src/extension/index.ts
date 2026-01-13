@@ -7,7 +7,7 @@ import {
   createStatusBarItem,
   createListener,
   stopCompetitiveCompanion,
-} from "./utils/competitiveCompanion";
+} from "./competitiveCompanion";
 import { registerWalkthroughCommands } from "./walkthrough";
 import {
   initializeRunSettingsWatcher,
@@ -17,7 +17,7 @@ import {
 import { initLogging } from "./utils/logging";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
-import { showChangelog } from "./utils/changelog";
+import { showChangelog } from "./changelog";
 
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;

@@ -4,9 +4,9 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { ProblemSchema } from "../../shared/schemas";
-import type JudgeViewProvider from "../providers/JudgeViewProvider";
-import { getLogger } from "./logging";
+import { ProblemSchema } from "../shared/schemas";
+import type JudgeViewProvider from "./providers/JudgeViewProvider";
+import { getLogger } from "./utils/logging";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 
@@ -17,7 +17,7 @@ class ProblemQueue {
   private queue: Problem[] = [];
   private processing = false;
 
-  constructor(private processor: (problem: Problem) => Promise<void>) {}
+  constructor(private processor: (problem: Problem) => Promise<void>) { }
 
   enqueue(problem: Problem): void {
     this.queue.push(problem);
