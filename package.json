@@ -357,6 +357,11 @@
         "title": "Toggle Stress Settings",
         "category": "Fast Olympic Coding",
         "icon": "$(gear)"
+      },
+      {
+        "command": "fastolympiccoding.showChangelog",
+        "title": "Show Changelog",
+        "category": "Fast Olympic Coding"
       }
     ],
     "keybindings": [

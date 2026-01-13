@@ -17,6 +17,7 @@ import {
 import { initLogging } from "./utils/logging";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
+import { showChangelog } from "./utils/changelog";
 
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
@@ -242,11 +243,15 @@ function registerCommands(context: vscode.ExtensionContext): void {
       stopCompetitiveCompanion()
     )
   );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.showChangelog", () => showChangelog(context))
+  );
 }
 
 export function activate(context: vscode.ExtensionContext): void {
   initLogging(context);
   initializeRunSettingsWatcher(context);
+  void showChangelog(context, true);
 
   registerViewProviders(context);
   registerCommands(context);
