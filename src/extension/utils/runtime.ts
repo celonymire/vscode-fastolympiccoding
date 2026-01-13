@@ -254,8 +254,7 @@ export class Runnable {
   private _pipeServers: [net.Server, net.Server, net.Server] | null = null;
   private _pipePaths: [string, string, string] | null = null;
 
-  async dispose(): Promise<void> {
-    this.cleanup();
+  private async _disposePipes(): Promise<void> {
     if (this._pipeServers) {
       const servers = this._pipeServers;
       this._pipeServers = null;
@@ -269,6 +268,11 @@ export class Runnable {
         )
       );
     }
+  }
+
+  async dispose(): Promise<void> {
+    this.cleanup();
+    await this._disposePipes();
   }
 
   cleanup(): void {
@@ -357,83 +361,26 @@ export class Runnable {
             const [serverIn, serverOut, serverErr] = this._pipeServers!;
             const [pipeNameIn, pipeNameOut, pipeNameErr] = this._pipePaths!;
 
-            let socketIn: net.Socket, socketOut: net.Socket, socketErr: net.Socket;
-            let connected = 0;
-
-            const onConnect = () => {
-              connected++;
-              if (connected === 3) {
-                // Create NativeChildProcess
-                const nativeProc = new NativeChildProcess(
-                  spawnResult.pid,
-                  [socketIn, socketOut, socketErr],
-                  spawnResult.result,
-                  spawnResult.cancel
-                );
-                this._process = nativeProc as unknown as ChildProcessLike;
-
-                // Proxy events from the native process to our internal emitter
-                nativeProc.once("spawn", () => this._emitter.emit("spawn"));
-                nativeProc.on("error", (err) => this._emitter.emit("error", err));
-                nativeProc.stdout.on("data", (data) => this._emitter.emit("stdout:data", data));
-                nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
-                nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
-                nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
-                nativeProc.once("close", (code, signal) =>
-                  this._emitter.emit("close", code, signal)
-                );
-
-                // Signal spawn success
-                nativeProc.emit("spawn");
-                resolveSpawn(true);
-
-                // Attach stream handlers
-                if (nativeProc.stdout) {
-                  nativeProc.stdout.resume();
-                  const p = new Promise<void>((resolve) => {
-                    if (nativeProc.stdout.destroyed) resolve();
-                    else nativeProc.stdout.once("close", resolve);
-                  });
-                  streamClosePromises.push(p);
-                }
-                if (nativeProc.stderr) {
-                  nativeProc.stderr.resume();
-                  const p = new Promise<void>((resolve) => {
-                    if (nativeProc.stderr.destroyed) resolve();
-                    else nativeProc.stderr.once("close", resolve);
-                  });
-                  streamClosePromises.push(p);
-                }
-
-                Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
-                  .then(([res]): void => {
-                    this.handleAddonResult(res);
-                    nativeProc.emit("exit", this._exitCode, null);
-                    nativeProc.emit("close", this._exitCode, null);
-                    resolve();
-                  })
-                  .catch((err: Error) => {
-                    nativeProc.emit("error", err);
-                    nativeProc.emit("close", this._exitCode, null);
-                    resolve();
-                  });
-              }
-            };
-
-            serverIn.once("connection", (s) => {
-              s.setNoDelay(true);
-              socketIn = s;
-              onConnect();
+            const pIn = new Promise<net.Socket>((resolve, reject) => {
+              serverIn.once("connection", (s) => {
+                s.setNoDelay(true);
+                resolve(s);
+              });
+              serverIn.once("error", reject);
             });
-            serverOut.once("connection", (s) => {
-              s.setNoDelay(true);
-              socketOut = s;
-              onConnect();
+            const pOut = new Promise<net.Socket>((resolve, reject) => {
+              serverOut.once("connection", (s) => {
+                s.setNoDelay(true);
+                resolve(s);
+              });
+              serverOut.once("error", reject);
             });
-            serverErr.once("connection", (s) => {
-              s.setNoDelay(true);
-              socketErr = s;
-              onConnect();
+            const pErr = new Promise<net.Socket>((resolve, reject) => {
+              serverErr.once("connection", (s) => {
+                s.setNoDelay(true);
+                resolve(s);
+              });
+              serverErr.once("error", reject);
             });
 
             // Call native spawn now that listeners are setup
@@ -448,11 +395,67 @@ export class Runnable {
               pipeNameErr,
               () => {} // Callback unused in this flow setup
             );
+
+            const [socketIn, socketOut, socketErr] = await Promise.all([pIn, pOut, pErr]);
+
+            // Create NativeChildProcess
+            const nativeProc = new NativeChildProcess(
+              spawnResult.pid,
+              [socketIn, socketOut, socketErr],
+              spawnResult.result,
+              spawnResult.cancel
+            );
+            this._process = nativeProc as unknown as ChildProcessLike;
+
+            // Proxy events from the native process to our internal emitter
+            nativeProc.once("spawn", () => this._emitter.emit("spawn"));
+            nativeProc.on("error", (err) => this._emitter.emit("error", err));
+            nativeProc.stdout.on("data", (data) => this._emitter.emit("stdout:data", data));
+            nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
+            nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
+            nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
+            nativeProc.once("close", (code, signal) => this._emitter.emit("close", code, signal));
+
+            // Signal spawn success
+            nativeProc.emit("spawn");
+            resolveSpawn(true);
+
+            // Attach stream handlers
+            if (nativeProc.stdout) {
+              nativeProc.stdout.resume();
+              const p = new Promise<void>((resolve) => {
+                if (nativeProc.stdout.destroyed) resolve();
+                else nativeProc.stdout.once("close", resolve);
+              });
+              streamClosePromises.push(p);
+            }
+            if (nativeProc.stderr) {
+              nativeProc.stderr.resume();
+              const p = new Promise<void>((resolve) => {
+                if (nativeProc.stderr.destroyed) resolve();
+                else nativeProc.stderr.once("close", resolve);
+              });
+              streamClosePromises.push(p);
+            }
+
+            Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
+              .then(([res]): void => {
+                this.handleAddonResult(res);
+                nativeProc.emit("exit", this._exitCode, null);
+                nativeProc.emit("close", this._exitCode, null);
+                resolve();
+              })
+              .catch((err: Error) => {
+                nativeProc.emit("error", err);
+                nativeProc.emit("close", this._exitCode, null);
+                resolve();
+              });
           } catch (e) {
             this._emitter.emit("error", new Error(`${e}`));
             this._emitter.emit("close", this._exitCode, null);
             resolveSpawn(false);
             resolve();
+            await this._disposePipes();
           }
         } else {
           // Fallback or Error if monitor not available (but we expect it to be available)
