@@ -46,6 +46,32 @@ struct SharedStopState {
   }
 };
 
+// Helper to get human-readable error message from system error code
+std::string GetErrorMessage(DWORD errorCode) {
+  if (errorCode == 0) {
+    return "";
+  }
+
+  LPSTR messageBuffer = nullptr;
+  size_t size = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+          FORMAT_MESSAGE_IGNORE_INSERTS,
+      NULL, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      (LPSTR)&messageBuffer, 0, NULL);
+
+  std::string message(messageBuffer, size);
+
+  // Free the buffer allocated by FormatMessage
+  LocalFree(messageBuffer);
+
+  // Remove trailing newline/CR if present
+  while (!message.empty() &&
+         (message.back() == '\r' || message.back() == '\n')) {
+    message.pop_back();
+  }
+
+  return message + " (Error Code: " + std::to_string(errorCode) + ")";
+}
 
 class WaitForProcessWorker : public Napi::AsyncWorker {
 public:
@@ -79,14 +105,16 @@ protected:
 
     HANDLE hStopEvent = sharedState_->hStopEvent;
     if (hStopEvent == NULL) {
-      errorMsg_ = "Failed to create stop event (in shared state)";
+      errorMsg_ = "Failed to create stop event (in shared state): " +
+                  GetErrorMessage(GetLastError());
       return;
     }
 
     // Create a job object to manage resource limits
     HANDLE hJob = CreateJobObject(NULL, NULL);
     if (hJob == NULL) {
-      errorMsg_ = "Failed to create job object";
+      errorMsg_ =
+          "Failed to create job object: " + GetErrorMessage(GetLastError());
       return;
     }
 
@@ -113,13 +141,15 @@ protected:
     // Set the job limits
     if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation,
                                  &jobLimits, sizeof(jobLimits))) {
+      DWORD err = GetLastError();
       CloseHandle(hJob);
-      errorMsg_ = "Failed to set job object limits";
+      errorMsg_ = "Failed to set job object limits: " + GetErrorMessage(err);
       return;
     }
 
     // Assign the process to the job
     if (!AssignProcessToJobObject(hJob, hProcess)) {
+      DWORD err = GetLastError();
       // It's possible the process already exited before we could assign it
       DWORD exitCode = 0;
       if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
@@ -129,8 +159,8 @@ protected:
       } else {
         // Real failure
         CloseHandle(hJob);
-        errorMsg_ = "Failed to assign process to job object (Error: " +
-                    std::to_string(GetLastError()) + ")";
+        errorMsg_ =
+            "Failed to assign process to job object: " + GetErrorMessage(err);
         return;
       }
     }
@@ -138,8 +168,10 @@ protected:
     // Get creation time before waiting
     FILETIME ftCreation, ftExit, ftKernel, ftUser;
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser)) {
+      DWORD err = GetLastError();
       CloseHandle(hJob);
-      errorMsg_ = "Failed to get initial process times";
+      errorMsg_ =
+          "Failed to get initial process times: " + GetErrorMessage(err);
       return;
     }
 
@@ -213,8 +245,9 @@ protected:
         }
       } else {
         // Failed
+        DWORD err = GetLastError();
         CloseHandle(hJob);
-        errorMsg_ = "WaitForMultipleObjects failed";
+        errorMsg_ = "WaitForMultipleObjects failed: " + GetErrorMessage(err);
         return;
       }
     }
@@ -250,16 +283,18 @@ protected:
     FILETIME ftExitFinal, ftKernelFinal, ftUserFinal;
     if (!GetProcessTimes(hProcess, &ftCreation, &ftExitFinal, &ftKernelFinal,
                          &ftUserFinal)) {
+      DWORD err = GetLastError();
       CloseHandle(hJob);
-      errorMsg_ = "Failed to get final process times";
+      errorMsg_ = "Failed to get final process times: " + GetErrorMessage(err);
       return;
     }
 
     // Get exit code
     DWORD exitCode = 0;
     if (!GetExitCodeProcess(hProcess, &exitCode)) {
+      DWORD err = GetLastError();
       CloseHandle(hJob);
-      errorMsg_ = "Failed to get exit code";
+      errorMsg_ = "Failed to get exit code: " + GetErrorMessage(err);
       return;
     }
     exitCode_ = static_cast<int>(exitCode);
@@ -481,13 +516,15 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
 
   if (hStdin == INVALID_HANDLE_VALUE || hStdout == INVALID_HANDLE_VALUE ||
       hStderr == INVALID_HANDLE_VALUE) {
+    DWORD err = GetLastError();
     if (hStdin != INVALID_HANDLE_VALUE)
       CloseHandle(hStdin);
     if (hStdout != INVALID_HANDLE_VALUE)
       CloseHandle(hStdout);
     if (hStderr != INVALID_HANDLE_VALUE)
       CloseHandle(hStderr);
-    Napi::Error::New(env, "Failed to connect to named pipes")
+    Napi::Error::New(env, "Failed to connect to named pipes: " +
+                              GetErrorMessage(err))
         .ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -516,7 +553,9 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   CloseHandle(hStderr);
 
   if (!success) {
-    Napi::Error::New(env, "CreateProcessW failed").ThrowAsJavaScriptException();
+    DWORD err = GetLastError();
+    Napi::Error::New(env, "CreateProcessW failed: " + GetErrorMessage(err))
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 

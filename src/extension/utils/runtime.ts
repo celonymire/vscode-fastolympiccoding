@@ -72,7 +72,7 @@ function getNativeProcessMonitor(): ProcessMonitorAddon | null {
     }
 
     if (!fs.existsSync(addonPath)) {
-      getLogger("runtime").warn(`Process monitor addon not found at ${addonPath}`);
+      getLogger("runtime").error(`Process monitor addon not found at ${addonPath}`);
       return null;
     }
 
@@ -295,13 +295,6 @@ export class Runnable {
     this._exitCode = result.exitCode;
   }
 
-  handleMonitorError(error: unknown): void {
-    const logger = getLogger("runtime");
-    logger.error(
-      `Process monitor addon failed: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-
   run(command: string[], timeout: number, memoryLimit: number, cwd?: string) {
     if (command.length === 0) {
       throw new Error("Runnable.run requires at least one command element");
@@ -394,8 +387,6 @@ export class Runnable {
                 nativeProc.emit("spawn");
                 resolveSpawn(true);
 
-                const logger = getLogger("runtime");
-
                 // Attach stream handlers
                 if (nativeProc.stdout) {
                   nativeProc.stdout.resume();
@@ -422,8 +413,6 @@ export class Runnable {
                     resolve();
                   })
                   .catch((err: Error) => {
-                    logger.error("Process error: " + err.message);
-                    this.handleMonitorError(err);
                     nativeProc.emit("error", err);
                     nativeProc.emit("close", this._exitCode, null);
                     resolve();
@@ -460,8 +449,7 @@ export class Runnable {
               () => {} // Callback unused in this flow setup
             );
           } catch (e) {
-            getLogger("runtime").error(`Native addon failed: ${e}`);
-            this._emitter.emit("error", new Error(`Native addon failed: ${e}`));
+            this._emitter.emit("error", new Error(`${e}`));
             this._emitter.emit("close", this._exitCode, null);
             resolveSpawn(false);
             resolve();
@@ -469,7 +457,6 @@ export class Runnable {
         } else {
           // Fallback or Error if monitor not available (but we expect it to be available)
           // Since we don't have a fallback impl in this snippet, we just error.
-          getLogger("runtime").error("Native addon not found");
           this._emitter.emit("error", new Error("Native addon not found"));
           this._emitter.emit("close", this._exitCode, null);
           resolveSpawn(false);

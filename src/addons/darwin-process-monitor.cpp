@@ -464,7 +464,8 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   pid_t pid = fork();
 
   if (pid < 0) {
-    Napi::Error::New(env, "fork failed").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "fork failed: " + std::string(std::strerror(errno)))
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 

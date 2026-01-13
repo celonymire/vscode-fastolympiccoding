@@ -390,7 +390,8 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
   pid_t pid = vfork();
 
   if (pid < 0) {
-    Napi::Error::New(env, "vfork failed").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "vfork failed: " + std::string(std::strerror(errno)))
+        .ThrowAsJavaScriptException();
     return env.Null();
   }
 
