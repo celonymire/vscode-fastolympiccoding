@@ -128,3 +128,28 @@ jobs:
         with:
           name: ${{ steps.vsix-file.outputs.vsix_name }}
           path: ${{ steps.vsix-file.outputs.vsix_name }}
+
+  collect-vsix:
+    name: Collect VSIX Files
+    needs: [package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: vsix-files
+
+      - name: Prepare files for zipping
+        run: |
+          mkdir vsix_bundle
+          find vsix-files -type f -name "*.vsix" -exec mv {} vsix_bundle/ \;
+
+      - name: Zip VSIX files
+        working-directory: vsix_bundle
+        run: zip ../vsix.zip ./*
+
+      - name: Upload VSIX zip
+        uses: actions/upload-artifact@v6
+        with:
+          name: vsix-zip
+          path: vsix.zip
