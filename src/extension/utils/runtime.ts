@@ -231,6 +231,7 @@ export class Runnable extends EventEmitter {
 
   private _cleanup(): void {
     this.removeAllListeners();
+    this.stdin?.removeAllListeners();
     this.stdout?.removeAllListeners();
     this.stderr?.removeAllListeners();
   }
@@ -405,10 +406,8 @@ export class Runnable extends EventEmitter {
             this._cleanup();
             resolveSpawn(false);
             resolve();
-            await this._disposePipes();
           }
         } else {
-          // Fallback          // Since we don't have a fallback impl in this snippet, we just error.
           this.emit("error", new Error("Native addon not found"));
           this.emit("close", this._exitCode, null);
           this._cleanup();
