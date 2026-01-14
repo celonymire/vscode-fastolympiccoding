@@ -299,7 +299,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         if (token.isCancellationRequested) {
           return;
         }
-        testcase.process.process?.stdin.write(testcase.stdin.data);
+        testcase.process.stdin?.write(testcase.stdin.data);
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
       .on("stdout:data", (data: string) => testcase.stdout.write(data, "batch"))
@@ -396,12 +396,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           testcase.interactorSecretResolver?.();
           testcase.interactorSecretResolver = undefined;
         }
-        testcase.interactorProcess.process?.stdin.write(testcase.interactorSecret.data);
+        testcase.interactorProcess.stdin?.write(testcase.interactorSecret.data);
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
       .on("stdout:data", (data: string) => {
         testcase.stdin.write(data, "force");
-        testcase.process.process?.stdin.write(data);
+        testcase.process.stdin?.write(data);
       })
       .on("error", (data: Error) => {
         if (token.isCancellationRequested) {
@@ -416,7 +416,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.process.stop();
       })
       .on("close", () => {
-        testcase.process.process?.stdin.end();
+        testcase.process.stdin?.end();
       });
 
     testcase.process
@@ -426,7 +426,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           await secretPromise;
         }
         testcase.stdout.write(data, "force");
-        testcase.interactorProcess.process?.stdin.write(data);
+        testcase.interactorProcess.stdin?.write(data);
       })
       .on("error", (data: Error) => {
         if (token.isCancellationRequested) {
@@ -440,7 +440,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.interactorProcess.stop();
       })
       .on("close", () => {
-        testcase.interactorProcess.process?.stdin.end();
+        testcase.interactorProcess.stdin?.end();
       });
 
     const [termination, interactorTermination] = await Promise.all([
@@ -1282,10 +1282,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     if (testcase.mode === "interactive") {
-      testcase.interactorProcess.process?.stdin.write(data);
+      testcase.interactorProcess.stdin?.write(data);
       testcase.stdout.write(data, "force");
     } else {
-      testcase.process.process?.stdin.write(data);
+      testcase.process.stdin?.write(data);
       testcase.stdin.write(data, "force");
     }
   }

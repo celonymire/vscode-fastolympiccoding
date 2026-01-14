@@ -416,7 +416,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       this._generatorState.process
         .on("spawn", () => {
-          this._generatorState.process.process?.stdin.write(`${seed}\n`);
+          this._generatorState.process.stdin?.write(`${seed}\n`);
         })
         .on("error", this._generatorState.errorHandler)
         .on("stdout:data", this._generatorState.stdoutDataHandler)
@@ -706,7 +706,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     for (const stateId of StateIdValue) {
       const state = this._findState(stateId);
-      state?.process.process?.kill();
+      state?.process.kill();
     }
   }
 
@@ -718,15 +718,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       if (this._interactiveMode) {
         // Generator provides the secret for the interactor
-        this._judgeState.process.process?.stdin.write(data);
+        this._judgeState.process.stdin?.write(data);
       } else {
         // Generator pipes to solution and good solution
-        this._solutionState.process.process?.stdin.write(data);
-        this._judgeState.process.process?.stdin.write(data);
+        this._solutionState.process.stdin?.write(data);
+        this._judgeState.process.stdin?.write(data);
       }
     } else if (stateId === "Judge") {
       if (this._interactiveMode) {
-        this._solutionState.process.process?.stdin.write(data);
+        this._solutionState.process.stdin?.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
@@ -739,7 +739,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           this._interactiveSecretPromise = null;
         }
 
-        this._judgeState.process.process?.stdin.write(data);
+        this._judgeState.process.stdin?.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
@@ -762,11 +762,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!state) {
       return;
     }
-
-    const proc = state?.process.process;
-    proc?.off("error", state.errorHandler);
-    proc?.stdout.off("data", state.stdoutDataHandler);
-    proc?.stderr.off("data", state.stderrDataHandler);
 
     if (code !== 0) {
       for (const siblingId of StateIdValue) {

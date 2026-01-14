@@ -185,63 +185,12 @@ type ListenerCallback =
 
 import { EventEmitter } from "node:events";
 
-class NativeChildProcess extends EventEmitter {
-  pid: number;
-  stdin: net.Socket;
-  stdout: net.Socket;
-  stderr: net.Socket;
-  // The promise that resolves when the process exits
-  readonly result: Promise<AddonResult>;
-  private _cancel: () => void;
+export class Runnable extends EventEmitter {
+  public pid: number | undefined;
+  public stdin: net.Socket | undefined;
+  public stdout: net.Socket | undefined;
+  public stderr: net.Socket | undefined;
 
-  constructor(
-    pid: number,
-    io: [net.Socket, net.Socket, net.Socket],
-    resultPromise: Promise<AddonResult>,
-    cancel: () => void
-  ) {
-    super();
-    this.pid = pid;
-    this.result = resultPromise;
-    this._cancel = cancel;
-
-    this.stdin = io[0];
-    this.stdout = io[1];
-    this.stderr = io[2];
-    this.stdout.setEncoding("utf-8");
-    this.stderr.setEncoding("utf-8");
-  }
-
-  stop() {
-    this._cancel();
-  }
-
-  kill(signal: NodeJS.Signals = "SIGTERM") {
-    try {
-      process.kill(this.pid, signal);
-    } catch {
-      // Ignore ESRCH
-    }
-  }
-}
-
-// Basic structural typing to match ChildProcess where we use it
-interface ChildProcessLike {
-  pid?: number;
-  stdin: NodeJS.WritableStream;
-  stdout: NodeJS.ReadableStream;
-  stderr: NodeJS.ReadableStream;
-  on(event: string, listener: ListenerCallback): this;
-  once(event: string, listener: ListenerCallback): this;
-  off(event: string, listener: ListenerCallback): this;
-  removeAllListeners(event?: string): this;
-  kill(signal?: NodeJS.Signals): boolean;
-  stop(): void;
-}
-
-export class Runnable {
-  private _process: ChildProcessLike | undefined = undefined;
-  private _emitter = new EventEmitter();
   private _promise: Promise<void> | undefined = undefined;
   private _spawnPromise: Promise<boolean> | undefined = undefined;
   private _elapsed = 0;
@@ -250,9 +199,14 @@ export class Runnable {
   private _maxMemoryBytes = 0;
   private _memoryLimitExceeded = false;
   private _stopped = false;
+  private _cancel: (() => void) | undefined;
 
   private _pipeServers: [net.Server, net.Server, net.Server] | null = null;
   private _pipePaths: [string, string, string] | null = null;
+
+  constructor() {
+    super();
+  }
 
   private async _disposePipes(): Promise<void> {
     if (this._pipeServers) {
@@ -271,23 +225,14 @@ export class Runnable {
   }
 
   async dispose(): Promise<void> {
-    this.cleanup();
+    this._cleanup();
     await this._disposePipes();
   }
 
-  cleanup(): void {
-    this._emitter.removeAllListeners();
-    if (this._process) {
-      this._process.removeAllListeners();
-      // Use logical check to see if we can remove listeners on streams
-      // (NativeChildProcess streams are Node streams so they have removeAllListeners)
-      if (typeof this._process.stdout.removeAllListeners === "function") {
-        this._process.stdout.removeAllListeners();
-      }
-      if (typeof this._process.stderr.removeAllListeners === "function") {
-        this._process.stderr.removeAllListeners();
-      }
-    }
+  private _cleanup(): void {
+    this.removeAllListeners();
+    this.stdout?.removeAllListeners();
+    this.stderr?.removeAllListeners();
   }
 
   handleAddonResult(result: AddonResult): void {
@@ -306,13 +251,17 @@ export class Runnable {
 
     const [commandName, ...commandArgs] = command;
 
-    this.cleanup();
     this._elapsed = 0;
     this._exitCode = null;
     this._timedOut = false;
     this._maxMemoryBytes = 0;
     this._memoryLimitExceeded = false;
     this._stopped = false;
+    this.pid = undefined;
+    this.stdin = undefined;
+    this.stdout = undefined;
+    this.stderr = undefined;
+    this._cancel = undefined;
 
     let resolveSpawn: (value: boolean) => void;
     this._spawnPromise = new Promise((resolve) => {
@@ -400,79 +349,74 @@ export class Runnable {
 
             const [socketIn, socketOut, socketErr] = await Promise.all([pIn, pOut, pErr]);
 
-            // Create NativeChildProcess
-            const nativeProc = new NativeChildProcess(
-              spawnResult.pid,
-              [socketIn, socketOut, socketErr],
-              spawnResult.result,
-              spawnResult.cancel
-            );
-            this._process = nativeProc as unknown as ChildProcessLike;
+            this.pid = spawnResult.pid;
+            this.stdin = socketIn;
+            this.stdout = socketOut;
+            this.stderr = socketErr;
+            this._cancel = spawnResult.cancel;
 
-            // Proxy events from the native process to our internal emitter
-            nativeProc.once("spawn", () => this._emitter.emit("spawn"));
-            nativeProc.on("error", (err) => this._emitter.emit("error", err));
-            nativeProc.stdout.on("data", (data) => this._emitter.emit("stdout:data", data));
-            nativeProc.stderr.on("data", (data) => this._emitter.emit("stderr:data", data));
-            nativeProc.stdout.once("end", () => this._emitter.emit("stdout:end"));
-            nativeProc.stderr.once("end", () => this._emitter.emit("stderr:end"));
-            nativeProc.once("close", (code, signal) => this._emitter.emit("close", code, signal));
+            this.stdout.setEncoding("utf-8");
+            this.stderr.setEncoding("utf-8");
 
-            // Signal spawn success
-            nativeProc.emit("spawn");
+            // Proxy events
+            this.stdout.on("data", (data) => this.emit("stdout:data", data));
+            this.stderr.on("data", (data) => this.emit("stderr:data", data));
+            this.stdout.once("end", () => this.emit("stdout:end"));
+            this.stderr.once("end", () => this.emit("stderr:end"));
+
             resolveSpawn(true);
+            this.emit("spawn");
 
             // Attach stream handlers
-            if (nativeProc.stdout) {
-              nativeProc.stdout.resume();
+            if (this.stdout) {
+              this.stdout.resume();
               const p = new Promise<void>((resolve) => {
-                if (nativeProc.stdout.destroyed) resolve();
-                else nativeProc.stdout.once("close", resolve);
+                if (this.stdout?.destroyed) resolve();
+                else this.stdout?.once("close", resolve);
               });
               streamClosePromises.push(p);
             }
-            if (nativeProc.stderr) {
-              nativeProc.stderr.resume();
+            if (this.stderr) {
+              this.stderr.resume();
               const p = new Promise<void>((resolve) => {
-                if (nativeProc.stderr.destroyed) resolve();
-                else nativeProc.stderr.once("close", resolve);
+                if (this.stderr?.destroyed) resolve();
+                else this.stderr?.once("close", resolve);
               });
               streamClosePromises.push(p);
             }
 
-            Promise.all([nativeProc.result, Promise.all(streamClosePromises)])
+            Promise.all([spawnResult.result, ...streamClosePromises])
               .then(([res]): void => {
                 this.handleAddonResult(res);
-                nativeProc.emit("exit", this._exitCode, null);
-                nativeProc.emit("close", this._exitCode, null);
+                this.emit("exit", this._exitCode, null);
+                this.emit("close", this._exitCode, null);
+                this._cleanup();
                 resolve();
               })
               .catch((err: Error) => {
-                nativeProc.emit("error", err);
-                nativeProc.emit("close", this._exitCode, null);
+                this.emit("error", err);
+                this.emit("close", this._exitCode, null);
+                this._cleanup();
                 resolve();
               });
           } catch (e) {
-            this._emitter.emit("error", new Error(`${e}`));
-            this._emitter.emit("close", this._exitCode, null);
+            this.emit("error", new Error(`${e}`));
+            this.emit("close", this._exitCode, null);
+            this._cleanup();
             resolveSpawn(false);
             resolve();
             await this._disposePipes();
           }
         } else {
-          // Fallback or Error if monitor not available (but we expect it to be available)
-          // Since we don't have a fallback impl in this snippet, we just error.
-          this._emitter.emit("error", new Error("Native addon not found"));
-          this._emitter.emit("close", this._exitCode, null);
+          // Fallback          // Since we don't have a fallback impl in this snippet, we just error.
+          this.emit("error", new Error("Native addon not found"));
+          this.emit("close", this._exitCode, null);
+          this._cleanup();
           resolveSpawn(false);
           resolve();
         }
       })();
     });
-  }
-
-  get process() {
-    return this._process;
   }
 
   get elapsed(): number {
@@ -499,20 +443,32 @@ export class Runnable {
   }
 
   stop() {
-    this._process?.stop();
+    this._cancel?.();
     this._stopped = true;
   }
 
-  on(event: "spawn", listener: () => void): Runnable;
-  on(event: "error", listener: (err: Error) => void): Runnable;
-  on(event: "stderr:data" | "stdout:data", listener: (data: string) => void): Runnable;
-  on(event: "stderr:end" | "stdout:end", listener: () => void): Runnable;
-  on(
-    event: "close",
-    listener: (code: number | null, signal: NodeJS.Signals | null) => void
-  ): Runnable;
-  on(event: string, listener: ListenerCallback): Runnable {
-    this._emitter.on(event, listener);
+  kill(signal: NodeJS.Signals = "SIGTERM") {
+    if (this.pid) {
+      try {
+        process.kill(this.pid, signal);
+      } catch {
+        // Ignore ESRCH
+      }
+    }
+  }
+
+  // Override emit to satisfy EventEmitter and our strict typing if needed
+  // emit(event: string | symbol, ...args: any[]): boolean {
+  //   return super.emit(event, ...args);
+  // }
+
+  on(event: "spawn", listener: () => void): this;
+  on(event: "error", listener: (err: Error) => void): this;
+  on(event: "stderr:data" | "stdout:data", listener: (data: string) => void): this;
+  on(event: "stderr:end" | "stdout:end", listener: () => void): this;
+  on(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+  on(event: string, listener: ListenerCallback): this {
+    super.on(event, listener);
     return this;
   }
 
@@ -590,7 +546,7 @@ async function doCompile(
         });
 
       const termination = await runnable.done;
-      runnable.cleanup();
+      // runnable.cleanup(); // Handled internally
       await runnable.dispose();
       compilationStatusItem.dispose();
 
