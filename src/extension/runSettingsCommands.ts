@@ -185,7 +185,7 @@ function getActiveFileExtension(): string | null {
   return path.extname(activeEditor.document.fileName);
 }
 
-export function registerWalkthroughCommands(context: vscode.ExtensionContext): void {
+export function registerRunSettingsCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "fastolympiccoding.createRunSettings",
