@@ -55,17 +55,17 @@
 </script>
 
 {#if status === "CE"}
-  <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
+  <div class="toolbar" class:toolbar--hidden={skipped}>
     <div class="testcase-badges">
-      <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
-        <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+      <div class="toolbar-badge-container toolbar-badge" data-status={status}>
+        <div class="toolbar-icon toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-terminal-bash"></div>
         </div>
-        <p class="testcase-elapsed-text">CE</p>
+        <p class="toolbar-badge-text">CE</p>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
-          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
+          <div class="toolbar-icon toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
         </div>
@@ -73,7 +73,7 @@
     </div>
     <div class="testcase-buttons">
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Run Testcase"
         aria-label="Run"
         onclick={handleRun}
@@ -81,7 +81,7 @@
         <div class="codicon codicon-run-below"></div>
       </button>
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Debug Testcase"
         aria-label="Debug"
         onclick={handleDebug}
@@ -89,7 +89,7 @@
         <div class="codicon codicon-debug-alt"></div>
       </button>
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Delete Testcase"
         aria-label="Delete"
         onclick={handleDelete}
@@ -97,7 +97,7 @@
         <div class="codicon codicon-trash"></div>
       </button>
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip={showDetails ? "Hide Details" : "Show Details"}
         aria-label={showDetails ? "Hide" : "Show"}
         onclick={handleToggleVisibility}
@@ -105,7 +105,7 @@
         <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
       </button>
       <button
-        class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+        class="toolbar-icon toolbar-icon--visibility"
         data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
         aria-label={skipped ? "Unskip" : "Skip"}
         onclick={handleToggleSkip}
@@ -117,10 +117,10 @@
     </div>
   </div>
 {:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
-  <div class="testcase-toolbar" class:testcase-toolbar--hidden={skipped}>
+  <div class="toolbar" class:toolbar--hidden={skipped}>
     <div class="testcase-badges">
-      <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
-        <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+      <div class="toolbar-badge-container toolbar-badge" data-status={status}>
+        <div class="toolbar-icon toolbar-icon-exclude-highlight">
           {#if status === "NA"}
             <div class="codicon codicon-bolded codicon-play"></div>
           {:else if status === "AC"}
@@ -135,7 +135,7 @@
             <div class="codicon codicon-bolded codicon-chip"></div>
           {/if}
         </div>
-        <p class="testcase-elapsed-text">
+        <p class="toolbar-badge-text">
           {status !== "NA" && status !== "AC" && status !== "ML" && status !== "WA"
             ? status
             : testcase.elapsed >= 1000
@@ -143,11 +143,11 @@
               : testcase.elapsed + "ms"}
         </p>
       </div>
-      <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
-        <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+      <div class="toolbar-badge-container toolbar-badge" data-status={status}>
+        <div class="toolbar-icon toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-chip"></div>
         </div>
-        <p class="testcase-elapsed-text">
+        <p class="toolbar-badge-text">
           {status === "ML"
             ? "ML"
             : testcase.memoryBytes >= 1024 * 1024 * 1024
@@ -160,8 +160,8 @@
         </p>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
-          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
+          <div class="toolbar-icon toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
         </div>
@@ -169,7 +169,7 @@
     </div>
     <div class="testcase-buttons">
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Run Testcase"
         aria-label="Run"
         onclick={handleRun}
@@ -177,7 +177,7 @@
         <div class="codicon codicon-run-below"></div>
       </button>
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Debug Testcase"
         aria-label="Debug"
         onclick={handleDebug}
@@ -185,7 +185,7 @@
         <div class="codicon codicon-debug-alt"></div>
       </button>
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Delete Testcase"
         aria-label="Delete"
         onclick={handleDelete}
@@ -193,7 +193,7 @@
         <div class="codicon codicon-trash"></div>
       </button>
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip={showDetails ? "Hide Details" : "Show Details"}
         aria-label={showDetails ? "Hide" : "Show"}
         onclick={handleToggleVisibility}
@@ -201,7 +201,7 @@
         <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
       </button>
       <button
-        class="testcase-toolbar-icon testcase-toolbar-icon--visibility"
+        class="toolbar-icon toolbar-icon--visibility"
         data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
         aria-label={skipped ? "Unskip" : "Skip"}
         onclick={handleToggleSkip}
@@ -213,17 +213,17 @@
     </div>
   </div>
 {:else if status === "COMPILING"}
-  <div class="testcase-toolbar">
-    <div class="testcase-toolbar-left">
-      <div class="testcase-elapsed-badge testcase-elapsed" data-status={status}>
-        <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-badge-container toolbar-badge" data-status={status}>
+        <div class="toolbar-icon toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
         </div>
-        <p class="testcase-elapsed-text">COMPILING</p>
+        <p class="toolbar-badge-text">COMPILING</p>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
-          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
+          <div class="toolbar-icon toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
         </div>
@@ -231,20 +231,20 @@
     </div>
   </div>
 {:else if status === "RUNNING"}
-  <div class="testcase-toolbar">
-    <div class="testcase-toolbar-left">
-      <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-icon toolbar-icon-exclude-highlight">
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>
       {#if testcase.mode === "interactive"}
-        <div class="testcase-elapsed-badge testcase-elapsed" data-status="CE">
-          <div class="testcase-toolbar-icon testcase-toolbar-icon-exclude-highlight">
+        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
+          <div class="toolbar-icon toolbar-icon-exclude-highlight">
             <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
           </div>
         </div>
       {/if}
       <button
-        class="testcase-toolbar-icon"
+        class="toolbar-icon"
         data-tooltip="Stop Testcase"
         aria-label="Stop"
         onclick={handleStop}
@@ -258,7 +258,7 @@
 <Tooltip />
 
 <style>
-  .testcase-toolbar {
+  .toolbar {
     display: flex;
     align-items: center;
     margin-bottom: 6px;
@@ -266,15 +266,15 @@
     gap: 6px;
   }
 
-  .testcase-toolbar--hidden > .testcase-badges {
+  .toolbar--hidden > .testcase-badges {
     opacity: 0.5;
   }
 
-  .testcase-toolbar--hidden > .testcase-buttons > *:not(.testcase-toolbar-icon-exclude-fade) {
+  .toolbar--hidden > .testcase-buttons > *:not(.toolbar-icon-exclude-fade) {
     opacity: 0.5;
   }
 
-  .testcase-toolbar-left {
+  .toolbar-left {
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -297,7 +297,7 @@
     flex-grow: 1;
   }
 
-  .testcase-toolbar-icon {
+  .toolbar-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -309,12 +309,12 @@
     color: inherit;
   }
 
-  .testcase-toolbar-icon:not(.testcase-toolbar-icon-exclude-highlight):hover {
+  .toolbar-icon:not(.toolbar-icon-exclude-highlight):hover {
     cursor: pointer;
     background: var(--vscode-button-secondaryBackground);
   }
 
-  .testcase-elapsed-badge {
+  .toolbar-badge-container {
     display: flex;
     align-items: center;
     padding: 1px 6px;
@@ -326,7 +326,7 @@
     color: var(--vscode-badge-foreground);
   }
 
-  .testcase-elapsed-text {
+  .toolbar-badge-text {
     margin: 0 3px 0 0;
   }
 
@@ -335,31 +335,31 @@
   }
 
   /* Status-specific colors using data-status attribute */
-  .testcase-elapsed[data-status="CE"] {
+  .toolbar-badge[data-status="CE"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  .testcase-elapsed[data-status="RE"] {
+  .toolbar-badge[data-status="RE"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  .testcase-elapsed[data-status="WA"] {
+  .toolbar-badge[data-status="WA"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  .testcase-elapsed[data-status="AC"] {
+  .toolbar-badge[data-status="AC"] {
     background-color: var(--vscode-terminal-ansiGreen);
   }
 
-  .testcase-elapsed[data-status="TL"] {
+  .toolbar-badge[data-status="TL"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 
-  .testcase-elapsed[data-status="COMPILING"] {
+  .toolbar-badge[data-status="COMPILING"] {
     background-color: var(--vscode-terminal-ansiMagenta);
   }
 
-  .testcase-elapsed[data-status="ML"] {
+  .toolbar-badge[data-status="ML"] {
     background-color: var(--vscode-terminal-ansiRed);
   }
 </style>
