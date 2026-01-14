@@ -287,13 +287,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    testcase.process.run(
-      runCommand,
-      bypassLimits ? 0 : this._timeLimit,
-      bypassLimits ? 0 : this._memoryLimit,
-      cwd
-    );
-
     testcase.process
       .on("spawn", () => {
         if (token.isCancellationRequested) {
@@ -347,7 +340,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         });
 
         this._saveFileData();
-      });
+      })
+      .run(
+        runCommand,
+        bypassLimits ? 0 : this._timeLimit,
+        bypassLimits ? 0 : this._memoryLimit,
+        cwd
+      );
   }
 
   private async _launchInteractiveTestcase(
