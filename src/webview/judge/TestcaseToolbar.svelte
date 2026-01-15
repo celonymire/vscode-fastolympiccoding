@@ -100,22 +100,24 @@
               : testcase.elapsed + "ms"}
         </p>
       </div>
-      <div class="toolbar-badge-container toolbar-badge" data-status={status}>
-        <div class="toolbar-icon toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-bolded codicon-chip"></div>
+      {#if status !== "CE"}
+        <div class="toolbar-badge-container toolbar-badge" data-status={status}>
+          <div class="toolbar-icon toolbar-icon-exclude-highlight">
+            <div class="codicon codicon-bolded codicon-chip"></div>
+          </div>
+          <p class="toolbar-badge-text">
+            {status === "ML"
+              ? "ML"
+              : testcase.memoryBytes >= 1024 * 1024 * 1024
+                ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
+                : testcase.memoryBytes >= 1024 * 1024
+                  ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
+                  : testcase.memoryBytes >= 1024
+                    ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
+                    : testcase.memoryBytes + "B"}
+          </p>
         </div>
-        <p class="toolbar-badge-text">
-          {status === "ML"
-            ? "ML"
-            : testcase.memoryBytes >= 1024 * 1024 * 1024
-              ? (testcase.memoryBytes / (1024 * 1024 * 1024)).toFixed(1) + "GB"
-              : testcase.memoryBytes >= 1024 * 1024
-                ? (testcase.memoryBytes / (1024 * 1024)).toFixed(0) + "MB"
-                : testcase.memoryBytes >= 1024
-                  ? (testcase.memoryBytes / 1024).toFixed(0) + "KB"
-                  : testcase.memoryBytes + "B"}
-        </p>
-      </div>
+      {/if}
       {#if testcase.mode === "interactive"}
         <div class="toolbar-badge-container toolbar-badge" data-status="CE">
           <div class="toolbar-icon toolbar-icon-exclude-highlight">
