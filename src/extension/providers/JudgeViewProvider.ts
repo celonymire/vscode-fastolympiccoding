@@ -140,13 +140,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return null;
     }
 
     const settings = getFileRunSettings(this._currentFile, extraVariables);
-    if (!settings) {
+    if (!settings || (testcase.mode === "interactive" && !settings.interactorFile)) {
       return null;
     }
 
@@ -157,9 +157,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       value: "COMPILING",
     });
 
-    const compilePromises = [compile(this._currentFile!, this._context)];
+    const compilePromises = [];
+    const currentFileCompilePromise = compile(this._currentFile!, this._context);
+    if (!currentFileCompilePromise) {
+      return null;
+    }
+    compilePromises.push(currentFileCompilePromise);
     if (testcase.mode === "interactive") {
-      compilePromises.push(compile(settings.interactorFile!, this._context));
+      const interactorCompilePromise = compile(settings.interactorFile!, this._context);
+      if (!interactorCompilePromise) {
+        return null;
+      }
+      compilePromises.push(interactorCompilePromise);
     }
     const errored = await Promise.all(compilePromises);
     const anyErrored = errored.some((hadError) => hadError);
@@ -246,7 +255,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _launchTestcase(ctx: ExecutionContext, bypassLimits: boolean, debugMode: boolean) {
+  private async _launchTestcase(ctx: ExecutionContext, bypassLimits: boolean, debugMode: boolean) {
     const { token, testcase, languageSettings, cwd } = ctx;
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
@@ -322,6 +331,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         bypassLimits ? 0 : this._memoryLimit,
         cwd
       );
+
+    await testcase.process.done;
   }
 
   private async _launchInteractiveTestcase(
@@ -968,33 +979,36 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _run(id: number, newTestcase: boolean): Promise<void> {
-    const donePromise = this._state[id].donePromise;
+    const ctx = await this._getExecutionContext(id);
+    if (!ctx) {
+      return;
+    }
+
+    const testcase = this._findTestcase(id);
+    if (!testcase) {
+      return;
+    }
+
+    const donePromise = testcase.donePromise;
     if (donePromise) {
       await donePromise;
       return;
     }
 
-    this._state[id].donePromise = new Promise((resolve) => {
+    testcase.donePromise = new Promise((resolve) => {
       void (async () => {
-        const ctx = await this._getExecutionContext(id);
-        if (!ctx) {
-          resolve();
-          return;
-        }
-
         if (ctx.testcase.mode === "interactive") {
-          this._launchInteractiveTestcase(ctx, newTestcase, false);
+          await this._launchInteractiveTestcase(ctx, newTestcase, false);
         } else {
-          this._launchTestcase(ctx, newTestcase, false);
+          await this._launchTestcase(ctx, newTestcase, false);
         }
 
-        await this._state[id].process.done;
         resolve();
       })();
     });
 
-    await this._state[id].donePromise;
-    this._state[id].donePromise = null;
+    await testcase.donePromise;
+    testcase.donePromise = null;
   }
 
   private async _debug(id: number): Promise<void> {
@@ -1111,7 +1125,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _stop(id: number) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1142,7 +1156,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _accept(id: number) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1168,7 +1182,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _decline(id: number) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1191,7 +1205,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _toggleVisibility(id: number) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1214,7 +1228,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _toggleSkip(id: number) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1230,7 +1244,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _compare(id: number) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1243,7 +1257,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _viewStdio({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1268,7 +1282,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _stdin({ id, data }: v.InferOutput<typeof StdinMessageSchema>) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1283,7 +1297,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _save({ id, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1364,7 +1378,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     id,
     stdio,
   }: v.InferOutput<typeof RequestTrimmedDataMessageSchema>) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1405,7 +1419,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _requestFullData({ id, stdio }: v.InferOutput<typeof RequestFullDataMessageSchema>) {
-    const testcase = this._getTestcase(id);
+    const testcase = this._findTestcase(id);
     if (!testcase) {
       return;
     }
@@ -1444,7 +1458,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _getTestcase(id: number): State | undefined {
+  private _findTestcase(id: number): State | undefined {
     return this._state.find((t) => t.id === id);
   }
 }
