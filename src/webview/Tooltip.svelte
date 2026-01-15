@@ -134,16 +134,31 @@
     clearTimeout(showTimeout);
     clearTimeout(hideTimeout);
 
-    const mutationObserver = new MutationObserver(() => {
-      // If the target element is no longer in the DOM, hide the tooltip
-      if (currentTarget && !document.contains(currentTarget)) {
-        hideTooltip();
+    const mutationObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "childList") {
+          // If the target element is no longer in the DOM, hide the tooltip
+          if (currentTarget && !document.contains(currentTarget)) {
+            hideTooltip();
+          }
+        } else if (mutation.type === "attributes" && mutation.attributeName === "data-tooltip") {
+          if (mutation.target === currentTarget) {
+            const text = currentTarget.getAttribute("data-tooltip");
+            if (text) {
+              tooltipText = text;
+            } else {
+              hideTooltip();
+            }
+          }
+        }
       }
     });
 
     mutationObserver.observe(document.body, {
       childList: true,
       subtree: true,
+      attributes: true,
+      attributeFilter: ["data-tooltip"],
     });
 
     // Hide tooltip on window resize

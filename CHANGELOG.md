@@ -22,6 +22,7 @@
 
 - Leading newline when adding real-time inputs to empty saved input
 - Seed for generators in stress tester not utilizing full 64-bit integer range
+- Tooltip not updating when the attribute changes
 
 ### Removed
 
