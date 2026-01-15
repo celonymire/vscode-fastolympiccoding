@@ -206,7 +206,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   ): Promise<boolean> {
     const compilePromise = compile(file, this._context);
     if (!compilePromise) {
-      return false;
+      return true;
     }
 
     super._postMessage({
