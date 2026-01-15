@@ -24,6 +24,7 @@
 - Seed for generators in stress tester not utilizing full 64-bit integer range
 - Tooltip not updating when the attribute changes
 - Compilation errors being double logged resulting in unhandled promise rejections
+- Interactor file compiling prematurely setting status of the testcase
 
 ### Removed
 

@@ -150,15 +150,37 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
-    const compilePromises = [this._compileIfNeeded(id, token, this._currentFile, testcase)];
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "status",
+      value: "COMPILING",
+    });
+
+    const compilePromises = [compile(this._currentFile!, this._context)];
     if (testcase.mode === "interactive") {
-      compilePromises.push(this._compileIfNeeded(id, token, settings.interactorFile!, testcase));
+      compilePromises.push(compile(settings.interactorFile!, this._context));
     }
     const errored = await Promise.all(compilePromises);
     const anyErrored = errored.some((hadError) => hadError);
     if (anyErrored) {
+      testcase.status = "CE";
+      super._postMessage({
+        type: "SET",
+        id,
+        property: "status",
+        value: "CE",
+      });
       return null;
     }
+
+    testcase.status = "NA";
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "status",
+      value: "NA",
+    });
 
     let interactorArgs: string[] | null = null;
     if (testcase.mode === "interactive") {
@@ -190,47 +212,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       interactorArgs,
       cwd: settings.languageSettings.currentWorkingDirectory,
     };
-  }
-
-  private async _compileIfNeeded(
-    id: number,
-    token: vscode.CancellationToken,
-    file: string,
-    testcase: State
-  ): Promise<boolean> {
-    const compilePromise = compile(file, this._context);
-    if (!compilePromise) {
-      return true;
-    }
-
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "status",
-      value: "COMPILING",
-    });
-
-    if (!token.isCancellationRequested && (await compilePromise)) {
-      testcase.status = "CE";
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "status",
-        value: "CE",
-      });
-      this._saveFileData();
-      return true;
-    } else {
-      testcase.status = "NA";
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "status",
-        value: "NA",
-      });
-    }
-
-    return token.isCancellationRequested;
   }
 
   private _prepareRunningState(id: number, testcase: State) {
