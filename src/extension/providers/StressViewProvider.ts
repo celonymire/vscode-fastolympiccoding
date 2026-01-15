@@ -69,6 +69,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _interactiveMode = false;
   private _interactiveSecretPromise: Promise<void> | null = null;
   private _interactorSecretResolver?: () => void;
+  private _donePromise: Promise<void> | null = null;
   private _generatorState: State;
   private _solutionState: State;
   private _judgeState: State;
@@ -281,17 +282,43 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   async run(): Promise<void> {
+    const donePromise = this._donePromise;
+    if (donePromise) {
+      await donePromise;
+      return;
+    }
+
     if (!this._currentFile) {
       return;
     }
 
+    this._donePromise = new Promise<void>((resolve) => {
+      void (async () => {
+        await this._doRun();
+        resolve();
+      })();
+    });
+    await this._donePromise;
+    this._donePromise = null;
+  }
+
+  stop() {
+    if (this._running) {
+      this._stopFlag = true;
+      for (const state of this._state) {
+        state.process.stop();
+      }
+    }
+  }
+
+  private async _doRun() {
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
     const testcaseTimeLimit = config.get<number>("stressTestcaseTimeLimit")!;
     const testcaseMemoryLimit = config.get<number>("stressTestcaseMemoryLimit")!;
     const timeLimit = config.get<number>("stressTimeLimit")!;
 
-    const solutionSettings = getFileRunSettings(this._currentFile);
+    const solutionSettings = getFileRunSettings(this._currentFile!);
     if (!solutionSettings) {
       return;
     }
@@ -351,7 +378,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
     };
     addCompilePromise(this._generatorState, solutionSettings.generatorFile!);
-    addCompilePromise(this._solutionState, this._currentFile);
+    addCompilePromise(this._solutionState, this._currentFile!);
     if (this._interactiveMode) {
       addCompilePromise(this._judgeState, solutionSettings.interactorFile!);
     } else {
@@ -541,15 +568,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._clearFlag = false;
 
     this._saveState();
-  }
-
-  stop() {
-    if (this._running) {
-      this._stopFlag = true;
-      for (const state of this._state) {
-        state.process.stop();
-      }
-    }
   }
 
   private _view({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
