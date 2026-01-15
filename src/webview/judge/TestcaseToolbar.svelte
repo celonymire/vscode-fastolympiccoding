@@ -56,7 +56,7 @@
 
 {#if status === "CE"}
   <div class="toolbar" class:toolbar--hidden={skipped}>
-    <div class="testcase-badges">
+    <div class="toolbar-badges">
       <div class="toolbar-badge-container toolbar-badge" data-status={status}>
         <div class="toolbar-icon toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-terminal-bash"></div>
@@ -72,12 +72,7 @@
       {/if}
     </div>
     <div class="testcase-buttons">
-      <button
-        class="toolbar-icon"
-        data-tooltip="Run Testcase"
-        aria-label="Run"
-        onclick={handleRun}
-      >
+      <button class="toolbar-icon" data-tooltip="Run Testcase" aria-label="Run" onclick={handleRun}>
         <div class="codicon codicon-run-below"></div>
       </button>
       <button
@@ -97,14 +92,6 @@
         <div class="codicon codicon-trash"></div>
       </button>
       <button
-        class="toolbar-icon"
-        data-tooltip={showDetails ? "Hide Details" : "Show Details"}
-        aria-label={showDetails ? "Hide" : "Show"}
-        onclick={handleToggleVisibility}
-      >
-        <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
-      </button>
-      <button
         class="toolbar-icon toolbar-icon--visibility"
         data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
         aria-label={skipped ? "Unskip" : "Skip"}
@@ -118,7 +105,24 @@
   </div>
 {:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
   <div class="toolbar" class:toolbar--hidden={skipped}>
-    <div class="testcase-badges">
+    <div class="toolbar-badges">
+      <div
+        class="toolbar-badge-container toolbar-dropdown-container toolbar-badge"
+        data-status={status}
+      >
+        <button
+          class="toolbar-icon toolbar-icon-exclude-highlight"
+          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+          aria-label={showDetails ? "Hide" : "Show"}
+          onclick={handleToggleVisibility}
+        >
+          <div
+            class="codicon codicon-bolded {showDetails
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="toolbar-badge-container toolbar-badge" data-status={status}>
         <div class="toolbar-icon toolbar-icon-exclude-highlight">
           {#if status === "NA"}
@@ -168,12 +172,7 @@
       {/if}
     </div>
     <div class="testcase-buttons">
-      <button
-        class="toolbar-icon"
-        data-tooltip="Run Testcase"
-        aria-label="Run"
-        onclick={handleRun}
-      >
+      <button class="toolbar-icon" data-tooltip="Run Testcase" aria-label="Run" onclick={handleRun}>
         <div class="codicon codicon-run-below"></div>
       </button>
       <button
@@ -191,14 +190,6 @@
         onclick={handleDelete}
       >
         <div class="codicon codicon-trash"></div>
-      </button>
-      <button
-        class="toolbar-icon"
-        data-tooltip={showDetails ? "Hide Details" : "Show Details"}
-        aria-label={showDetails ? "Hide" : "Show"}
-        onclick={handleToggleVisibility}
-      >
-        <div class="codicon {showDetails ? 'codicon-eye-closed' : 'codicon-eye'}"></div>
       </button>
       <button
         class="toolbar-icon toolbar-icon--visibility"
@@ -266,7 +257,7 @@
     gap: 6px;
   }
 
-  .toolbar--hidden > .testcase-badges {
+  .toolbar--hidden > .toolbar-badges {
     opacity: 0.5;
   }
 
@@ -282,7 +273,7 @@
     margin-right: auto;
   }
 
-  .testcase-badges {
+  .toolbar-badges {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -317,13 +308,17 @@
   .toolbar-badge-container {
     display: flex;
     align-items: center;
-    padding: 1px 6px;
+    padding: 0px 6px;
     border-radius: 11px;
     font-size: 15px;
     font-weight: bold;
     line-height: 1;
     background: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
+  }
+
+  .toolbar-dropdown-container {
+    padding: 0px;
   }
 
   .toolbar-badge-text {
