@@ -72,6 +72,7 @@ type State = Omit<
   process: Runnable;
   interactorProcess: Runnable;
   interactorSecretResolver?: () => void;
+  donePromise: Promise<void> | null;
 };
 
 type ExecutionContext = {
@@ -141,13 +142,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const testcase = this._getTestcase(id);
     if (!testcase) {
-      return null;
-    }
-
-    // stop already-running process
-    this._stop(id);
-    await testcase.process.done;
-    if (testcase.skipped) {
       return null;
     }
 
@@ -898,6 +892,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       process: new Runnable(),
       interactorProcess: new Runnable(),
       interactorSecretResolver: undefined,
+      donePromise: null,
     };
 
     newTestcase.stdin.callback = (data: string) =>
@@ -992,16 +987,33 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _run(id: number, newTestcase: boolean): Promise<void> {
-    const ctx = await this._getExecutionContext(id);
-    if (!ctx) {
+    const donePromise = this._state[id].donePromise;
+    if (donePromise) {
+      await donePromise;
       return;
     }
 
-    if (ctx.testcase.mode === "interactive") {
-      this._launchInteractiveTestcase(ctx, newTestcase, false);
-    } else {
-      this._launchTestcase(ctx, newTestcase, false);
-    }
+    this._state[id].donePromise = new Promise((resolve) => {
+      void (async () => {
+        const ctx = await this._getExecutionContext(id);
+        if (!ctx) {
+          resolve();
+          return;
+        }
+
+        if (ctx.testcase.mode === "interactive") {
+          this._launchInteractiveTestcase(ctx, newTestcase, false);
+        } else {
+          this._launchTestcase(ctx, newTestcase, false);
+        }
+
+        await this._state[id].process.done;
+        resolve();
+      })();
+    });
+
+    await this._state[id].donePromise;
+    this._state[id].donePromise = null;
   }
 
   private async _debug(id: number): Promise<void> {
