@@ -489,16 +489,8 @@ export class Runnable extends EventEmitter {
 }
 
 export async function getFileChecksum(file: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash("md5");
-    const stream = fs.createReadStream(file, { encoding: "utf8" });
-    stream.once("error", (err) => reject(err));
-    stream.once("end", () => {
-      hash.end();
-      resolve(hash.digest("hex"));
-    });
-    stream.pipe(hash);
-  });
+  const content = await fs.promises.readFile(file);
+  return crypto.createHash("md5").update(content).digest("hex");
 }
 
 async function doCompile(
