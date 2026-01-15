@@ -16,6 +16,7 @@
 - Trim off trailing whitespaces when requesting full data
 - Don't save ongoing running statuses to avoid blocking interacting with testcase on malfunction
 - Removed unused save all functionality
+- Allow showing testcase details on compiler error status
 
 ### Fixed
 

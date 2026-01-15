@@ -54,56 +54,7 @@
   const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
 </script>
 
-{#if status === "CE"}
-  <div class="toolbar" class:toolbar--hidden={skipped}>
-    <div class="toolbar-badges">
-      <div class="toolbar-badge-container toolbar-badge" data-status={status}>
-        <div class="toolbar-icon toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-bolded codicon-terminal-bash"></div>
-        </div>
-        <p class="toolbar-badge-text">CE</p>
-      </div>
-      {#if testcase.mode === "interactive"}
-        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
-          <div class="toolbar-icon toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
-    </div>
-    <div class="testcase-buttons">
-      <button class="toolbar-icon" data-tooltip="Run Testcase" aria-label="Run" onclick={handleRun}>
-        <div class="codicon codicon-run-below"></div>
-      </button>
-      <button
-        class="toolbar-icon"
-        data-tooltip="Debug Testcase"
-        aria-label="Debug"
-        onclick={handleDebug}
-      >
-        <div class="codicon codicon-debug-alt"></div>
-      </button>
-      <button
-        class="toolbar-icon"
-        data-tooltip="Delete Testcase"
-        aria-label="Delete"
-        onclick={handleDelete}
-      >
-        <div class="codicon codicon-trash"></div>
-      </button>
-      <button
-        class="toolbar-icon toolbar-icon--visibility"
-        data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
-        aria-label={skipped ? "Unskip" : "Skip"}
-        onclick={handleToggleSkip}
-      >
-        <div
-          class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
-        ></div>
-      </button>
-    </div>
-  </div>
-{:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
+{#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE"}
   <div class="toolbar" class:toolbar--hidden={skipped}>
     <div class="toolbar-badges">
       <div
@@ -137,6 +88,8 @@
             <div class="codicon codicon-bolded codicon-clock"></div>
           {:else if status === "ML"}
             <div class="codicon codicon-bolded codicon-chip"></div>
+          {:else if status === "CE"}
+            <div class="codicon codicon-bolded codicon-terminal-bash"></div>
           {/if}
         </div>
         <p class="toolbar-badge-text">

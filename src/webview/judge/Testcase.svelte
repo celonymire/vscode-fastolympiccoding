@@ -62,11 +62,7 @@
   let interactorSecretEditing = $state(false);
 </script>
 
-{#if status === "CE"}
-  <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {onprerun} />
-  </div>
-{:else if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML"}
+{#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE"}
   <div class="testcase-container">
     <TestcaseToolbar {id} {testcase} {onprerun} />
     {#if showDetails}
@@ -90,84 +86,86 @@
           }}
         />
       {/if}
-      <AutoresizeTextarea
-        bind:value={testcase.stdin}
-        bind:editing={stdinEditing}
-        placeholder="Input..."
-        readonly={testcase.mode === "interactive"}
-        onexpand={() => handleExpandStdio("STDIN")}
-        onpreedit={() => {
-          postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "STDIN" });
-        }}
-        onsave={handleSaveStdin}
-        oncancel={() => {
-          postProviderMessage({ type: "REQUEST_TRIMMED_DATA", id, stdio: "STDIN" });
-        }}
-      />
-      <AutoresizeTextarea
-        value={testcase.stderr}
-        readonly
-        hiddenOnEmpty
-        variant="stderr"
-        onexpand={() => handleExpandStdio("STDERR")}
-      />
-      {#if testcase.mode === "interactive" || testcase.status !== "AC"}
+      {#if status !== "CE"}
         <AutoresizeTextarea
-          value={testcase.stdout}
+          bind:value={testcase.stdin}
+          bind:editing={stdinEditing}
+          placeholder="Input..."
+          readonly={testcase.mode === "interactive"}
+          onexpand={() => handleExpandStdio("STDIN")}
+          onpreedit={() => {
+            postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "STDIN" });
+          }}
+          onsave={handleSaveStdin}
+          oncancel={() => {
+            postProviderMessage({ type: "REQUEST_TRIMMED_DATA", id, stdio: "STDIN" });
+          }}
+        />
+        <AutoresizeTextarea
+          value={testcase.stderr}
           readonly
           hiddenOnEmpty
-          onexpand={() => handleExpandStdio("STDOUT")}
-        >
-          {#snippet actions()}
-            {#if (status === "NA" || status === "WA") && testcase.mode !== "interactive"}
-              <button
-                class="action-button action-button--always-visible codicon codicon-pass"
-                data-tooltip="Accept Output"
-                aria-label="Accept"
-                onclick={() => postProviderMessage({ type: "ACTION", id, action: "ACCEPT" })}
-              ></button>
-            {/if}
-            {#if status === "WA" && testcase.mode !== "interactive"}
-              <button
-                class="action-button action-button--always-visible codicon codicon-diff-single"
-                data-tooltip="Compare Answers"
-                aria-label="Compare"
-                onclick={() => postProviderMessage({ type: "ACTION", id, action: "COMPARE" })}
-              ></button>
-            {/if}
-          {/snippet}
-        </AutoresizeTextarea>
-      {/if}
-      {#if testcase.mode !== "interactive"}
-        <AutoresizeTextarea
-          bind:value={testcase.acceptedStdout}
-          bind:editing={acceptedStdoutEditing}
-          placeholder="Accepted output..."
-          variant="accepted"
-          onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
-          onpreedit={() => {
-            postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "ACCEPTED_STDOUT" });
-          }}
-          onsave={handleSaveAcceptedStdout}
-          oncancel={() => {
-            postProviderMessage({
-              type: "REQUEST_TRIMMED_DATA",
-              id,
-              stdio: "ACCEPTED_STDOUT",
-            });
-          }}
-        >
-          {#snippet actions()}
-            {#if status === "AC" && testcase.mode !== "interactive"}
-              <button
-                class="action-button action-button--always-visible codicon codicon-close"
-                data-tooltip="Decline Answer"
-                aria-label="Decline"
-                onclick={() => postProviderMessage({ type: "ACTION", id, action: "DECLINE" })}
-              ></button>
-            {/if}
-          {/snippet}
-        </AutoresizeTextarea>
+          variant="stderr"
+          onexpand={() => handleExpandStdio("STDERR")}
+        />
+        {#if testcase.mode === "interactive" || testcase.status !== "AC"}
+          <AutoresizeTextarea
+            value={testcase.stdout}
+            readonly
+            hiddenOnEmpty
+            onexpand={() => handleExpandStdio("STDOUT")}
+          >
+            {#snippet actions()}
+              {#if (status === "NA" || status === "WA") && testcase.mode !== "interactive"}
+                <button
+                  class="action-button action-button--always-visible codicon codicon-pass"
+                  data-tooltip="Accept Output"
+                  aria-label="Accept"
+                  onclick={() => postProviderMessage({ type: "ACTION", id, action: "ACCEPT" })}
+                ></button>
+              {/if}
+              {#if status === "WA" && testcase.mode !== "interactive"}
+                <button
+                  class="action-button action-button--always-visible codicon codicon-diff-single"
+                  data-tooltip="Compare Answers"
+                  aria-label="Compare"
+                  onclick={() => postProviderMessage({ type: "ACTION", id, action: "COMPARE" })}
+                ></button>
+              {/if}
+            {/snippet}
+          </AutoresizeTextarea>
+        {/if}
+        {#if testcase.mode !== "interactive"}
+          <AutoresizeTextarea
+            bind:value={testcase.acceptedStdout}
+            bind:editing={acceptedStdoutEditing}
+            placeholder="Accepted output..."
+            variant="accepted"
+            onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
+            onpreedit={() => {
+              postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "ACCEPTED_STDOUT" });
+            }}
+            onsave={handleSaveAcceptedStdout}
+            oncancel={() => {
+              postProviderMessage({
+                type: "REQUEST_TRIMMED_DATA",
+                id,
+                stdio: "ACCEPTED_STDOUT",
+              });
+            }}
+          >
+            {#snippet actions()}
+              {#if status === "AC" && testcase.mode !== "interactive"}
+                <button
+                  class="action-button action-button--always-visible codicon codicon-close"
+                  data-tooltip="Decline Answer"
+                  aria-label="Decline"
+                  onclick={() => postProviderMessage({ type: "ACTION", id, action: "DECLINE" })}
+                ></button>
+              {/if}
+            {/snippet}
+          </AutoresizeTextarea>
+        {/if}
       {/if}
     {/if}
   </div>
