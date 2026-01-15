@@ -150,9 +150,7 @@
         aria-label={skipped ? "Unskip" : "Skip"}
         onclick={handleToggleSkip}
       >
-        <div
-          class="codicon {skipped ? 'codicon-debug-connected' : 'codicon-debug-disconnect'}"
-        ></div>
+        <div class="codicon {skipped ? 'codicon-run-coverage' : 'codicon-run-errors'}"></div>
       </button>
     </div>
   </div>
