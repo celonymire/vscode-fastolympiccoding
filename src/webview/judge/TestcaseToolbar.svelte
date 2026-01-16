@@ -9,15 +9,14 @@
   type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 
   interface Props {
-    id: number;
     testcase: ITestcase;
     onprerun: () => void;
   }
 
-  let { id, testcase, onprerun }: Props = $props();
+  let { testcase, onprerun }: Props = $props();
 
   function handleAction(action: ActionValue) {
-    postProviderMessage({ type: "ACTION", id, action });
+    postProviderMessage({ type: "ACTION", uuid: testcase.uuid, action });
   }
 
   function handleRun() {

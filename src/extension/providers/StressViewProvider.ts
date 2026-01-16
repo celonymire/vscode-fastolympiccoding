@@ -615,6 +615,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       if (currentState?.state === "Solution") {
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+          uuid: crypto.randomUUID(),
           stdin: this._judgeState.stdout.data,
           stderr: this._solutionState.stderr.data + this._judgeState.stderr.data,
           stdout: this._solutionState.stdout.data,
@@ -631,6 +632,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       } else if (currentState?.state === "Judge") {
         // add as standard testcase easily debug the interactor from reproduced queries
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+          uuid: crypto.randomUUID(),
           stdin: this._generatorState.stdout.data + this._solutionState.stdout.data,
           stderr: this._solutionState.stderr.data + this._judgeState.stderr.data,
           stdout: this._judgeState.stdout.data,
@@ -649,6 +651,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const currentState = this._findState(id);
 
       this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
+        uuid: crypto.randomUUID(),
         stdin: this._generatorState.stdout.data,
         stderr: currentState?.stderr.data ?? "",
         stdout: currentState?.stdout.data ?? "",

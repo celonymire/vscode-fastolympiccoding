@@ -6,11 +6,10 @@
   import TestcaseToolbar from "./TestcaseToolbar.svelte";
 
   interface Props {
-    id: number;
     testcase: Testcase;
   }
 
-  let { id, testcase = $bindable() }: Props = $props();
+  let { testcase = $bindable() }: Props = $props();
   let newStdin = $state("");
 
   function onprerun() {
@@ -25,26 +24,31 @@
   }
 
   function handleExpandStdio(stdio: Stdio) {
-    postProviderMessage({ type: "VIEW", id, stdio });
+    postProviderMessage({ type: "VIEW", uuid: testcase.uuid, stdio });
   }
 
   function handleSaveInteractorSecret() {
     postProviderMessage({
       type: "SAVE",
-      id,
+      uuid: testcase.uuid,
       stdio: "INTERACTOR_SECRET",
       data: testcase.interactorSecret,
     });
   }
 
   function handleSaveStdin() {
-    postProviderMessage({ type: "SAVE", id, stdio: "STDIN", data: testcase.stdin });
+    postProviderMessage({
+      type: "SAVE",
+      uuid: testcase.uuid,
+      stdio: "STDIN",
+      data: testcase.stdin,
+    });
   }
 
   function handleSaveAcceptedStdout() {
     postProviderMessage({
       type: "SAVE",
-      id,
+      uuid: testcase.uuid,
       stdio: "ACCEPTED_STDOUT",
       data: testcase.acceptedStdout,
     });
@@ -64,7 +68,7 @@
 
 {#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {onprerun} />
+    <TestcaseToolbar {testcase} {onprerun} />
     {#if showDetails}
       {#if testcase.mode === "interactive"}
         <AutoresizeTextarea
@@ -74,13 +78,17 @@
           variant="interactor-secret"
           onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
           onpreedit={() => {
-            postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "INTERACTOR_SECRET" });
+            postProviderMessage({
+              type: "REQUEST_FULL_DATA",
+              uuid: testcase.uuid,
+              stdio: "INTERACTOR_SECRET",
+            });
           }}
           onsave={handleSaveInteractorSecret}
           oncancel={() => {
             postProviderMessage({
               type: "REQUEST_TRIMMED_DATA",
-              id,
+              uuid: testcase.uuid,
               stdio: "INTERACTOR_SECRET",
             });
           }}
@@ -94,11 +102,15 @@
           readonly={testcase.mode === "interactive"}
           onexpand={() => handleExpandStdio("STDIN")}
           onpreedit={() => {
-            postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "STDIN" });
+            postProviderMessage({ type: "REQUEST_FULL_DATA", uuid: testcase.uuid, stdio: "STDIN" });
           }}
           onsave={handleSaveStdin}
           oncancel={() => {
-            postProviderMessage({ type: "REQUEST_TRIMMED_DATA", id, stdio: "STDIN" });
+            postProviderMessage({
+              type: "REQUEST_TRIMMED_DATA",
+              uuid: testcase.uuid,
+              stdio: "STDIN",
+            });
           }}
         />
         <AutoresizeTextarea
@@ -121,7 +133,8 @@
                   class="action-button action-button--always-visible codicon codicon-pass"
                   data-tooltip="Accept Output"
                   aria-label="Accept"
-                  onclick={() => postProviderMessage({ type: "ACTION", id, action: "ACCEPT" })}
+                  onclick={() =>
+                    postProviderMessage({ type: "ACTION", uuid: testcase.uuid, action: "ACCEPT" })}
                 ></button>
               {/if}
               {#if status === "WA" && testcase.mode !== "interactive"}
@@ -129,7 +142,8 @@
                   class="action-button action-button--always-visible codicon codicon-diff-single"
                   data-tooltip="Compare Answers"
                   aria-label="Compare"
-                  onclick={() => postProviderMessage({ type: "ACTION", id, action: "COMPARE" })}
+                  onclick={() =>
+                    postProviderMessage({ type: "ACTION", uuid: testcase.uuid, action: "COMPARE" })}
                 ></button>
               {/if}
             {/snippet}
@@ -143,13 +157,17 @@
             variant="accepted"
             onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
             onpreedit={() => {
-              postProviderMessage({ type: "REQUEST_FULL_DATA", id, stdio: "ACCEPTED_STDOUT" });
+              postProviderMessage({
+                type: "REQUEST_FULL_DATA",
+                uuid: testcase.uuid,
+                stdio: "ACCEPTED_STDOUT",
+              });
             }}
             onsave={handleSaveAcceptedStdout}
             oncancel={() => {
               postProviderMessage({
                 type: "REQUEST_TRIMMED_DATA",
-                id,
+                uuid: testcase.uuid,
                 stdio: "ACCEPTED_STDOUT",
               });
             }}
@@ -160,7 +178,8 @@
                   class="action-button action-button--always-visible codicon codicon-close"
                   data-tooltip="Decline Answer"
                   aria-label="Decline"
-                  onclick={() => postProviderMessage({ type: "ACTION", id, action: "DECLINE" })}
+                  onclick={() =>
+                    postProviderMessage({ type: "ACTION", uuid: testcase.uuid, action: "DECLINE" })}
                 ></button>
               {/if}
             {/snippet}
@@ -171,11 +190,11 @@
   </div>
 {:else if status === "COMPILING"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {onprerun} />
+    <TestcaseToolbar {testcase} {onprerun} />
   </div>
 {:else if status === "RUNNING"}
   <div class="testcase-container">
-    <TestcaseToolbar {id} {testcase} {onprerun} />
+    <TestcaseToolbar {testcase} {onprerun} />
     {#if visible}
       {#if testcase.mode === "interactive"}
         {#if testcase.interactorSecret === "" || testcase.interactorSecret === "\n"}
@@ -186,7 +205,7 @@
             onsave={() => {
               postProviderMessage({
                 type: "SAVE",
-                id,
+                uuid: testcase.uuid,
                 stdio: "INTERACTOR_SECRET",
                 data: newInteractorSecret,
               });
@@ -216,7 +235,7 @@
           ctrlEnterNewline={true}
           onkeyup={(e) => {
             if (e.key === "Enter" && !e.ctrlKey) {
-              postProviderMessage({ type: "STDIN", id, data: newStdin });
+              postProviderMessage({ type: "STDIN", uuid: testcase.uuid, data: newStdin });
               newStdin = "";
             }
           }}

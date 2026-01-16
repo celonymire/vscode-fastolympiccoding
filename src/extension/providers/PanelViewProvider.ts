@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import type StressViewProvider from "./StressViewProvider";
 import { isListening, onDidChangeListening } from "../competitiveCompanion";
@@ -9,7 +10,8 @@ class StatusTreeItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly description?: string,
     public readonly iconPath?: vscode.ThemeIcon,
-    public readonly command?: vscode.Command
+    public readonly command?: vscode.Command,
+    public readonly filePath?: string
   ) {
     super(label, collapsibleState);
     this.description = description;
@@ -28,6 +30,9 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
     private _stressViewProvider: StressViewProvider
   ) {
     this._context.subscriptions.push(onDidChangeListening(() => this.refresh()));
+    this._context.subscriptions.push(
+      this._judgeViewProvider.onDidChangeBackgroundTasks(() => this.refresh())
+    );
   }
 
   refresh(): void {
@@ -57,101 +62,59 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       );
       companionItem.contextValue = listening ? "companion-listening" : "companion-stopped";
 
+      // Get count of background judge tasks
+      const backgroundTasks = this._judgeViewProvider.getAllBackgroundTasks();
+      const judgeTaskCount = backgroundTasks.size;
+      const judgeDescription =
+        judgeTaskCount > 0 ? `${judgeTaskCount} file${judgeTaskCount > 1 ? "s" : ""}` : undefined;
+
       return Promise.resolve([
         companionItem,
         new StatusTreeItem(
-          "Quick Actions",
+          "Judge Background Testcases",
           vscode.TreeItemCollapsibleState.Expanded,
-          undefined,
-          new vscode.ThemeIcon("zap")
+          judgeDescription,
+          new vscode.ThemeIcon("run"),
+          undefined
         ),
         new StatusTreeItem(
-          "Judge Status",
+          "Stress Test Background Processes",
           vscode.TreeItemCollapsibleState.Expanded,
           undefined,
-          new vscode.ThemeIcon("list-selection")
-        ),
-        new StatusTreeItem(
-          "Stress Test Status",
-          vscode.TreeItemCollapsibleState.Expanded,
-          undefined,
-          new vscode.ThemeIcon("debug-alt")
-        ),
-        new StatusTreeItem(
-          "Recent Activity",
-          vscode.TreeItemCollapsibleState.Expanded,
-          undefined,
-          new vscode.ThemeIcon("history")
+          new vscode.ThemeIcon("debug-alt"),
+          undefined
         ),
       ]);
     }
 
-    // Children based on parent
-    switch (element.label) {
-      case "Quick Actions":
-        return Promise.resolve([
-          new StatusTreeItem(
-            "Run All Tests",
-            vscode.TreeItemCollapsibleState.None,
-            "Execute all testcases",
-            new vscode.ThemeIcon("run-all"),
-            {
-              command: "fastolympiccoding.runAll",
-              title: "Run All Tests",
-            }
-          ),
-          new StatusTreeItem(
-            "Clear Data",
-            vscode.TreeItemCollapsibleState.None,
-            "Clear saved testcases",
-            new vscode.ThemeIcon("clear-all"),
-            {
-              command: "fastolympiccoding.clearData",
-              title: "Clear Data",
-            }
-          ),
-        ]);
+    // Children of "Judge Background Testcases"
+    if (element.label === "Judge Background Testcases") {
+      const backgroundTasks = this._judgeViewProvider.getAllBackgroundTasks();
+      const items: StatusTreeItem[] = [];
 
-      case "Judge Status":
-        return Promise.resolve([
-          new StatusTreeItem(
-            "No active tests",
-            vscode.TreeItemCollapsibleState.None,
-            "Click to view Judge panel",
-            new vscode.ThemeIcon("info"),
-            {
-              command: "fastolympiccoding.judge.focus",
-              title: "Open Judge",
-            }
-          ),
-        ]);
+      for (const [file, uuids] of backgroundTasks.entries()) {
+        const basename = path.basename(file);
+        const item = new StatusTreeItem(
+          basename,
+          vscode.TreeItemCollapsibleState.None,
+          `${uuids.length} test${uuids.length > 1 ? "s" : ""} running`,
+          new vscode.ThemeIcon("loading~spin"),
+          {
+            command: "vscode.open",
+            title: "Open File",
+            arguments: [vscode.Uri.file(file)],
+          },
+          file
+        );
+        item.contextValue = "judge-background-file";
+        items.push(item);
+      }
 
-      case "Stress Test Status":
-        return Promise.resolve([
-          new StatusTreeItem(
-            "Not running",
-            vscode.TreeItemCollapsibleState.None,
-            "Click to view Stress panel",
-            new vscode.ThemeIcon("info"),
-            {
-              command: "fastolympiccoding.stress.focus",
-              title: "Open Stress",
-            }
-          ),
-        ]);
-
-      case "Recent Activity":
-        return Promise.resolve([
-          new StatusTreeItem(
-            "No recent activity",
-            vscode.TreeItemCollapsibleState.None,
-            undefined,
-            new vscode.ThemeIcon("circle-outline")
-          ),
-        ]);
-
-      default:
-        return Promise.resolve([]);
+      // Sort by file name
+      items.sort((a, b) => a.label.localeCompare(b.label));
+      return Promise.resolve(items);
     }
+
+    return Promise.resolve([]);
   }
 }

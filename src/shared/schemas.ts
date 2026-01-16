@@ -46,6 +46,7 @@ export const TestSchema = v.object({
 });
 
 export const TestcaseSchema = v.object({
+  uuid: v.fallback(v.string(), () => crypto.randomUUID()),
   stdin: v.fallback(v.string(), ""),
   stderr: v.fallback(v.string(), ""),
   stdout: v.fallback(v.string(), ""),
@@ -59,8 +60,9 @@ export const TestcaseSchema = v.object({
   mode: v.fallback(v.picklist(MODES), "standard"),
   interactorSecret: v.fallback(v.string(), ""),
 });
+
 export type Testcase = v.InferOutput<typeof TestcaseSchema>;
-export type TestcaseProperty = keyof Testcase;
+export type TestcaseProperty = Exclude<keyof Testcase, "uuid">;
 
 export const InputTypeValues = ["stdin", "file", "regex"] as const;
 export type InputType = (typeof InputTypeValues)[number];

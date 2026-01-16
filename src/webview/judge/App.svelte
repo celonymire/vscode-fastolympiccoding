@@ -16,53 +16,51 @@
   import Testcase from "./Testcase.svelte";
 
   // Reactive state using Svelte 5 runes
-  let testcases = $state<{ id: number; data: TestcaseType }[]>([]);
+  let testcases = $state<TestcaseType[]>([]);
   let newTimeLimit = $state(0);
   let newMemoryLimit = $state(0);
   let show = $state(true);
   let showSettings = $state(false);
   let showTestcaseDropdown = $state(false);
 
-  // Helper to find testcase by id
-  function findTestcaseIndex(id: number): number {
-    return testcases.findIndex((t) => t.id === id);
+  // Helper to find testcase by uuid
+  function findTestcaseIndex(uuid: string): number {
+    return testcases.findIndex((t) => t.uuid === uuid);
   }
 
   // Message handlers
-  function handleNew({ id }: v.InferOutput<typeof NewMessageSchema>) {
-    const existing = findTestcaseIndex(id);
+  function handleNew({ uuid }: v.InferOutput<typeof NewMessageSchema>) {
+    const existing = findTestcaseIndex(uuid);
     if (existing === -1) {
       testcases.push({
-        id,
-        data: {
-          stdin: "",
-          stderr: "",
-          stdout: "",
-          acceptedStdout: "",
-          elapsed: 0,
-          memoryBytes: 0,
-          status: "NA",
-          shown: true,
-          toggled: false,
-          skipped: false,
-          mode: "standard",
-          interactorSecret: "",
-        },
+        uuid,
+        stdin: "",
+        stderr: "",
+        stdout: "",
+        acceptedStdout: "",
+        elapsed: 0,
+        memoryBytes: 0,
+        status: "NA",
+        shown: true,
+        toggled: false,
+        skipped: false,
+        mode: "standard",
+        interactorSecret: "",
       });
     }
   }
 
-  function handleSet({ id, property, value }: v.InferOutput<typeof SetMessageSchema>) {
-    const idx = findTestcaseIndex(id);
+  function handleSet({ uuid, property, value }: v.InferOutput<typeof SetMessageSchema>) {
+    const idx = findTestcaseIndex(uuid);
     if (idx !== -1) {
-      (testcases[idx].data as unknown as Record<string, unknown>)[property] = value;
+      (testcases[idx] as unknown as Record<string, unknown>)[property] = value;
     }
   }
 
-  function handleStdio({ id, data, stdio }: v.InferOutput<typeof StdioMessageSchema>) {
-    const idx = findTestcaseIndex(id);
+  function handleStdio({ uuid, data, stdio }: v.InferOutput<typeof StdioMessageSchema>) {
+    const idx = findTestcaseIndex(uuid);
     if (idx === -1) return;
-    const tc = testcases[idx].data;
+    const tc = testcases[idx];
     switch (stdio) {
       case "STDIN":
         tc.stdin += data;
@@ -82,8 +80,8 @@
     }
   }
 
-  function handleDelete({ id }: v.InferOutput<typeof DeleteMessageSchema>) {
-    const idx = findTestcaseIndex(id);
+  function handleDelete({ uuid }: v.InferOutput<typeof DeleteMessageSchema>) {
+    const idx = findTestcaseIndex(uuid);
     if (idx !== -1) {
       testcases.splice(idx, 1);
     }
@@ -223,8 +221,8 @@
     </button>
   {:else}
     <div class="testcase-container">
-      {#each testcases as testcase, index (testcase.id)}
-        <Testcase id={testcase.id} bind:testcase={testcases[index].data} />
+      {#each testcases as testcase, index (testcase.uuid)}
+        <Testcase bind:testcase={testcases[index]} />
       {/each}
       <div class="new-button-wrapper">
         <button class="text-button grow-1" type="button" onclick={handleNewTestcase}>

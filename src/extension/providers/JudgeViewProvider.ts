@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
+import * as crypto from "crypto";
 
 import {
   ProblemSchema,
@@ -68,12 +69,18 @@ type State = Omit<
   stdout: TextHandler;
   acceptedStdout: TextHandler;
   interactorSecret: TextHandler;
-  id: number;
   process: Runnable;
   interactorProcess: Runnable;
   interactorSecretResolver?: () => void;
   donePromise: Promise<void> | null;
+  cancellationSource?: vscode.CancellationTokenSource;
 };
+
+interface RuntimeContext {
+  state: State[];
+  timeLimit: number;
+  memoryLimit: number;
+}
 
 type ExecutionContext = {
   token: vscode.CancellationToken;
@@ -123,25 +130,38 @@ function updateInteractiveTestcaseFromTermination(
 }
 
 export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: State[] = [];
-  private _timeLimit = 0;
-  private _memoryLimit = 0;
-  private _newId = 0;
-  private _fileCancellation?: vscode.CancellationTokenSource;
-  private _activeDebugTestcaseId?: number;
+  // Centralized context storage for all files (both active and background)
+  private _contexts: Map<string, RuntimeContext> = new Map();
+
+  private _activeDebugTestcaseUuid?: string;
+
+  private _onDidChangeBackgroundTasks = new vscode.EventEmitter<void>();
+  readonly onDidChangeBackgroundTasks = this._onDidChangeBackgroundTasks.event;
+
+  // Accessor for the current file's context
+  private get _runtime(): RuntimeContext {
+    if (!this._currentFile) {
+      throw new Error("No current file active");
+    }
+    const ctx = this._contexts.get(this._currentFile);
+    if (!ctx) {
+      throw new Error(`Context not initialized for ${this._currentFile}`);
+    }
+    return ctx;
+  }
 
   // If the testcase is interactive, ensure interactive settings are also valid and resolved
   private async _getExecutionContext(
-    id: number,
+    uuid: string,
     extraVariables?: Record<string, string>
   ): Promise<ExecutionContext | null> {
-    const token = this._fileCancellation?.token;
-    if (!token || token.isCancellationRequested || !this._currentFile) {
+    const testcase = this._findTestcase(uuid);
+    if (!testcase) {
       return null;
     }
 
-    const testcase = this._findTestcase(id);
-    if (!testcase) {
+    const token = testcase.cancellationSource?.token;
+    if (!token || token.isCancellationRequested || !this._currentFile) {
       return null;
     }
 
@@ -152,7 +172,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "status",
       value: "COMPILING",
     });
@@ -176,7 +196,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       testcase.status = "CE";
       super._postMessage({
         type: "SET",
-        id,
+        uuid,
         property: "status",
         value: "CE",
       });
@@ -186,7 +206,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.status = "NA";
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "status",
       value: "NA",
     });
@@ -223,10 +243,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     };
   }
 
-  private _prepareRunningState(id: number, testcase: State) {
+  private _prepareRunningState(testcase: State) {
+    testcase.status = "RUNNING";
     super._postMessage({
       type: "SET",
-      id,
+      uuid: testcase.uuid,
       property: "status",
       value: "RUNNING",
     });
@@ -234,7 +255,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       testcase.stdin.reset();
       super._postMessage({
         type: "SET",
-        id,
+        uuid: testcase.uuid,
         property: "stdin",
         value: "",
       });
@@ -242,14 +263,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.stderr.reset();
     super._postMessage({
       type: "SET",
-      id,
+      uuid: testcase.uuid,
       property: "stderr",
       value: "",
     });
     testcase.stdout.reset();
     super._postMessage({
       type: "SET",
-      id,
+      uuid: testcase.uuid,
       property: "stdout",
       value: "",
     });
@@ -264,7 +285,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
-    this._prepareRunningState(testcase.id, testcase);
+    this._prepareRunningState(testcase);
 
     const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
     if (!runCommand) {
@@ -292,11 +313,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.status = "RE";
         super._postMessage({
           type: "SET",
-          id: testcase.id,
+          uuid: testcase.uuid,
           property: "status",
           value: "RE",
         });
-        this._saveFileData();
       })
       .on("close", async () => {
         if (token.isCancellationRequested) {
@@ -306,29 +326,27 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         updateTestcaseFromTermination(testcase, termination);
         super._postMessage({
           type: "SET",
-          id: testcase.id,
+          uuid: testcase.uuid,
           property: "status",
           value: testcase.status,
         });
         super._postMessage({
           type: "SET",
-          id: testcase.id,
+          uuid: testcase.uuid,
           property: "elapsed",
           value: testcase.elapsed,
         });
         super._postMessage({
           type: "SET",
-          id: testcase.id,
+          uuid: testcase.uuid,
           property: "memoryBytes",
           value: testcase.memoryBytes,
         });
-
-        this._saveFileData();
       })
       .run(
         runCommand,
-        bypassLimits ? 0 : this._timeLimit,
-        bypassLimits ? 0 : this._memoryLimit,
+        bypassLimits ? 0 : this._runtime.timeLimit,
+        bypassLimits ? 0 : this._runtime.memoryLimit,
         cwd
       );
 
@@ -340,6 +358,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     bypassLimits: boolean,
     debugMode: boolean
   ) {
+    // TODO: Make this utilize done promise
+
     const { token, testcase, languageSettings, interactorArgs, cwd } = ctx;
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
@@ -348,7 +368,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
-    this._prepareRunningState(testcase.id, testcase);
+    this._prepareRunningState(testcase);
 
     const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
     if (!runCommand) {
@@ -357,8 +377,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     testcase.process.run(
       runCommand,
-      bypassLimits ? 0 : this._timeLimit,
-      bypassLimits ? 0 : this._memoryLimit,
+      bypassLimits ? 0 : this._runtime.timeLimit,
+      bypassLimits ? 0 : this._runtime.memoryLimit,
       cwd
     );
     // Don't restrict the interactor's time and memory limit
@@ -440,24 +460,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
     super._postMessage({
       type: "SET",
-      id: testcase.id,
+      uuid: testcase.uuid,
       property: "status",
       value: testcase.status,
     });
     super._postMessage({
       type: "SET",
-      id: testcase.id,
+      uuid: testcase.uuid,
       property: "elapsed",
       value: testcase.elapsed,
     });
     super._postMessage({
       type: "SET",
-      id: testcase.id,
+      uuid: testcase.uuid,
       property: "memoryBytes",
       value: testcase.memoryBytes,
     });
-
-    this._saveFileData();
   }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
@@ -496,16 +514,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
-    this._fileCancellation?.cancel();
-    this._fileCancellation?.dispose();
-    this._fileCancellation = undefined;
-
-    for (const testcase of this._state) {
+    for (const testcase of this._runtime.state) {
+      testcase.cancellationSource?.cancel();
+      testcase.cancellationSource?.dispose();
+      testcase.cancellationSource = undefined;
       testcase.process.stop();
       testcase.interactorProcess.stop();
       void testcase.process.dispose();
       void testcase.interactorProcess.dispose();
     }
+
+    // Stop all background tasks
+    void this.stopAllBackgroundTasks();
+    this._onDidChangeBackgroundTasks.dispose();
 
     super.onDispose();
   }
@@ -520,17 +541,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     context.subscriptions.push(
       vscode.debug.onDidStartDebugSession((session) => {
-        const id = session.configuration?.fastolympiccodingTestcaseId;
-        if (typeof id !== "number") {
+        const uuid = session.configuration?.fastolympiccodingTestcaseUuid;
+        if (typeof uuid !== "string") {
           return;
         }
-        this._activeDebugTestcaseId = id;
+        this._activeDebugTestcaseUuid = uuid;
       }),
       vscode.debug.onDidTerminateDebugSession((session) => {
-        const id = session.configuration?.fastolympiccodingTestcaseId;
-        if (typeof id === "number" && this._activeDebugTestcaseId === id) {
-          this._stop(id);
-          this._activeDebugTestcaseId = undefined;
+        const uuid = session.configuration?.fastolympiccodingTestcaseId;
+        if (typeof uuid === "string" && this._activeDebugTestcaseUuid === uuid) {
+          this._stop(uuid);
+          this._activeDebugTestcaseUuid = undefined;
         }
       })
     );
@@ -540,7 +561,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   // Judge has state if there are testcases loaded
   protected override _hasState(): boolean {
-    return this._state.length > 0 || this._timeLimit !== 0 || this._memoryLimit !== 0;
+    return (
+      this._runtime.state.length > 0 ||
+      this._runtime.timeLimit !== 0 ||
+      this._runtime.memoryLimit !== 0
+    );
   }
 
   protected override _sendShowMessage(visible: boolean): void {
@@ -548,151 +573,173 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _switchToNoFile() {
-    this._fileCancellation?.cancel();
-    this._fileCancellation?.dispose();
-    this._fileCancellation = undefined;
+    // DON'T cancel file cancellation or stop tests here!
+    // This is called during file transitions when editor briefly shows undefined.
+    // The next call will be _switchToFile with the new file, which will handle
+    // moving running tests to background.
 
-    this.stopAll();
-    for (const testcase of this._state) {
-      super._postMessage({ type: "DELETE", id: testcase.id });
+    // Only stop non-running tests to free resources
+    for (const testcase of this._runtime.state) {
+      if (testcase.donePromise === null) {
+        testcase.process.stop();
+        testcase.interactorProcess.stop();
+        void testcase.process.dispose();
+        void testcase.interactorProcess.dispose();
+      }
     }
-    this._state = [];
-    this._timeLimit = 0;
-    this._memoryLimit = 0;
-    this._newId = 0;
-    this._currentFile = undefined;
+
+    // Clear webview but keep state for background tracking
+    for (const testcase of this._runtime.state) {
+      super._postMessage({ type: "DELETE", uuid: testcase.uuid });
+    }
 
     this._sendShowMessage(false);
   }
 
-  protected override _switchToFile(file: string) {
-    // Cancel any in-flight operations for the previous file
-    this._fileCancellation?.cancel();
-    this._fileCancellation?.dispose();
-    this._fileCancellation = new vscode.CancellationTokenSource();
+  private _syncTestcaseState(testcase: State) {
+    const uuid = testcase.uuid;
+    super._postMessage({ type: "SET", uuid, property: "stdin", value: testcase.stdin.data });
+    super._postMessage({ type: "SET", uuid, property: "stderr", value: testcase.stderr.data });
+    super._postMessage({ type: "SET", uuid, property: "stdout", value: testcase.stdout.data });
+    super._postMessage({
+      type: "SET",
+      uuid,
+      property: "acceptedStdout",
+      value: testcase.acceptedStdout.data,
+    });
+    super._postMessage({ type: "SET", uuid, property: "elapsed", value: testcase.elapsed });
+    super._postMessage({ type: "SET", uuid, property: "memoryBytes", value: testcase.memoryBytes });
+    super._postMessage({ type: "SET", uuid, property: "status", value: testcase.status });
+    super._postMessage({ type: "SET", uuid, property: "shown", value: testcase.shown });
+    super._postMessage({ type: "SET", uuid, property: "toggled", value: testcase.toggled });
+    super._postMessage({ type: "SET", uuid, property: "skipped", value: testcase.skipped });
+    super._postMessage({ type: "SET", uuid, property: "mode", value: testcase.mode });
+    super._postMessage({
+      type: "SET",
+      uuid,
+      property: "interactorSecret",
+      value: testcase.interactorSecret.data,
+    });
+  }
 
-    // Stop any processes tied to the previous file, and clear state/webview.
-    this.stopAll();
-    for (const testcase of this._state) {
-      super._postMessage({ type: "DELETE", id: testcase.id });
+  private _createTextHandler(initialData?: string): TextHandler {
+    const handler = new TextHandler();
+    if (initialData) {
+      handler.write(initialData, "force");
     }
-    this._state = [];
-    this._timeLimit = 0;
-    this._memoryLimit = 0;
-    this._newId = 0;
+    return handler;
+  }
 
+  protected override _switchToFile(file: string) {
+    const previousFile = this._currentFile;
+
+    // Clear webview for the previous file
+    if (previousFile && this._contexts.has(previousFile)) {
+      // We can access the previous context directly
+      const prevContext = this._contexts.get(previousFile);
+      if (prevContext) {
+        for (const testcase of prevContext.state) {
+          super._postMessage({ type: "DELETE", uuid: testcase.uuid });
+        }
+      }
+    }
+
+    // Ensure target context exists
+    if (!this._contexts.has(file)) {
+      // LOAD FROM DISK
+      const storageData = super.readStorage()[file];
+      const fileData = v.parse(FileDataSchema, storageData ?? {});
+      const timeLimit = fileData.timeLimit;
+      const memoryLimit = fileData.memoryLimit;
+      const state: State[] = [];
+
+      // Parse testcases
+      for (const rawTestcase of fileData.testcases) {
+        try {
+          const testcase = v.parse(TestcaseSchema, rawTestcase);
+
+          const newState: State = {
+            uuid: testcase.uuid,
+            stdin: this._createTextHandler(testcase.stdin),
+            stderr: this._createTextHandler(testcase.stderr),
+            stdout: this._createTextHandler(testcase.stdout),
+            acceptedStdout: this._createTextHandler(testcase.acceptedStdout),
+            elapsed: testcase.elapsed,
+            memoryBytes: testcase.memoryBytes,
+            status: testcase.status,
+            shown: testcase.shown,
+            toggled: testcase.toggled,
+            skipped: testcase.skipped,
+            mode: testcase.mode,
+            interactorSecret: this._createTextHandler(testcase.interactorSecret),
+            process: new Runnable(),
+            interactorProcess: new Runnable(),
+            donePromise: null,
+          };
+          state.push(newState);
+        } catch (e) {
+          console.error("Failed to parse testcase", e);
+        }
+      }
+
+      this._contexts.set(file, {
+        state,
+        timeLimit,
+        memoryLimit,
+      });
+    }
+
+    // Switch file
     this._currentFile = file;
     this._sendShowMessage(true);
 
-    const storageData = super.readStorage()[file];
-    const fileData = v.parse(FileDataSchema, storageData ?? {});
-    const testcases = fileData.testcases;
-    this._timeLimit = fileData.timeLimit;
-    this._memoryLimit = fileData.memoryLimit;
-    for (let i = 0; i < testcases.length; i++) {
-      const testcase = v.parse(TestcaseSchema, testcases[i]);
-      this._addTestcase(testcase.mode, testcase);
-    }
+    // Rehydrate UI
+    const ctx = this._runtime; // Uses _currentFile
 
     super._postMessage({
       type: "INITIAL_STATE",
-      timeLimit: this._timeLimit,
-      memoryLimit: this._memoryLimit,
+      timeLimit: ctx.timeLimit,
+      memoryLimit: ctx.memoryLimit,
     });
+
+    for (const testcase of ctx.state) {
+      super._postMessage({ type: "NEW", uuid: testcase.uuid });
+
+      this._syncTestcaseState(testcase);
+
+      // If running, ensure we are awaiting completion (handled by donePromise logic elsewhere,
+      // but if we need to hook up listeners that might have been lost?
+      // No, listeners are on the process object which is in heap.
+      // We just need to make sure UI knows it's running.)
+      if (testcase.donePromise) {
+        void this._awaitTestcaseCompletion(testcase.uuid);
+      }
+    }
+
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   protected override _rehydrateWebviewFromState() {
     super._postMessage({
       type: "INITIAL_STATE",
-      timeLimit: this._timeLimit,
-      memoryLimit: this._memoryLimit,
+      timeLimit: this._runtime.timeLimit,
+      memoryLimit: this._runtime.memoryLimit,
     });
 
-    for (const testcase of this._state) {
-      const id = testcase.id;
+    for (const testcase of this._runtime.state) {
+      const uuid = testcase.uuid;
 
-      // Ensure a clean slate for this id in the webview.
-      super._postMessage({ type: "DELETE", id });
-      super._postMessage({ type: "NEW", id });
-
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "stdin",
-        value: testcase.stdin.data,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "stderr",
-        value: testcase.stderr.data,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "stdout",
-        value: testcase.stdout.data,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "acceptedStdout",
-        value: testcase.acceptedStdout.data,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "elapsed",
-        value: testcase.elapsed,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "memoryBytes",
-        value: testcase.memoryBytes,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "status",
-        value: testcase.status,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "shown",
-        value: testcase.shown,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "toggled",
-        value: testcase.toggled,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "skipped",
-        value: testcase.skipped,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "mode",
-        value: testcase.mode,
-      });
-      super._postMessage({
-        type: "SET",
-        id,
-        property: "interactorSecret",
-        value: testcase.interactorSecret.data,
-      });
+      // Ensure a clean slate for this uuid in the webview.
+      super._postMessage({ type: "DELETE", uuid });
+      super._postMessage({ type: "NEW", uuid });
+      this._syncTestcaseState(testcase);
     }
   }
 
   addFromCompetitiveCompanion(file: string, data: IProblem) {
     const testcases: ITestcase[] = data.tests.map(
       (test: ITest): ITestcase => ({
+        uuid: crypto.randomUUID(),
         stdin: test.input,
         stderr: "",
         stdout: "",
@@ -711,12 +758,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
     if (file === current) {
       this.deleteAll();
-      this._timeLimit = data.timeLimit;
-      this._memoryLimit = data.memoryLimit;
+      this._runtime.timeLimit = data.timeLimit;
+      this._runtime.memoryLimit = data.memoryLimit;
       for (const testcase of testcases) {
         this._addTestcase(data.interactive ? "interactive" : "standard", testcase);
       }
-      this._saveFileData();
 
       super._postMessage({
         type: "INITIAL_STATE",
@@ -739,7 +785,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
     if (file === current) {
       this._addTestcase(testcase.mode, testcase);
-      this._saveFileData();
     } else {
       const storageData = super.readStorage()[file];
       const parseResult = v.safeParse(FileDataSchema, storageData);
@@ -758,27 +803,27 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   runAll() {
-    for (const testcase of this._state) {
-      void this._run(testcase.id, false);
+    for (const testcase of this._runtime.state) {
+      void this._run(testcase.uuid, false);
     }
   }
 
   debugAll() {
-    for (const testcase of this._state) {
-      void this._debug(testcase.id);
+    for (const testcase of this._runtime.state) {
+      void this._debug(testcase.uuid);
     }
   }
 
   stopAll() {
-    for (const testcase of this._state) {
-      this._stop(testcase.id);
+    for (const testcase of this._runtime.state) {
+      this._stop(testcase.uuid);
     }
   }
 
   deleteAll() {
-    const ids = [...this._state.map((testcase) => testcase.id)];
-    for (const id of ids) {
-      this._delete(id);
+    const uuids = [...this._runtime.state.map((testcase) => testcase.uuid)];
+    for (const uuid of uuids) {
+      this._delete(uuid);
     }
   }
 
@@ -786,88 +831,165 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: "SETTINGS_TOGGLE" });
   }
 
+  // Background task management
+  getBackgroundTasksForFile(file: string): string[] {
+    const context = this._contexts.get(file);
+    if (!context) {
+      return [];
+    }
+    return context.state.filter((t) => t.donePromise !== null).map((state) => state.uuid);
+  }
+
+  getAllBackgroundTasks(): Map<string, string[]> {
+    const result = new Map<string, string[]>();
+    for (const [file, context] of this._contexts.entries()) {
+      if (file === this._currentFile) {
+        continue;
+      } // Access current file via normal view, not background list
+      const runningTasks = context.state.filter((t) => t.donePromise !== null);
+      if (runningTasks.length > 0) {
+        result.set(
+          file,
+          runningTasks.map((state) => state.uuid)
+        );
+      }
+    }
+    return result;
+  }
+
+  async stopBackgroundTasksForFile(file: string): Promise<void> {
+    const context = this._contexts.get(file);
+    if (!context) {
+      return;
+    }
+
+    // Cancel cancellation tokens
+    const canceledSources = new Set<vscode.CancellationTokenSource>();
+    for (const state of context.state) {
+      if (state.cancellationSource && !canceledSources.has(state.cancellationSource)) {
+        state.cancellationSource.cancel();
+        state.cancellationSource.dispose();
+        canceledSources.add(state.cancellationSource);
+      }
+    }
+
+    // Stop all processes
+    for (const state of context.state) {
+      state.process.stop();
+      state.interactorProcess.stop();
+    }
+
+    // Wait for all to complete
+    const donePromises: Promise<void>[] = [];
+    for (const state of context.state) {
+      if (state.donePromise) {
+        donePromises.push(state.donePromise);
+      }
+    }
+    await Promise.all(donePromises);
+
+    // Clean up
+    for (const state of context.state) {
+      state.process.dispose();
+      state.interactorProcess.dispose();
+    }
+
+    // Note: We don't delete from _contexts here because it holds the persistent state now
+    // We just stopped the background execution.
+    this._onDidChangeBackgroundTasks.fire();
+  }
+
+  async stopAllBackgroundTasks(): Promise<void> {
+    const files = Array.from(this._contexts.keys());
+    await Promise.all(files.map((file) => this.stopBackgroundTasksForFile(file)));
+  }
+
   private _nextTestcase({ mode }: v.InferOutput<typeof NextMessageSchema>) {
     void this._run(this._addTestcase(mode, undefined), true);
   }
 
-  private _action({ id, action }: v.InferOutput<typeof ActionMessageSchema>) {
+  private _action({ uuid, action }: v.InferOutput<typeof ActionMessageSchema>) {
     switch (action) {
       case "RUN":
-        void this._run(id, false);
+        void this._run(uuid, false);
         break;
       case "DEBUG":
-        void this._debug(id);
+        void this._debug(uuid);
         break;
       case "STOP":
-        this._stop(id);
+        this._stop(uuid);
         break;
       case "DELETE":
-        this._delete(id);
+        this._delete(uuid);
         break;
       case "ACCEPT":
-        this._accept(id);
+        this._accept(uuid);
         break;
       case "DECLINE":
-        this._decline(id);
+        this._decline(uuid);
         break;
       case "TOGGLE_VISIBILITY":
-        this._toggleVisibility(id);
+        this._toggleVisibility(uuid);
         break;
       case "TOGGLE_SKIP":
-        this._toggleSkip(id);
+        this._toggleSkip(uuid);
         break;
       case "COMPARE":
-        this._compare(id);
+        this._compare(uuid);
         break;
     }
   }
 
-  private _saveFileData() {
-    const file = this._currentFile;
-    if (!file) {
-      return;
+  private _saveAllState() {
+    const allData = this.readStorage();
+
+    const serialize = (state: State[], timeLimit: number, memoryLimit: number): FileData => {
+      const testcases: ITestcase[] = state.map((t) => ({
+        uuid: t.uuid,
+        stdin: t.stdin.data,
+        stderr: t.stderr.data,
+        stdout: t.stdout.data,
+        acceptedStdout: t.acceptedStdout.data,
+        elapsed: t.elapsed,
+        memoryBytes: t.memoryBytes,
+        status: t.status,
+        shown: t.shown,
+        toggled: t.toggled,
+        skipped: t.skipped,
+        mode: t.mode,
+        interactorSecret: t.interactorSecret.data,
+      }));
+      return {
+        timeLimit,
+        memoryLimit,
+        testcases,
+      };
+    };
+
+    // Save all contexts
+    for (const [file, context] of this._contexts) {
+      allData[file] = serialize(context.state, context.timeLimit, context.memoryLimit);
     }
 
-    const testcases: ITestcase[] = [];
-    for (const testcase of this._state) {
-      testcases.push({
-        stdin: testcase.stdin.data,
-        stderr: testcase.stderr.data,
-        stdout: testcase.stdout.data,
-        acceptedStdout: testcase.acceptedStdout.data,
-        elapsed: testcase.elapsed,
-        memoryBytes: testcase.memoryBytes,
-        status: testcase.status,
-        shown: testcase.shown,
-        toggled: testcase.toggled,
-        skipped: testcase.skipped,
-        mode: testcase.mode,
-        interactorSecret: testcase.interactorSecret.data,
-      });
-    }
-    const fileData: FileData = {
-      timeLimit: this._timeLimit,
-      memoryLimit: this._memoryLimit,
-      testcases,
-    };
-    void super.writeStorage(
-      file,
-      JSON.stringify(fileData) === JSON.stringify(defaultFileData) ? undefined : fileData
-    );
+    // Bulk write to storage
+    void this._context.workspaceState.update(this.view, allData);
   }
 
   private _addTestcase(mode: Mode, testcase?: Partial<ITestcase>) {
-    const id = this._newId++;
-    this._state.push(this._createTestcaseState(id, mode, testcase));
-    return id;
+    const newState = this._createTestcaseState(mode, testcase);
+    this._runtime.state.push(newState);
+
+    return newState.uuid;
   }
 
-  private _createTestcaseState(id: number, mode: Mode, testcase?: Partial<ITestcase>) {
-    // using partial type to have backward compatibility with old testcases
-    // create a new testcase in webview and fill it in later
-    super._postMessage({ type: "NEW", id });
+  private _createTestcaseState(mode: Mode, testcase?: Partial<ITestcase>) {
+    const uuid = testcase?.uuid ?? crypto.randomUUID();
+
+    // Create a new testcase in webview
+    super._postMessage({ type: "NEW", uuid });
 
     const newTestcase: State = {
+      uuid,
       stdin: new TextHandler(),
       stderr: new TextHandler(),
       stdout: new TextHandler(),
@@ -880,7 +1002,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       skipped: testcase?.skipped ?? false,
       mode: testcase?.mode ?? mode,
       interactorSecret: new TextHandler(),
-      id,
       process: new Runnable(),
       interactorProcess: new Runnable(),
       interactorSecretResolver: undefined,
@@ -890,35 +1011,35 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     newTestcase.stdin.callback = (data: string) =>
       super._postMessage({
         type: "STDIO",
-        id,
+        uuid,
         stdio: "STDIN",
         data,
       });
     newTestcase.stderr.callback = (data: string) =>
       super._postMessage({
         type: "STDIO",
-        id,
+        uuid,
         stdio: "STDERR",
         data,
       });
     newTestcase.stdout.callback = (data: string) =>
       super._postMessage({
         type: "STDIO",
-        id,
+        uuid,
         stdio: "STDOUT",
         data,
       });
     newTestcase.acceptedStdout.callback = (data: string) =>
       super._postMessage({
         type: "STDIO",
-        id,
+        uuid,
         stdio: "ACCEPTED_STDOUT",
         data,
       });
     newTestcase.interactorSecret.callback = (data: string) =>
       super._postMessage({
         type: "STDIO",
-        id,
+        uuid,
         stdio: "INTERACTOR_SECRET",
         data,
       });
@@ -932,71 +1053,43 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // best assumption is to send the complete secret at the start.
     newTestcase.interactorSecret.write(testcase?.interactorSecret ?? "", "final");
 
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "status",
-      value: newTestcase.status,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "elapsed",
-      value: newTestcase.elapsed,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "memoryBytes",
-      value: newTestcase.memoryBytes,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "shown",
-      value: newTestcase.shown,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "toggled",
-      value: newTestcase.toggled,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "skipped",
-      value: newTestcase.skipped,
-    });
-    super._postMessage({
-      type: "SET",
-      id,
-      property: "mode",
-      value: newTestcase.mode,
-    });
+    this._syncTestcaseState(newTestcase);
 
     return newTestcase;
   }
 
-  private async _run(id: number, newTestcase: boolean): Promise<void> {
-    const ctx = await this._getExecutionContext(id);
-    if (!ctx) {
+  private async _awaitTestcaseCompletion(uuid: string): Promise<void> {
+    const testcase = this._findTestcase(uuid);
+    if (!testcase?.donePromise) {
       return;
     }
 
-    const testcase = this._findTestcase(id);
+    await testcase.donePromise;
+    testcase.donePromise = null;
+  }
+
+  private async _run(uuid: string, newTestcase: boolean): Promise<void> {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
 
     const donePromise = testcase.donePromise;
     if (donePromise) {
-      await donePromise;
       return;
     }
 
+    testcase.status = "RUNNING";
+    testcase.cancellationSource = new vscode.CancellationTokenSource();
+
     testcase.donePromise = new Promise((resolve) => {
       void (async () => {
+        const ctx = await this._getExecutionContext(uuid);
+        if (!ctx) {
+          resolve();
+          return;
+        }
+
         if (ctx.testcase.mode === "interactive") {
           await this._launchInteractiveTestcase(ctx, newTestcase, false);
         } else {
@@ -1007,11 +1100,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })();
     });
 
-    await testcase.donePromise;
-    testcase.donePromise = null;
+    await this._awaitTestcaseCompletion(uuid);
   }
 
-  private async _debug(id: number): Promise<void> {
+  private async _debug(uuid: string): Promise<void> {
     let debugPort: number;
     try {
       debugPort = await findAvailablePort();
@@ -1024,7 +1116,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     const extraVariables = { debugPort: String(debugPort) };
 
-    const ctx = await this._getExecutionContext(id, extraVariables);
+    const ctx = await this._getExecutionContext(uuid, extraVariables);
     if (!ctx || !this._currentFile) {
       return;
     }
@@ -1102,7 +1194,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     // Tag this debug session so we can identify which testcase is being debugged.
     // VS Code preserves custom fields on session.configuration.
-    resolvedConfig.fastolympiccodingTestcaseId = id;
+    resolvedConfig.fastolympiccodingTestcaseUuid = uuid;
 
     // Slight delay to ensure process is listening
     // This is less than ideal because it relies on timing, but there is no reliable way
@@ -1120,19 +1212,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       resolvedConfig as vscode.DebugConfiguration
     );
     if (!started) {
-      this._stop(id);
+      this._stop(uuid);
     }
   }
 
-  private _stop(id: number) {
-    const testcase = this._findTestcase(id);
+  private _stop(uuid: string) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
 
     // If this testcase is the one currently being debugged, stop the VS Code debug session.
     // This is more reliable than killing the spawned debug-wrapper process alone.
-    if (this._activeDebugTestcaseId === id && vscode.debug.activeDebugSession) {
+    if (this._activeDebugTestcaseUuid === uuid && vscode.debug.activeDebugSession) {
       void vscode.debug.stopDebugging(vscode.debug.activeDebugSession);
     }
 
@@ -1140,23 +1232,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.interactorProcess.stop();
   }
 
-  private _delete(id: number) {
-    this._stop(id);
-    super._postMessage({ type: "DELETE", id });
-    const idx = this._state.findIndex((t) => t.id === id);
-    const state = this._state[idx];
-
-    state.process.dispose();
-    state.interactorProcess.dispose();
-
+  private _delete(uuid: string) {
+    this._stop(uuid);
+    super._postMessage({ type: "DELETE", uuid });
+    const idx = this._runtime.state.findIndex((t) => t.uuid === uuid);
     if (idx !== -1) {
-      this._state.splice(idx, 1);
+      const state = this._runtime.state[idx];
+      state.process.dispose();
+      state.interactorProcess.dispose();
+      this._runtime.state.splice(idx, 1);
     }
-    this._saveFileData();
   }
 
-  private _accept(id: number) {
-    const testcase = this._findTestcase(id);
+  private _accept(uuid: string) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1165,24 +1254,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     // shortened version will be sent back while writing
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "status",
       value: testcase.status,
     });
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "acceptedStdout",
       value: "",
     });
     testcase.acceptedStdout.reset();
     testcase.acceptedStdout.write(testcase.stdout.data, "final");
-
-    this._saveFileData();
   }
 
-  private _decline(id: number) {
-    const testcase = this._findTestcase(id);
+  private _decline(uuid: string) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1191,21 +1278,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.acceptedStdout.reset();
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "status",
       value: testcase.status,
     });
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "acceptedStdout",
       value: "",
     });
-    this._saveFileData();
   }
 
-  private _toggleVisibility(id: number) {
-    const testcase = this._findTestcase(id);
+  private _toggleVisibility(uuid: string) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1214,21 +1300,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.toggled = true;
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "shown",
       value: testcase.shown,
     });
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "toggled",
       value: true,
     });
-    this._saveFileData();
   }
 
-  private _toggleSkip(id: number) {
-    const testcase = this._findTestcase(id);
+  private _toggleSkip(uuid: string) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1236,15 +1321,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.skipped = !testcase.skipped;
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "skipped",
       value: testcase.skipped,
     });
-    this._saveFileData();
   }
 
-  private _compare(id: number) {
-    const testcase = this._findTestcase(id);
+  private _compare(uuid: string) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1253,11 +1337,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       `ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
     );
 
-    vscode.commands.executeCommand("vscode.diff", stdout, acStdout, `Diff: Testcase #${id + 1}`);
+    vscode.commands.executeCommand("vscode.diff", stdout, acStdout, `Diff: Testcase ${uuid}`);
   }
 
-  private _viewStdio({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
-    const testcase = this._findTestcase(id);
+  private _viewStdio({ uuid, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1281,8 +1365,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _stdin({ id, data }: v.InferOutput<typeof StdinMessageSchema>) {
-    const testcase = this._findTestcase(id);
+  private _stdin({ uuid, data }: v.InferOutput<typeof StdinMessageSchema>) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1296,14 +1380,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private async _save({ id, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
-    const testcase = this._findTestcase(id);
+  private async _save({ uuid, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
 
     // Clear the webview's edit field
-    const propertyMap: Record<Stdio, keyof ITestcase | null> = {
+    const propertyMap: Record<Stdio, TestcaseProperty | null> = {
       STDIN: "stdin",
       ACCEPTED_STDOUT: "acceptedStdout",
       INTERACTOR_SECRET: "interactorSecret",
@@ -1314,7 +1398,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (property) {
       super._postMessage({
         type: "SET",
-        id,
+        uuid,
         property,
         value: "",
       });
@@ -1356,29 +1440,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property: "status",
       value: testcase.status,
     });
-
-    this._saveFileData();
   }
 
   private _setTimeLimit({ limit }: v.InferOutput<typeof SetTimeLimitSchema>) {
-    this._timeLimit = limit;
-    this._saveFileData();
+    this._runtime.timeLimit = limit;
   }
 
   private _setMemoryLimit({ limit }: v.InferOutput<typeof SetMemoryLimitSchema>) {
-    this._memoryLimit = limit;
-    this._saveFileData();
+    this._runtime.memoryLimit = limit;
   }
 
   private _requestTrimmedData({
-    id,
+    uuid,
     stdio,
   }: v.InferOutput<typeof RequestTrimmedDataMessageSchema>) {
-    const testcase = this._findTestcase(id);
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1387,7 +1467,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       // clear out webview content first
       super._postMessage({
         type: "SET",
-        id,
+        uuid,
         property,
         value: "",
       });
@@ -1418,8 +1498,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _requestFullData({ id, stdio }: v.InferOutput<typeof RequestFullDataMessageSchema>) {
-    const testcase = this._findTestcase(id);
+  private _requestFullData({ uuid, stdio }: v.InferOutput<typeof RequestFullDataMessageSchema>) {
+    const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
     }
@@ -1452,13 +1532,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     super._postMessage({
       type: "SET",
-      id,
+      uuid,
       property,
       value: value.trimEnd(),
     });
   }
 
-  private _findTestcase(id: number): State | undefined {
-    return this._state.find((t) => t.id === id);
+  private _findTestcase(uuid: string): State | undefined {
+    return this._runtime.state.find((t) => t.uuid === uuid);
   }
 }
