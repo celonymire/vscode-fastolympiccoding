@@ -3,11 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { compile, clearCompileCache } from "./utils/runtime";
-import {
-  createStatusBarItem,
-  createListener,
-  stopCompetitiveCompanion,
-} from "./competitiveCompanion";
+import { createListener, stopCompetitiveCompanion } from "./competitiveCompanion";
 import { registerRunSettingsCommands } from "./runSettingsCommands";
 import {
   initializeRunSettingsWatcher,
@@ -17,10 +13,13 @@ import {
 import { initLogging } from "./utils/logging";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
+import PanelViewProvider from "./providers/PanelViewProvider";
 import { showChangelog } from "./changelog";
+import { createStatusBarItem } from "./statusBar";
 
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
+let panelViewProvider: PanelViewProvider;
 
 type Dependencies = Record<string, string[]>;
 
@@ -75,6 +74,15 @@ function registerViewProviders(context: vscode.ExtensionContext): void {
   stressViewProvider = new StressViewProvider(context, judgeViewProvider);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(stressViewProvider.getViewId(), stressViewProvider)
+  );
+
+  // Panel tree view in panel area (bottom)
+  panelViewProvider = new PanelViewProvider(context, judgeViewProvider, stressViewProvider);
+  context.subscriptions.push(
+    vscode.window.createTreeView("fastolympiccoding.panel", {
+      treeDataProvider: panelViewProvider,
+      showCollapseAll: false,
+    })
   );
 }
 
@@ -245,6 +253,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
   context.subscriptions.push(
     vscode.commands.registerCommand("fastolympiccoding.showChangelog", () => showChangelog(context))
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.showPanel", () => {
+      vscode.commands.executeCommand("fastolympiccoding.panel.focus");
+    })
   );
 }
 

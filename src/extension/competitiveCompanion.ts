@@ -38,7 +38,6 @@ class ProblemQueue {
 
 // Module state
 let server: http.Server | undefined;
-let statusBarItem: vscode.StatusBarItem | undefined;
 
 let prevSelection: string | undefined;
 let prevBatchId: string | undefined;
@@ -227,23 +226,6 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
 }
 
 /**
- * Creates the status bar item for Competitive Companion.
- */
-export function createStatusBarItem(context: vscode.ExtensionContext): vscode.StatusBarItem {
-  statusBarItem = vscode.window.createStatusBarItem(
-    "fastolympiccoding.listeningForCompetitiveCompanion",
-    vscode.StatusBarAlignment.Left
-  );
-  statusBarItem.name = "Competitive Companion Indicator";
-  statusBarItem.text = "$(zap)";
-  statusBarItem.tooltip = "Listening For Competitive Companion";
-  statusBarItem.hide();
-  context.subscriptions.push(statusBarItem);
-
-  return statusBarItem;
-}
-
-/**
  * Starts listening for Competitive Companion connections.
  */
 export function createListener(judgeViewProvider: JudgeViewProvider): void {
@@ -259,7 +241,7 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
     const port = config.get<number>("port")!;
     const logger = getLogger("competitive-companion");
     logger.info(`Listener started on port ${port}`);
-    statusBarItem?.show();
+    _onDidChangeListening.fire(true);
   });
   server.once("error", (error) => {
     const logger = getLogger("competitive-companion");
@@ -270,7 +252,7 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
   });
   server.once("close", () => {
     server = undefined;
-    statusBarItem?.hide();
+    _onDidChangeListening.fire(false);
   });
 
   const config = vscode.workspace.getConfiguration("fastolympiccoding");
@@ -282,6 +264,15 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
  * Stops listening for Competitive Companion connections.
  */
 export function stopCompetitiveCompanion(): void {
-  server?.close();
-  server = undefined;
+  if (server) {
+    server.close();
+    server = undefined;
+  }
 }
+
+export function isListening(): boolean {
+  return server !== undefined;
+}
+
+const _onDidChangeListening = new vscode.EventEmitter<boolean>();
+export const onDidChangeListening = _onDidChangeListening.event;
