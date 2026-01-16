@@ -58,8 +58,6 @@ const FileDataSchema = v.fallback(
   { timeLimit: 0, memoryLimit: 0, testcases: [] }
 );
 
-const defaultFileData = v.parse(FileDataSchema, {});
-
 type State = Omit<
   ITestcase,
   "stdin" | "stderr" | "stdout" | "acceptedStdout" | "interactorSecret"
@@ -573,27 +571,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _switchToNoFile() {
-    // DON'T cancel file cancellation or stop tests here!
-    // This is called during file transitions when editor briefly shows undefined.
-    // The next call will be _switchToFile with the new file, which will handle
-    // moving running tests to background.
+    this._moveCurrentStateToBackground();
+  }
 
-    // Only stop non-running tests to free resources
-    for (const testcase of this._runtime.state) {
-      if (testcase.donePromise === null) {
-        testcase.process.stop();
-        testcase.interactorProcess.stop();
-        void testcase.process.dispose();
-        void testcase.interactorProcess.dispose();
+  private _moveCurrentStateToBackground() {
+    if (this._currentFile && this._contexts.has(this._currentFile)) {
+      const ctx = this._contexts.get(this._currentFile)!;
+      for (const testcase of ctx.state) {
+        super._postMessage({ type: "DELETE", uuid: testcase.uuid });
+        testcase.donePromise?.then(() => {
+          this._onDidChangeBackgroundTasks.fire();
+        });
       }
     }
 
-    // Clear webview but keep state for background tracking
-    for (const testcase of this._runtime.state) {
-      super._postMessage({ type: "DELETE", uuid: testcase.uuid });
-    }
-
+    this._currentFile = undefined;
     this._sendShowMessage(false);
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   private _syncTestcaseState(testcase: State) {
@@ -631,18 +625,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _switchToFile(file: string) {
-    const previousFile = this._currentFile;
-
-    // Clear webview for the previous file
-    if (previousFile && this._contexts.has(previousFile)) {
-      // We can access the previous context directly
-      const prevContext = this._contexts.get(previousFile);
-      if (prevContext) {
-        for (const testcase of prevContext.state) {
-          super._postMessage({ type: "DELETE", uuid: testcase.uuid });
-        }
-      }
-    }
+    this._moveCurrentStateToBackground();
 
     // Ensure target context exists
     if (!this._contexts.has(file)) {
@@ -694,7 +677,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._sendShowMessage(true);
 
     // Rehydrate UI
-    const ctx = this._runtime; // Uses _currentFile
+    const ctx = this._runtime;
 
     super._postMessage({
       type: "INITIAL_STATE",
@@ -704,13 +687,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     for (const testcase of ctx.state) {
       super._postMessage({ type: "NEW", uuid: testcase.uuid });
-
       this._syncTestcaseState(testcase);
 
-      // If running, ensure we are awaiting completion (handled by donePromise logic elsewhere,
-      // but if we need to hook up listeners that might have been lost?
-      // No, listeners are on the process object which is in heap.
-      // We just need to make sure UI knows it's running.)
       if (testcase.donePromise) {
         void this._awaitTestcaseCompletion(testcase.uuid);
       }
@@ -1068,7 +1046,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.donePromise = null;
   }
 
-  private async _run(uuid: string, newTestcase: boolean): Promise<void> {
+  private async _run(uuid: string, bypassLimits: boolean): Promise<void> {
     const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
@@ -1079,9 +1057,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    testcase.status = "RUNNING";
     testcase.cancellationSource = new vscode.CancellationTokenSource();
-
     testcase.donePromise = new Promise((resolve) => {
       void (async () => {
         const ctx = await this._getExecutionContext(uuid);
@@ -1091,9 +1067,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
 
         if (ctx.testcase.mode === "interactive") {
-          await this._launchInteractiveTestcase(ctx, newTestcase, false);
+          await this._launchInteractiveTestcase(ctx, bypassLimits, false);
         } else {
-          await this._launchTestcase(ctx, newTestcase, false);
+          await this._launchTestcase(ctx, bypassLimits, false);
         }
 
         resolve();
