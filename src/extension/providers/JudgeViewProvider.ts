@@ -351,6 +351,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     await testcase.process.done;
     this._onDidChangeBackgroundTasks.fire();
+    this.requestSave();
   }
 
   private async _launchInteractiveTestcase(
@@ -474,6 +475,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       value: testcase.memoryBytes,
     });
     this._onDidChangeBackgroundTasks.fire();
+    this.requestSave();
   }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
@@ -512,17 +514,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
-    this._saveAllState();
-    void this.stopAllBackgroundTasks();
+    this.forceSave();
 
-    for (const testcase of this._runtime.state) {
-      testcase.cancellationSource?.cancel();
-      testcase.cancellationSource?.dispose();
-      testcase.cancellationSource = undefined;
-      testcase.process.stop();
-      testcase.interactorProcess.stop();
-      void testcase.process.dispose();
-      void testcase.interactorProcess.dispose();
+    for (const context of this._contexts.values()) {
+      for (const testcase of context.state) {
+        testcase.cancellationSource?.cancel();
+        testcase.cancellationSource?.dispose();
+        testcase.cancellationSource = undefined;
+        testcase.process.stop();
+        testcase.interactorProcess.stop();
+        void testcase.process.dispose();
+        void testcase.interactorProcess.dispose();
+      }
     }
     this._onDidChangeBackgroundTasks.dispose();
 
@@ -575,6 +578,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _moveCurrentStateToBackground() {
+    this.requestSave();
     if (this._currentFile && this._contexts.has(this._currentFile)) {
       const ctx = this._contexts.get(this._currentFile)!;
       for (const testcase of ctx.state) {
@@ -625,11 +629,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _switchToFile(file: string) {
+    console.log(`[JudgeViewProvider] _switchToFile: ${file}`);
     this._moveCurrentStateToBackground();
 
     // Ensure target context exists
     if (!this._contexts.has(file)) {
-      // LOAD FROM DISK
+      console.log(`[JudgeViewProvider] Creating new context for ${file}`);
+      // LOAD FROM DISK (simplified for brevity of replacement, assuming unmodified lines follow)
       const storageData = super.readStorage()[file];
       const fileData = v.parse(FileDataSchema, storageData ?? {});
       const timeLimit = fileData.timeLimit;
@@ -670,6 +676,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         timeLimit,
         memoryLimit,
       });
+      console.log(
+        `[JudgeViewProvider] Context set for ${file}. Contexts size: ${this._contexts.size}`
+      );
     }
 
     // Switch file
@@ -747,6 +756,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         timeLimit: data.timeLimit,
         memoryLimit: data.memoryLimit,
       });
+
+      this.requestSave();
     } else {
       const fileData: FileData = {
         timeLimit: data.timeLimit,
@@ -763,6 +774,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
     if (file === current) {
       this._addTestcase(testcase.mode, testcase);
+      this.requestSave();
     } else {
       const storageData = super.readStorage()[file];
       const parseResult = v.safeParse(FileDataSchema, storageData);
@@ -895,12 +907,37 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._compare(uuid);
         break;
     }
+    this.requestSave();
+  }
+
+  private _saveTimer: NodeJS.Timeout | undefined;
+
+  private forceSave() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = undefined;
+    }
+    this._saveAllState();
+  }
+
+  private requestSave() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+    }
+    this._saveTimer = setTimeout(() => {
+      this._saveAllState();
+      this._saveTimer = undefined;
+    }, 1000);
   }
 
   private _saveAllState() {
+    console.log(
+      `[JudgeViewProvider] saving all states. Contexts size: ${this._contexts.size}, Current file: ${this._currentFile}`
+    );
     const allData = this.readStorage();
 
     const serialize = (state: State[], timeLimit: number, memoryLimit: number): FileData => {
+      console.log("state:", state);
       const testcases: ITestcase[] = state.map((testcase) => ({
         uuid: testcase.uuid,
         stdin: testcase.stdin.data,
@@ -1425,14 +1462,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "status",
       value: testcase.status,
     });
+
+    this.requestSave();
   }
 
   private _setTimeLimit({ limit }: v.InferOutput<typeof SetTimeLimitSchema>) {
     this._runtime.timeLimit = limit;
+    this.requestSave();
   }
 
   private _setMemoryLimit({ limit }: v.InferOutput<typeof SetMemoryLimitSchema>) {
     this._runtime.memoryLimit = limit;
+    this.requestSave();
   }
 
   private _requestTrimmedData({
