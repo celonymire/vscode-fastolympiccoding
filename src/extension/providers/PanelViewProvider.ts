@@ -125,7 +125,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
         judgeTaskCount > 0 ? `${judgeTaskCount} file${judgeTaskCount > 1 ? "s" : ""}` : undefined;
 
       const judgeItem = new StatusTreeItem(
-        "Judge Background Testcases",
+        "Judge Testcases",
         vscode.TreeItemCollapsibleState.Expanded,
         judgeDescription,
         new vscode.ThemeIcon("run"),
@@ -144,7 +144,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
           : undefined;
 
       const stressItem = new StatusTreeItem(
-        "Stress Test Background Processes",
+        "Stress Test Processes",
         vscode.TreeItemCollapsibleState.Expanded,
         stressDescription,
         new vscode.ThemeIcon("debug-alt"),
@@ -157,8 +157,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       return Promise.resolve([companionItem, judgeItem, stressItem]);
     }
 
-    // Children of "Judge Background Testcases"
-    if (element.label === "Judge Background Testcases") {
+    if (element.label === "Judge Testcases") {
       const backgroundTasks = this._judgeViewProvider.getAllBackgroundTasks();
       const items: StatusTreeItem[] = [];
 
@@ -186,8 +185,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       return Promise.resolve(items);
     }
 
-    // Children of "Stress Test Background Processes"
-    if (element.label === "Stress Test Background Processes") {
+    if (element.label === "Stress Test Processes") {
       const stressSessions = this._stressViewProvider.getRunningStressSessions();
       const items: StatusTreeItem[] = [];
 
