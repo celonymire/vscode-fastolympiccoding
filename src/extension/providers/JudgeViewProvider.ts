@@ -1062,116 +1062,143 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private async _debug(uuid: string): Promise<void> {
-    let debugPort: number;
-    try {
-      debugPort = await findAvailablePort();
-    } catch (error) {
-      const logger = getLogger("judge");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to allocate debug port because ${errorMessage}`);
-      vscode.window.showErrorMessage("Failed to find available port for debugging");
-      return;
-    }
-    const extraVariables = { debugPort: String(debugPort) };
-
-    const ctx = await this._getExecutionContext(uuid, extraVariables);
-    if (!ctx || !this._currentFile) {
+    const testcase = this._findTestcase(uuid);
+    if (!testcase) {
       return;
     }
 
-    if (!ctx.languageSettings.debugCommand) {
-      const logger = getLogger("judge");
-      logger.error(`No debug command for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(
-        `No debug command for ${this._currentFile}`,
-        this._currentFile
-      );
-      return;
-    }
-    if (!ctx.languageSettings.debugAttachConfig) {
-      const logger = getLogger("judge");
-      logger.error(`No debug attach configuration for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(
-        `No debug attach configuration for ${this._currentFile}`,
-        this._currentFile
-      );
+    if (testcase.donePromise) {
       return;
     }
 
-    // get the attach debug configuration
-    const folder =
-      vscode.workspace.getWorkspaceFolder(vscode.Uri.file(this._currentFile)) ??
-      vscode.workspace.workspaceFolders?.at(0);
-    const attachConfig = vscode.workspace
-      .getConfiguration("launch", folder)
-      .get<vscode.DebugConfiguration[]>("configurations", [])
-      .find((config) => config.name === ctx.languageSettings.debugAttachConfig);
-    if (!attachConfig) {
-      const logger = getLogger("judge");
-      logger.error(
-        `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`
-      );
-      showOpenRunSettingsErrorWindow(
-        `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`,
-        this._currentFile
-      );
-      return;
-    }
+    testcase.cancellationSource = new vscode.CancellationTokenSource();
+    testcase.donePromise = new Promise((resolve) => {
+      void (async () => {
+        let debugPort: number;
+        try {
+          debugPort = await findAvailablePort();
+        } catch (error) {
+          const logger = getLogger("judge");
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`Failed to allocate debug port because ${errorMessage}`);
+          vscode.window.showErrorMessage("Failed to find available port for debugging");
+          resolve();
+          return;
+        }
+        const extraVariables = { debugPort: String(debugPort) };
 
-    // No limits for debugging testcases
-    if (ctx.testcase.mode === "interactive") {
-      this._launchInteractiveTestcase(ctx, true, true);
-    } else {
-      this._launchTestcase(ctx, true, true);
-    }
+        const ctx = await this._getExecutionContext(uuid, extraVariables);
+        if (!ctx || !this._currentFile) {
+          resolve();
+          return;
+        }
 
-    // Wait for the debug process to spawn before attaching
-    const spawnedPromises = [ctx.testcase.process.spawned];
-    if (ctx.testcase.mode === "interactive") {
-      spawnedPromises.push(ctx.testcase.interactorProcess.spawned);
-    }
-    const spawned = await Promise.all(spawnedPromises);
-    let allSpawned = true;
-    for (const spawnedProcess of spawned) {
-      if (!spawnedProcess) {
-        allSpawned = false;
-      }
-    }
+        if (!ctx.languageSettings.debugCommand) {
+          const logger = getLogger("judge");
+          logger.error(`No debug command for ${this._currentFile}`);
+          showOpenRunSettingsErrorWindow(
+            `No debug command for ${this._currentFile}`,
+            this._currentFile
+          );
+          resolve();
+          return;
+        }
+        if (!ctx.languageSettings.debugAttachConfig) {
+          const logger = getLogger("judge");
+          logger.error(`No debug attach configuration for ${this._currentFile}`);
+          showOpenRunSettingsErrorWindow(
+            `No debug attach configuration for ${this._currentFile}`,
+            this._currentFile
+          );
+          resolve();
+          return;
+        }
 
-    if (!allSpawned || ctx.token.isCancellationRequested) {
-      await ctx.testcase.process.done;
-      await ctx.testcase.interactorProcess.done;
-      const logger = getLogger("judge");
-      logger.error(`Debug process failed to spawn`);
-      vscode.window.showErrorMessage(`Debug process failed to spawn`);
-      return;
-    }
+        // get the attach debug configuration
+        const folder =
+          vscode.workspace.getWorkspaceFolder(vscode.Uri.file(this._currentFile)) ??
+          vscode.workspace.workspaceFolders?.at(0);
+        const attachConfig = vscode.workspace
+          .getConfiguration("launch", folder)
+          .get<vscode.DebugConfiguration[]>("configurations", [])
+          .find((config) => config.name === ctx.languageSettings.debugAttachConfig);
+        if (!attachConfig) {
+          const logger = getLogger("judge");
+          logger.error(
+            `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`
+          );
+          showOpenRunSettingsErrorWindow(
+            `Debug attach configuration "${ctx.languageSettings.debugAttachConfig}" not found`,
+            this._currentFile
+          );
+          resolve();
+          return;
+        }
 
-    // resolve the values in the attach configuration
-    const resolvedConfig = resolveVariables(attachConfig, this._currentFile, extraVariables);
+        // No limits for debugging testcases
+        if (ctx.testcase.mode === "interactive") {
+          this._launchInteractiveTestcase(ctx, true, true);
+        } else {
+          this._launchTestcase(ctx, true, true);
+        }
 
-    // Tag this debug session so we can identify which testcase is being debugged.
-    // VS Code preserves custom fields on session.configuration.
-    resolvedConfig.fastolympiccodingTestcaseUuid = uuid;
+        // Wait for the debug process to spawn before attaching
+        const spawnedPromises = [ctx.testcase.process.spawned];
+        if (ctx.testcase.mode === "interactive") {
+          spawnedPromises.push(ctx.testcase.interactorProcess.spawned);
+        }
+        const spawned = await Promise.all(spawnedPromises);
+        let allSpawned = true;
+        for (const spawnedProcess of spawned) {
+          if (!spawnedProcess) {
+            allSpawned = false;
+          }
+        }
 
-    // Slight delay to ensure process is listening
-    // This is less than ideal because it relies on timing, but there is no reliable way
-    // to detect when the debug server is ready without attempting a connection. If we try
-    // to connect as a client, we might interfere with the debug session because the server
-    // treats the first connection as the debuggee. I also tried to check if the port is listening
-    // via platform specific means, but then I ran into the problem of mismatching PIDs and
-    // the server running in IPv6 vs IPv4 mode.
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (!allSpawned || ctx.token.isCancellationRequested) {
+          await ctx.testcase.process.done;
+          await ctx.testcase.interactorProcess.done;
+          const logger = getLogger("judge");
+          logger.error(`Debug process failed to spawn`);
+          vscode.window.showErrorMessage(`Debug process failed to spawn`);
+          resolve();
+          return;
+        }
 
-    // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
-    // We just need to bypass our type system here.
-    const started = await vscode.debug.startDebugging(
-      folder,
-      resolvedConfig as vscode.DebugConfiguration
-    );
-    if (!started) {
-      this._stop(uuid);
-    }
+        // resolve the values in the attach configuration
+        const resolvedConfig = resolveVariables(attachConfig, this._currentFile, extraVariables);
+
+        // Tag this debug session so we can identify which testcase is being debugged.
+        // VS Code preserves custom fields on session.configuration.
+        resolvedConfig.fastolympiccodingTestcaseUuid = uuid;
+
+        // Slight delay to ensure process is listening
+        // This is less than ideal because it relies on timing, but there is no reliable way
+        // to detect when the debug server is ready without attempting a connection. If we try
+        // to connect as a client, we might interfere with the debug session because the server
+        // treats the first connection as the debuggee. I also tried to check if the port is listening
+        // via platform specific means, but then I ran into the problem of mismatching PIDs and
+        // the server running in IPv6 vs IPv4 mode.
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // The configuration is user-provided, and may be invalid. Let VS Code handle validation.
+        // We just need to bypass our type system here.
+        const started = await vscode.debug.startDebugging(
+          folder,
+          resolvedConfig as vscode.DebugConfiguration
+        );
+        if (!started) {
+          this._stop(uuid);
+        }
+
+        await testcase.process.done;
+        await testcase.interactorProcess.done;
+        resolve();
+      })();
+    });
+
+    await testcase.donePromise;
+    testcase.donePromise = null;
   }
 
   private _stop(uuid: string) {
