@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import type StressViewProvider from "./StressViewProvider";
 import { isListening, onDidChangeListening } from "../competitiveCompanion";
