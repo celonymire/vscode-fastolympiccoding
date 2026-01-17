@@ -114,6 +114,12 @@
           onsave?.();
         }
       }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      if (editing) {
+        editing = false;
+        oncancel?.();
+      }
     }
   }
 
@@ -269,7 +275,7 @@
         {#if oncancel}
           <button
             type="button"
-            data-tooltip="Cancel"
+            data-tooltip="Cancel (Esc)"
             aria-label="Cancel"
             class="action-button codicon codicon-close"
             onclick={() => {
