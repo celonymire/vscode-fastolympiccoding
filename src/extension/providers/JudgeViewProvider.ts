@@ -512,6 +512,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
+    this._saveAllState();
+    void this.stopAllBackgroundTasks();
+
     for (const testcase of this._runtime.state) {
       testcase.cancellationSource?.cancel();
       testcase.cancellationSource?.dispose();
@@ -521,9 +524,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       void testcase.process.dispose();
       void testcase.interactorProcess.dispose();
     }
-
-    // Stop all background tasks
-    void this.stopAllBackgroundTasks();
     this._onDidChangeBackgroundTasks.dispose();
 
     super.onDispose();
@@ -841,16 +841,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    // Cancel cancellation tokens
-    const canceledSources = new Set<vscode.CancellationTokenSource>();
-    for (const state of context.state) {
-      if (state.cancellationSource && !canceledSources.has(state.cancellationSource)) {
-        state.cancellationSource.cancel();
-        state.cancellationSource.dispose();
-        canceledSources.add(state.cancellationSource);
-      }
-    }
-
     // Stop all processes
     for (const state of context.state) {
       state.process.stop();
@@ -866,14 +856,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
     await Promise.all(donePromises);
 
-    // Clean up
-    for (const state of context.state) {
-      state.process.dispose();
-      state.interactorProcess.dispose();
-    }
-
-    // Note: We don't delete from _contexts here because it holds the persistent state now
-    // We just stopped the background execution.
     this._onDidChangeBackgroundTasks.fire();
   }
 
@@ -922,20 +904,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const allData = this.readStorage();
 
     const serialize = (state: State[], timeLimit: number, memoryLimit: number): FileData => {
-      const testcases: ITestcase[] = state.map((t) => ({
-        uuid: t.uuid,
-        stdin: t.stdin.data,
-        stderr: t.stderr.data,
-        stdout: t.stdout.data,
-        acceptedStdout: t.acceptedStdout.data,
-        elapsed: t.elapsed,
-        memoryBytes: t.memoryBytes,
-        status: t.status,
-        shown: t.shown,
-        toggled: t.toggled,
-        skipped: t.skipped,
-        mode: t.mode,
-        interactorSecret: t.interactorSecret.data,
+      const testcases: ITestcase[] = state.map((testcase) => ({
+        uuid: testcase.uuid,
+        stdin: testcase.stdin.data,
+        stderr: testcase.stderr.data,
+        stdout: testcase.stdout.data,
+        acceptedStdout: testcase.acceptedStdout.data,
+        elapsed: testcase.elapsed,
+        memoryBytes: testcase.memoryBytes,
+        status: testcase.status,
+        shown: testcase.shown,
+        toggled: testcase.toggled,
+        skipped: testcase.skipped,
+        mode: testcase.mode,
+        interactorSecret: testcase.interactorSecret.data,
       }));
       return {
         timeLimit,

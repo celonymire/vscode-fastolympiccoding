@@ -260,6 +260,17 @@ function registerCommands(context: vscode.ExtensionContext): void {
       vscode.commands.executeCommand("fastolympiccoding.panel.focus");
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "fastolympiccoding.stopBackgroundTests",
+      (item: { filePath?: string }) => {
+        if (item?.filePath) {
+          void judgeViewProvider.stopBackgroundTasksForFile(item.filePath);
+        }
+      }
+    )
+  );
 }
 
 export function activate(context: vscode.ExtensionContext): void {

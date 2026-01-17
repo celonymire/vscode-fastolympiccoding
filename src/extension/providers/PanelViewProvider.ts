@@ -93,9 +93,9 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       const items: StatusTreeItem[] = [];
 
       for (const [file, uuids] of backgroundTasks.entries()) {
-        const basename = path.basename(file);
+        const relativePath = vscode.workspace.asRelativePath(file);
         const item = new StatusTreeItem(
-          basename,
+          relativePath,
           vscode.TreeItemCollapsibleState.None,
           `${uuids.length} test${uuids.length > 1 ? "s" : ""} running`,
           new vscode.ThemeIcon("loading~spin"),

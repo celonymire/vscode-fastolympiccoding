@@ -86,6 +86,11 @@
           "command": "fastolympiccoding.stopCompetitiveCompanion",
           "group": "inline",
           "when": "view == fastolympiccoding.panel && viewItem == companion-listening"
+        },
+        {
+          "command": "fastolympiccoding.stopBackgroundTests",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == judge-background-file"
         }
       ]
     },
@@ -346,6 +351,12 @@
         "command": "fastolympiccoding.showChangelog",
         "title": "Show Changelog",
         "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.stopBackgroundTests",
+        "title": "Stop Running Tests",
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
       }
     ],
     "keybindings": [
