@@ -128,7 +128,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
+    if (this._currentFile) {
+      this._saveState(this._currentFile);
+    }
     this.stopAll();
+
     this._onDidChangeBackgroundTasks.dispose();
     for (const ctx of this._contexts.values()) {
       for (const state of ctx.state) {
