@@ -273,6 +273,23 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "fastolympiccoding.stopStressSession",
+      (item: { filePath?: string }) => {
+        if (item?.filePath) {
+          stressViewProvider.stopStressSession(item.filePath);
+        }
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.stopAllStressSessions", () => {
+      stressViewProvider.stopAll();
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("fastolympiccoding.stopAllBackgroundTests", () => {
       void judgeViewProvider.stopAllBackgroundTasks();
     })

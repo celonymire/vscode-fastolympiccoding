@@ -61,25 +61,45 @@ type State = {
   closeHandler: (code: number | null) => void;
 };
 
-export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
-  private _state: State[] = [];
-  private _stopFlag = false;
-  private _clearFlag = false;
-  private _running = false;
-  private _interactiveMode = false;
-  private _interactiveSecretPromise: Promise<void> | null = null;
-  private _interactorSecretResolver?: () => void;
-  private _donePromise: Promise<void> | null = null;
-  private _generatorState: State;
-  private _solutionState: State;
-  private _judgeState: State;
+interface StressContext {
+  state: State[];
+  stopFlag: boolean;
+  clearFlag: boolean;
+  running: boolean;
+  interactiveMode: boolean;
+  interactiveSecretPromise: Promise<void> | null;
+  interactorSecretResolver?: () => void;
+  donePromise: Promise<void> | null;
+}
 
-  private _findState(id: StateId): State | null {
-    const index = this._state.findIndex((state) => state.state === id);
-    if (index === -1) {
-      return null;
+export default class extends BaseViewProvider<typeof ProviderMessageSchema, WebviewMessage> {
+  private _contexts: Map<string, StressContext> = new Map();
+  private _onDidChangeBackgroundTasks = new vscode.EventEmitter<void>();
+  readonly onDidChangeBackgroundTasks = this._onDidChangeBackgroundTasks.event;
+
+  private get _currentContext(): StressContext | undefined {
+    return this._currentFile ? this._contexts.get(this._currentFile) : undefined;
+  }
+
+  // Used by PanelViewProvider
+  getRunningStressSessions(): string[] {
+    const running: string[] = [];
+    for (const [file, ctx] of this._contexts) {
+      if (ctx.running) {
+        running.push(file);
+      }
     }
-    return this._state[index];
+    return running;
+  }
+
+  stopStressSession(file: string) {
+    const ctx = this._contexts.get(file);
+    if (ctx && ctx.running) {
+      ctx.stopFlag = true;
+      for (const state of ctx.state) {
+        state.process.stop();
+      }
+    }
   }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
@@ -108,11 +128,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   override onDispose() {
-    this.stop();
-    this._judgeState.process.dispose();
-    this._solutionState.process.dispose();
-    this._generatorState.process.dispose();
-
+    this.stopAll();
+    this._onDidChangeBackgroundTasks.dispose();
+    for (const ctx of this._contexts.values()) {
+      for (const state of ctx.state) {
+        state.process.stop();
+        state.process.dispose();
+      }
+    }
     super.onDispose();
   }
 
@@ -126,85 +149,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     private _testcaseViewProvider: JudgeViewProvider
   ) {
     super("stress", context, ProviderMessageSchema);
-
-    // Initialize state with handlers bound to each StateId
-    this._state = [
-      {
-        state: "Generator",
-        stdin: new TextHandler(),
-        stdout: new TextHandler(),
-        stderr: new TextHandler(),
-        status: "NA",
-        process: new Runnable(),
-        errorHandler: this._onProcessError.bind(this, "Generator"),
-        stdoutDataHandler: this._onStdoutData.bind(this, "Generator"),
-        stdoutEndHandler: this._onStdoutEnd.bind(this, "Generator"),
-        stderrDataHandler: this._onStderrData.bind(this, "Generator"),
-        stderrEndHandler: this._onStderrEnd.bind(this, "Generator"),
-        closeHandler: this._onProcessClose.bind(this, "Generator"),
-      },
-      {
-        state: "Solution",
-        stdin: new TextHandler(),
-        stdout: new TextHandler(),
-        stderr: new TextHandler(),
-        status: "NA",
-        process: new Runnable(),
-        errorHandler: this._onProcessError.bind(this, "Solution"),
-        stdoutDataHandler: this._onStdoutData.bind(this, "Solution"),
-        stdoutEndHandler: this._onStdoutEnd.bind(this, "Solution"),
-        stderrDataHandler: this._onStderrData.bind(this, "Solution"),
-        stderrEndHandler: this._onStderrEnd.bind(this, "Solution"),
-        closeHandler: this._onProcessClose.bind(this, "Solution"),
-      },
-      {
-        state: "Judge",
-        stdin: new TextHandler(),
-        stdout: new TextHandler(),
-        stderr: new TextHandler(),
-        status: "NA",
-        process: new Runnable(),
-        errorHandler: this._onProcessError.bind(this, "Judge"),
-        stdoutDataHandler: this._onStdoutData.bind(this, "Judge"),
-        stdoutEndHandler: this._onStdoutEnd.bind(this, "Judge"),
-        stderrDataHandler: this._onStderrData.bind(this, "Judge"),
-        stderrEndHandler: this._onStderrEnd.bind(this, "Judge"),
-        closeHandler: this._onProcessClose.bind(this, "Judge"),
-      },
-    ];
-
-    this._solutionState = this._findState("Solution")!;
-    this._judgeState = this._findState("Judge")!;
-    this._generatorState = this._findState("Generator")!;
-
-    // Set up callbacks to send STDIO messages to webview
-    for (const state of this._state) {
-      state.stdin.callback = (data: string) => {
-        super._postMessage({
-          type: "STDIO",
-          id: state.state,
-          stdio: "STDIN",
-          data,
-        });
-      };
-      state.stdout.callback = (data: string) => {
-        super._postMessage({
-          type: "STDIO",
-          id: state.state,
-          stdio: "STDOUT",
-          data,
-        });
-      };
-      state.stderr.callback = (data: string) => {
-        super._postMessage({
-          type: "STDIO",
-          id: state.state,
-          stdio: "STDERR",
-          data,
-        });
-      };
-    }
-
     this.onShow();
   }
 
@@ -213,48 +157,99 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _switchToNoFile() {
-    this.stop();
-    for (const state of this._state) {
-      state.stdin.reset();
-      state.stdout.reset();
-      state.stderr.reset();
-      state.status = "NA";
-    }
     this._currentFile = undefined;
     this._sendShowMessage(false);
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   protected override _switchToFile(file: string) {
-    // Stop any running stress loop for the previous file.
-    this.stop();
-
     this._currentFile = file;
     this._sendShowMessage(true);
 
-    // Load persisted state from workspaceState.
-    const fileData = super.readStorage()[file];
-    const persistedState = v.parse(FileDataSchema, fileData ?? {});
-    this._interactiveMode = persistedState.interactiveMode;
+    if (!this._contexts.has(file)) {
+      // Load persisted state from workspaceState.
+      const fileData = super.readStorage()[file];
+      const persistedState = v.parse(FileDataSchema, fileData ?? {});
+
+      this._contexts.set(file, this._createContext(file, persistedState));
+    }
+
+    // Send full state to webview.
+    this._rehydrateWebviewFromState();
+    this._onDidChangeBackgroundTasks.fire();
+  }
+
+  private _createContext(file: string, persistedState: FileData): StressContext {
+    const states: State[] = [
+      this._createState(file, "Generator"),
+      this._createState(file, "Solution"),
+      this._createState(file, "Judge"),
+    ];
+
+    // Restore state values
     for (const fileState of persistedState.states) {
-      const state = this._findState(fileState.state);
+      const state = states.find((s) => s.state === fileState.state);
       if (!state) continue;
       state.status = fileState.status;
-      state.stdin.reset();
-      state.stdout.reset();
-      state.stderr.reset();
       state.stdin.write(fileState.stdin, "force");
       state.stdout.write(fileState.stdout, "force");
       state.stderr.write(fileState.stderr, "force");
     }
 
-    // Send full state to webview.
-    this._rehydrateWebviewFromState();
+    return {
+      state: states,
+      stopFlag: false,
+      clearFlag: false,
+      running: false,
+      interactiveMode: persistedState.interactiveMode,
+      interactiveSecretPromise: null,
+      donePromise: null,
+    };
+  }
+
+  private _createState(file: string, id: StateId): State {
+    const state: State = {
+      state: id,
+      stdin: new TextHandler(),
+      stdout: new TextHandler(),
+      stderr: new TextHandler(),
+      status: "NA",
+      process: new Runnable(),
+      errorHandler: (err) => this._onProcessError(file, id, err),
+      stdoutDataHandler: (data) => this._onStdoutData(file, id, data),
+      stdoutEndHandler: () => this._onStdoutEnd(file, id),
+      stderrDataHandler: (data) => this._onStderrData(file, id, data),
+      stderrEndHandler: () => this._onStderrEnd(),
+      closeHandler: (code) => this._onProcessClose(file, id, code),
+    };
+
+    // Set up callbacks to send STDIO messages to webview if this is current file
+    const updateWebview = (stdio: "STDIN" | "STDOUT" | "STDERR", data: string) => {
+      if (this._currentFile === file) {
+        super._postMessage({
+          type: "STDIO",
+          id,
+          stdio,
+          data,
+        });
+      }
+    };
+
+    state.stdin.callback = (data) => updateWebview("STDIN", data);
+    state.stdout.callback = (data) => updateWebview("STDOUT", data);
+    state.stderr.callback = (data) => updateWebview("STDERR", data);
+
+    return state;
   }
 
   protected override _rehydrateWebviewFromState() {
-    super._postMessage({ type: "INIT", interactiveMode: this._interactiveMode });
-    super._postMessage({ type: "CLEAR" });
-    for (const state of this._state) {
+    const ctx = this._currentContext;
+    if (!ctx) return;
+
+    super._postMessage({ type: "INIT", interactiveMode: ctx.interactiveMode });
+    super._postMessage({ type: "CLEAR" }); // Reset view
+
+    for (const state of ctx.state) {
       super._postMessage({
         type: "STATUS",
         id: state.state,
@@ -282,7 +277,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   async run(): Promise<void> {
-    const donePromise = this._donePromise;
+    const ctx = this._currentContext;
+    if (!ctx) return;
+
+    const donePromise = ctx.donePromise;
     if (donePromise) {
       await donePromise;
       return;
@@ -292,33 +290,43 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    this._donePromise = new Promise<void>((resolve) => {
+    const currentFile = this._currentFile;
+    ctx.donePromise = new Promise<void>((resolve) => {
       void (async () => {
-        await this._doRun();
+        await this._doRun(currentFile);
         resolve();
       })();
     });
-    await this._donePromise;
-    this._donePromise = null;
+
+    this._onDidChangeBackgroundTasks.fire();
+    await ctx.donePromise;
+    ctx.donePromise = null;
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   stop() {
-    if (this._running) {
-      this._stopFlag = true;
-      for (const state of this._state) {
-        state.process.stop();
-      }
+    if (this._currentFile) {
+      this.stopStressSession(this._currentFile);
     }
   }
 
-  private async _doRun() {
+  stopAll() {
+    for (const file of this._contexts.keys()) {
+      this.stopStressSession(file);
+    }
+  }
+
+  private async _doRun(file: string) {
+    const ctx = this._contexts.get(file);
+    if (!ctx) return;
+
     const config = vscode.workspace.getConfiguration("fastolympiccoding");
     const delayBetweenTestcases = config.get<number>("delayBetweenTestcases")!;
     const testcaseTimeLimit = config.get<number>("stressTestcaseTimeLimit")!;
     const testcaseMemoryLimit = config.get<number>("stressTestcaseMemoryLimit")!;
     const timeLimit = config.get<number>("stressTimeLimit")!;
 
-    const solutionSettings = getFileRunSettings(this._currentFile!);
+    const solutionSettings = getFileRunSettings(file);
     if (!solutionSettings) {
       return;
     }
@@ -326,7 +334,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const generatorSettings = getFileRunSettings(solutionSettings.generatorFile!);
 
     let judgeSettings: FileRunSettings | null;
-    if (this._interactiveMode) {
+    if (ctx.interactiveMode) {
       judgeSettings = getFileRunSettings(solutionSettings.interactorFile!);
     } else {
       judgeSettings = getFileRunSettings(solutionSettings.goodSolutionFile!);
@@ -336,136 +344,139 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    if (!solutionSettings.languageSettings.runCommand) {
+    const logError = (msg: string) => {
       const logger = getLogger("stress");
-      logger.error(`No run command for ${this._currentFile}`);
-      showOpenRunSettingsErrorWindow(`No run command for ${this._currentFile}`);
+      logger.error(msg);
+      showOpenRunSettingsErrorWindow(msg);
+    };
+
+    if (!solutionSettings.languageSettings.runCommand) {
+      logError(`No run command for ${file}`);
       return;
     }
     if (!generatorSettings.languageSettings.runCommand) {
-      const logger = getLogger("stress");
-      logger.error(`No run command for ${solutionSettings.generatorFile}`);
-      showOpenRunSettingsErrorWindow(`No run command for ${solutionSettings.generatorFile}`);
+      logError(`No run command for ${solutionSettings.generatorFile}`);
       return;
     }
     if (!judgeSettings.languageSettings.runCommand) {
-      const logger = getLogger("stress");
-      const judgeFile = this._interactiveMode
+      const judgeFile = ctx.interactiveMode
         ? solutionSettings.interactorFile!
         : solutionSettings.goodSolutionFile!;
-      logger.error(`No run command for ${judgeFile}`);
-      showOpenRunSettingsErrorWindow(`No run command for ${judgeFile}`);
+      logError(`No run command for ${judgeFile}`);
       return;
     }
 
     const callback = (state: State, code: number) => {
       const status = code ? "CE" : "NA";
       state.status = status;
-      super._postMessage({ type: "STATUS", id: state.state, status });
-
+      if (this._currentFile === file) {
+        super._postMessage({ type: "STATUS", id: state.state, status });
+      }
       return code;
     };
+
     const compilePromises: Promise<number>[] = [];
-    const addCompilePromise = (state: State, file: string) => {
-      const compilePromise = compile(file, this._context);
+    const addCompilePromise = (state: State, filePath: string) => {
+      const compilePromise = compile(filePath, this._context);
       if (compilePromise) {
-        super._postMessage({
-          type: "STATUS",
-          id: state.state,
-          status: "COMPILING",
-        });
+        if (this._currentFile === file) {
+          super._postMessage({
+            type: "STATUS",
+            id: state.state,
+            status: "COMPILING",
+          });
+        }
         compilePromises.push(compilePromise.then(callback.bind(this, state)));
       }
     };
-    addCompilePromise(this._generatorState, solutionSettings.generatorFile!);
-    addCompilePromise(this._solutionState, this._currentFile!);
-    if (this._interactiveMode) {
-      addCompilePromise(this._judgeState, solutionSettings.interactorFile!);
+
+    const generatorState = ctx.state.find((s) => s.state === "Generator")!;
+    const solutionState = ctx.state.find((s) => s.state === "Solution")!;
+    const judgeState = ctx.state.find((s) => s.state === "Judge")!;
+
+    addCompilePromise(generatorState, solutionSettings.generatorFile!);
+    addCompilePromise(solutionState, file);
+    if (ctx.interactiveMode) {
+      addCompilePromise(judgeState, solutionSettings.interactorFile!);
     } else {
-      addCompilePromise(this._judgeState, solutionSettings.goodSolutionFile!);
+      addCompilePromise(judgeState, solutionSettings.goodSolutionFile!);
     }
 
     const compileCodes = await Promise.all(compilePromises);
-    let anyFailedToCompile = false;
-    for (const code of compileCodes) {
-      if (code) {
-        anyFailedToCompile = true;
-      }
-    }
-    if (anyFailedToCompile) {
-      this._saveState();
+    if (compileCodes.some((code) => code !== 0)) {
+      this._saveState(file);
       return;
     }
 
-    for (const id of StateIdValue) {
-      super._postMessage({
-        type: "STATUS",
-        id,
-        status: "RUNNING",
-      });
+    if (this._currentFile === file) {
+      for (const id of StateIdValue) {
+        super._postMessage({
+          type: "STATUS",
+          id,
+          status: "RUNNING",
+        });
+      }
     }
 
-    this._stopFlag = false;
-    this._clearFlag = false;
-    this._running = true;
+    ctx.stopFlag = false;
+    ctx.clearFlag = false;
+    ctx.running = true;
+    this._onDidChangeBackgroundTasks.fire();
+
     const start = Date.now();
-    while (!this._stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
-      super._postMessage({ type: "CLEAR" });
-      for (const state of this._state) {
+    while (!ctx.stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
+      if (this._currentFile === file) {
+        super._postMessage({ type: "CLEAR" });
+      }
+      for (const state of ctx.state) {
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
 
-        super._postMessage({
-          type: "STATUS",
-          id: state.state,
-          status: "RUNNING",
-        });
+        if (this._currentFile === file) {
+          super._postMessage({
+            type: "STATUS",
+            id: state.state,
+            status: "RUNNING",
+          });
+        }
       }
       const seed = crypto.randomBytes(8).readBigUInt64BE();
-      this._interactiveSecretPromise = new Promise<void>((resolve) => {
-        this._interactorSecretResolver = resolve;
+      ctx.interactiveSecretPromise = new Promise<void>((resolve) => {
+        ctx.interactorSecretResolver = resolve;
       });
 
-      this._judgeState.process
-        .on("error", this._judgeState.errorHandler)
-        .on("stdout:data", this._judgeState.stdoutDataHandler)
-        .on("stdout:end", this._judgeState.stdoutEndHandler)
-        .on("stderr:data", this._judgeState.stderrDataHandler)
-        .on("stderr:end", this._judgeState.stderrEndHandler)
-        .on("close", this._judgeState.closeHandler);
-      this._judgeState.process.run(
+      const setupProcess = (state: State) => {
+        state.process
+          .on("error", state.errorHandler)
+          .on("stdout:data", state.stdoutDataHandler)
+          .on("stdout:end", state.stdoutEndHandler)
+          .on("stderr:data", state.stderrDataHandler)
+          .on("stderr:end", state.stderrEndHandler)
+          .on("close", state.closeHandler);
+      };
+
+      setupProcess(judgeState);
+      judgeState.process.run(
         judgeSettings.languageSettings.runCommand,
         testcaseTimeLimit,
         testcaseMemoryLimit,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
 
-      this._generatorState.process
-        .on("spawn", () => {
-          this._generatorState.process.stdin?.write(`${seed}\n`);
-        })
-        .on("error", this._generatorState.errorHandler)
-        .on("stdout:data", this._generatorState.stdoutDataHandler)
-        .on("stdout:end", this._generatorState.stdoutEndHandler)
-        .on("stderr:data", this._generatorState.stderrDataHandler)
-        .on("stderr:end", this._generatorState.stderrEndHandler)
-        .on("close", this._generatorState.closeHandler);
-      this._generatorState.process.run(
+      setupProcess(generatorState);
+      generatorState.process.on("spawn", () => {
+        generatorState.process.stdin?.write(`${seed}\n`);
+      });
+      generatorState.process.run(
         generatorSettings.languageSettings.runCommand,
         0,
         0,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
 
-      this._solutionState.process
-        .on("error", this._solutionState.errorHandler)
-        .on("stdout:data", this._solutionState.stdoutDataHandler)
-        .on("stdout:end", this._solutionState.stdoutEndHandler)
-        .on("stderr:data", this._solutionState.stderrDataHandler)
-        .on("stderr:end", this._solutionState.stderrEndHandler)
-        .on("close", this._solutionState.closeHandler);
-      this._solutionState.process.run(
+      setupProcess(solutionState);
+      solutionState.process.run(
         solutionSettings.languageSettings.runCommand,
         testcaseTimeLimit,
         testcaseMemoryLimit,
@@ -477,101 +488,116 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           void (async () => {
             const termination = await state.process.done;
             state.status = mapTestcaseTermination(termination);
-            super._postMessage({
-              type: "STATUS",
-              id: state.state,
-              status: state.status,
-            });
+            if (this._currentFile === file) {
+              super._postMessage({
+                type: "STATUS",
+                id: state.state,
+                status: state.status,
+              });
+            }
             resolve(terminationSeverityNumber(termination));
           })();
         });
       };
 
-      const generatorPromise = executionPromise(this._generatorState);
-      const solutionPromise = executionPromise(this._solutionState);
-      const judgePromise = executionPromise(this._judgeState);
+      const generatorPromise = executionPromise(generatorState);
+      const solutionPromise = executionPromise(solutionState);
+      const judgePromise = executionPromise(judgeState);
 
       const severities = await Promise.all([generatorPromise, solutionPromise, judgePromise]);
       const maxSeverity = Math.max(...severities) as Severity;
 
-      if (this._interactiveMode) {
+      if (ctx.interactiveMode) {
         if (maxSeverity === 0) {
-          // All the processes finished successfully, therefore the judge
-          // returned 0 so the answer is correct
-          this._solutionState.status = "AC";
-          super._postMessage({
-            type: "STATUS",
-            id: this._solutionState.state,
-            status: this._solutionState.status,
-          });
+          // All finished successfully
+          solutionState.status = "AC";
+          if (this._currentFile === file) {
+            super._postMessage({
+              type: "STATUS",
+              id: solutionState.state,
+              status: solutionState.status,
+            });
+          }
         } else if (maxSeverity === 1) {
-          // The stress tester was stopped
+          // Stopped
           break;
         } else if (
-          this._solutionState.process.exitCode === null ||
-          this._judgeState.process.exitCode === null
+          solutionState.process.exitCode === null ||
+          judgeState.process.exitCode === null
         ) {
-          // The one of the two processes crashed.
+          // Crashed
           break;
-        } else if (this._judgeState.process.exitCode !== 0) {
-          // Judge returned non-zero code which means answer is invalid
-          this._judgeState.status = "NA";
-          this._solutionState.status = "WA";
-          super._postMessage({
-            type: "STATUS",
-            id: this._judgeState.state,
-            status: this._judgeState.status,
-          });
-          super._postMessage({
-            type: "STATUS",
-            id: this._solutionState.state,
-            status: this._solutionState.status,
-          });
+        } else if (judgeState.process.exitCode !== 0) {
+          // WA
+          judgeState.status = "NA";
+          solutionState.status = "WA";
+          if (this._currentFile === file) {
+            super._postMessage({
+              type: "STATUS",
+              id: judgeState.state,
+              status: judgeState.status,
+            });
+            super._postMessage({
+              type: "STATUS",
+              id: solutionState.state,
+              status: solutionState.status,
+            });
+          }
           break;
         }
       } else {
         if (maxSeverity > 0) {
-          // Either the stress tester was stopped or something had gone wrong
           break;
-        } else if (this._solutionState.stdout.data !== this._judgeState.stdout.data) {
-          this._solutionState.status = "WA";
-          super._postMessage({
-            type: "STATUS",
-            id: this._solutionState.state,
-            status: this._solutionState.status,
-          });
+        } else if (solutionState.stdout.data !== judgeState.stdout.data) {
+          solutionState.status = "WA";
+          if (this._currentFile === file) {
+            super._postMessage({
+              type: "STATUS",
+              id: solutionState.state,
+              status: solutionState.status,
+            });
+          }
           break;
         } else {
-          this._solutionState.status = "AC";
-          super._postMessage({
-            type: "STATUS",
-            id: this._solutionState.state,
-            status: this._solutionState.status,
-          });
+          solutionState.status = "AC";
+          if (this._currentFile === file) {
+            super._postMessage({
+              type: "STATUS",
+              id: solutionState.state,
+              status: solutionState.status,
+            });
+          }
         }
       }
 
       await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
     }
-    this._running = false;
 
-    if (this._clearFlag) {
-      for (const state of this._state) {
+    ctx.running = false;
+
+    if (ctx.clearFlag) {
+      for (const state of ctx.state) {
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
         state.status = "NA";
       }
 
-      super._postMessage({ type: "CLEAR" });
+      if (this._currentFile === file) {
+        super._postMessage({ type: "CLEAR" });
+      }
     }
-    this._clearFlag = false;
+    ctx.clearFlag = false;
 
-    this._saveState();
+    this._saveState(file);
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   private _view({ id, stdio }: v.InferOutput<typeof ViewMessageSchema>) {
-    const state = this._findState(id);
+    const ctx = this._currentContext;
+    if (!ctx) return;
+    const state = ctx.state.find((s) => s.state === id);
+
     if (!state) {
       return;
     }
@@ -593,6 +619,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
+    const ctx = this._currentContext;
+    if (!ctx) return;
+
     const settings = getFileRunSettings(this._currentFile);
     if (!settings) {
       return;
@@ -604,21 +633,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     } else if (id === "Solution") {
       resolvedFile = this._currentFile;
     } else if (id === "Judge") {
-      resolvedFile = this._interactiveMode ? settings.interactorFile : settings.goodSolutionFile;
+      resolvedFile = ctx.interactiveMode ? settings.interactorFile : settings.goodSolutionFile;
     }
     if (!resolvedFile) {
       return;
     }
 
-    if (this._interactiveMode) {
-      const currentState = this._findState(id);
+    const generatorState = ctx.state.find((s) => s.state === "Generator")!;
+    const solutionState = ctx.state.find((s) => s.state === "Solution")!;
+    const judgeState = ctx.state.find((s) => s.state === "Judge")!;
+
+    if (ctx.interactiveMode) {
+      const currentState = ctx.state.find((s) => s.state === id);
 
       if (currentState?.state === "Solution") {
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
           uuid: crypto.randomUUID(),
-          stdin: this._judgeState.stdout.data,
-          stderr: this._solutionState.stderr.data + this._judgeState.stderr.data,
-          stdout: this._solutionState.stdout.data,
+          stdin: judgeState.stdout.data, // Interactor output is stdin for solution
+          stderr: solutionState.stderr.data + judgeState.stderr.data,
+          stdout: solutionState.stdout.data,
           acceptedStdout: "",
           elapsed: currentState?.process.elapsed ?? 0,
           memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
@@ -627,15 +660,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           toggled: false,
           skipped: false,
           mode: "interactive",
-          interactorSecret: this._generatorState.stdout.data,
+          interactorSecret: generatorState.stdout.data,
         });
       } else if (currentState?.state === "Judge") {
         // add as standard testcase easily debug the interactor from reproduced queries
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
           uuid: crypto.randomUUID(),
-          stdin: this._generatorState.stdout.data + this._solutionState.stdout.data,
-          stderr: this._solutionState.stderr.data + this._judgeState.stderr.data,
-          stdout: this._judgeState.stdout.data,
+          stdin: generatorState.stdout.data + solutionState.stdout.data,
+          stderr: solutionState.stderr.data + judgeState.stderr.data,
+          stdout: judgeState.stdout.data,
           acceptedStdout: "",
           elapsed: currentState?.process.elapsed ?? 0,
           memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
@@ -644,18 +677,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           toggled: false,
           skipped: false,
           mode: "standard",
-          interactorSecret: this._generatorState.stdout.data,
+          interactorSecret: generatorState.stdout.data,
         });
       }
     } else {
-      const currentState = this._findState(id);
+      const currentState = ctx.state.find((s) => s.state === id);
 
       this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
         uuid: crypto.randomUUID(),
-        stdin: this._generatorState.stdout.data,
+        stdin: generatorState.stdout.data,
         stderr: currentState?.stderr.data ?? "",
         stdout: currentState?.stdout.data ?? "",
-        acceptedStdout: this._judgeState.stdout.data,
+        acceptedStdout: judgeState.stdout.data,
         elapsed: currentState?.process.elapsed ?? 0,
         memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
         status: currentState?.status ?? "NA",
@@ -669,11 +702,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   clear() {
-    if (this._running) {
-      this._clearFlag = true;
+    const ctx = this._currentContext;
+    if (!ctx) return;
+
+    if (ctx.running) {
+      ctx.clearFlag = true;
       this.stop();
     } else {
-      for (const state of this._state) {
+      for (const state of ctx.state) {
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
@@ -681,28 +717,36 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
 
       super._postMessage({ type: "CLEAR" });
-      this._saveState();
+      if (this._currentFile) {
+        void this._saveState(this._currentFile);
+      }
     }
   }
 
   _save({ interactiveMode }: v.InferOutput<typeof SaveMessageSchema>) {
-    this._interactiveMode = interactiveMode;
+    const ctx = this._currentContext;
+    if (!ctx) {
+      return;
+    }
 
-    this._saveState();
+    ctx.interactiveMode = interactiveMode;
+    if (this._currentFile) {
+      void this._saveState(this._currentFile);
+    }
   }
 
-  private _saveState() {
-    const file = this._currentFile;
-    if (!file) {
+  private _saveState(file: string) {
+    const ctx = this._contexts.get(file);
+    if (!ctx) {
       return;
     }
 
     const defaultData = v.parse(FileDataSchema, {});
     const data: FileData = {
-      interactiveMode: this._interactiveMode,
+      interactiveMode: ctx.interactiveMode,
       states: [],
     };
-    for (const state of this._state) {
+    for (const state of ctx.state) {
       data.states.push({
         state: state.state,
         status: state.status,
@@ -717,50 +761,65 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     );
   }
 
-  private _onProcessError(stateId: StateId, data: Error) {
+  private _onProcessError(file: string, stateId: StateId, data: Error) {
     if (data.name !== "AbortError") {
       const logger = getLogger("stress");
-      const state = this._findState(stateId);
-      logger.error(`${stateId} process error: ${data.message}`);
-      state?.stderr.write(data.message, "final");
+      const ctx = this._contexts.get(file);
+      const state = ctx?.state.find((s) => s.state === stateId);
+      logger.error(`${file} ${stateId} process error: ${data.message}`);
+      if (state) {
+        state.stderr.write(data.message, "final");
+      }
     }
 
-    for (const stateId of StateIdValue) {
-      const state = this._findState(stateId);
-      state?.process.kill();
+    const ctx = this._contexts.get(file);
+    if (ctx) {
+      for (const s of ctx.state) {
+        s.process.kill();
+      }
     }
   }
 
-  private async _onStdoutData(stateId: StateId, data: string) {
-    const state = this._findState(stateId);
-    if (stateId === "Generator") {
-      const writeMode: WriteMode = this._interactiveMode ? "force" : "batch";
-      this._generatorState.stdout.write(data, writeMode);
+  private async _onStdoutData(file: string, stateId: StateId, data: string) {
+    const ctx = this._contexts.get(file);
+    if (!ctx) {
+      return;
+    }
 
-      if (this._interactiveMode) {
+    const state = ctx.state.find((s) => s.state === stateId);
+
+    const generatorState = ctx.state.find((s) => s.state === "Generator")!;
+    const solutionState = ctx.state.find((s) => s.state === "Solution")!;
+    const judgeState = ctx.state.find((s) => s.state === "Judge")!;
+
+    if (stateId === "Generator") {
+      const writeMode: WriteMode = ctx.interactiveMode ? "force" : "batch";
+      generatorState.stdout.write(data, writeMode);
+
+      if (ctx.interactiveMode) {
         // Generator provides the secret for the interactor
-        this._judgeState.process.stdin?.write(data);
+        judgeState.process.stdin?.write(data);
       } else {
         // Generator pipes to solution and good solution
-        this._solutionState.process.stdin?.write(data);
-        this._judgeState.process.stdin?.write(data);
+        solutionState.process.stdin?.write(data);
+        judgeState.process.stdin?.write(data);
       }
     } else if (stateId === "Judge") {
-      if (this._interactiveMode) {
-        this._solutionState.process.stdin?.write(data);
+      if (ctx.interactiveMode) {
+        solutionState.process.stdin?.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
       }
     } else {
-      if (this._interactiveMode) {
+      if (ctx.interactiveMode) {
         // Make sure generator sends the secret before sending our queries
-        if (this._interactiveSecretPromise) {
-          await this._interactiveSecretPromise;
-          this._interactiveSecretPromise = null;
+        if (ctx.interactiveSecretPromise) {
+          await ctx.interactiveSecretPromise;
+          ctx.interactiveSecretPromise = null;
         }
 
-        this._judgeState.process.stdin?.write(data);
+        judgeState.process.stdin?.write(data);
         state?.stdout.write(data, "force");
       } else {
         state?.stdout.write(data, "batch");
@@ -768,42 +827,53 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _onStdoutEnd(stateId: StateId) {
-    if (this._interactiveMode && stateId === "Generator") {
-      this._interactorSecretResolver?.();
-      this._interactorSecretResolver = undefined;
+  private _onStdoutEnd(file: string, stateId: StateId) {
+    const ctx = this._contexts.get(file);
+    if (!ctx) {
+      return;
     }
 
-    const state = this._findState(stateId);
+    if (ctx.interactiveMode && stateId === "Generator") {
+      ctx.interactorSecretResolver?.();
+      ctx.interactorSecretResolver = undefined;
+    }
+
+    const state = ctx.state.find((s) => s.state === stateId);
     state?.stdout.write("", "final");
   }
 
-  private _onProcessClose(stateId: StateId, code: number | null) {
-    const state = this._findState(stateId);
+  private _onProcessClose(file: string, stateId: StateId, code: number | null) {
+    const ctx = this._contexts.get(file);
+    if (!ctx) {
+      return;
+    }
+
+    const state = ctx.state.find((s) => s.state === stateId);
     if (!state) {
       return;
     }
 
     if (code !== 0) {
-      for (const siblingId of StateIdValue) {
-        const sibling = this._findState(siblingId);
-        if (sibling && sibling.state !== stateId) {
+      for (const sibling of ctx.state) {
+        if (sibling.state !== stateId) {
           sibling.process.stop();
         }
       }
     }
   }
 
-  private _onStderrData(stateId: StateId, data: string) {
-    const state = this._findState(stateId);
-    const writeMode: WriteMode = this._interactiveMode ? "force" : "batch";
+  private _onStderrData(file: string, stateId: StateId, data: string) {
+    const ctx = this._contexts.get(file);
+    if (!ctx) {
+      return;
+    }
+
+    const state = ctx.state.find((s) => s.state === stateId);
+    const writeMode: WriteMode = ctx.interactiveMode ? "force" : "batch";
     state?.stderr.write(data, writeMode);
   }
 
-  private _onStderrEnd(stateId: StateId) {
-    const state = this._findState(stateId);
-    state?.stderr.write("", "final");
-  }
+  private _onStderrEnd() {}
 
   toggleWebviewSettings() {
     super._postMessage({ type: "SETTINGS_TOGGLE" });

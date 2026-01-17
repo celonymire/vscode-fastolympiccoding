@@ -93,9 +93,19 @@
           "when": "view == fastolympiccoding.panel && viewItem == judge-background-file"
         },
         {
+          "command": "fastolympiccoding.stopStressSession",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == stress-background-file"
+        },
+        {
           "command": "fastolympiccoding.stopAllBackgroundTests",
           "group": "inline",
           "when": "view == fastolympiccoding.panel && viewItem == judge-background-group"
+        },
+        {
+          "command": "fastolympiccoding.stopAllStressSessions",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == stress-background-group"
         }
       ]
     },
@@ -359,13 +369,25 @@
       },
       {
         "command": "fastolympiccoding.stopBackgroundTests",
-        "title": "Stop Running Tests",
+        "title": "Stop",
         "category": "Fast Olympic Coding",
-        "icon": "$(circle-slash)"
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "fastolympiccoding.stopStressSession",
+        "title": "Stop Stress Test",
+        "category": "Fast Olympic Coding",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "fastolympiccoding.stopAllBackgroundTests",
         "title": "Stop All Running Tests",
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "fastolympiccoding.stopAllStressSessions",
+        "title": "Stop All Stress Sessions",
         "category": "Fast Olympic Coding",
         "icon": "$(circle-slash)"
       }
