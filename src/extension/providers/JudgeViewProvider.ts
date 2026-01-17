@@ -356,8 +356,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     bypassLimits: boolean,
     debugMode: boolean
   ) {
-    // TODO: Make this utilize done promise
-
     const { token, testcase, languageSettings, interactorArgs, cwd } = ctx;
     if (!debugMode && !languageSettings.runCommand) {
       const logger = getLogger("judge");
@@ -372,15 +370,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!runCommand) {
       return;
     }
-
-    testcase.process.run(
-      runCommand,
-      bypassLimits ? 0 : this._runtime.timeLimit,
-      bypassLimits ? 0 : this._runtime.memoryLimit,
-      cwd
-    );
-    // Don't restrict the interactor's time and memory limit
-    testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
 
     // Pass the secret input before the outputs of the solution
     // This is a deliberate design choice to allow minimal changes to adapt
@@ -420,7 +409,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })
       .on("close", () => {
         testcase.process.stdin?.end();
-      });
+      })
+      .run(interactorArgs!, 0, 0, cwd);
 
     testcase.process
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
@@ -444,7 +434,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })
       .on("close", () => {
         testcase.interactorProcess.stdin?.end();
-      });
+      })
+      .run(
+        runCommand,
+        bypassLimits ? 0 : this._runtime.timeLimit,
+        bypassLimits ? 0 : this._runtime.memoryLimit,
+        cwd
+      );
 
     const [termination, interactorTermination] = await Promise.all([
       testcase.process.done,
@@ -1197,8 +1193,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })();
     });
 
-    await testcase.donePromise;
-    testcase.donePromise = null;
+    await this._awaitTestcaseCompletion(uuid);
   }
 
   private _stop(uuid: string) {
