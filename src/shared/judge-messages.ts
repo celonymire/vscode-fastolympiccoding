@@ -45,26 +45,26 @@ export const NextMessageSchema = v.object({
 
 export const ActionMessageSchema = v.object({
   type: v.literal("ACTION"),
-  id: v.number(),
+  uuid: v.string(),
   action: ActionSchema,
 });
 
 export const SaveMessageSchema = v.object({
   type: v.literal("SAVE"),
-  id: v.number(),
+  uuid: v.string(),
   stdio: StdioSchema,
   data: v.string(),
 });
 
 export const ViewMessageSchema = v.object({
   type: v.literal("VIEW"),
-  id: v.number(),
+  uuid: v.string(),
   stdio: StdioSchema,
 });
 
 export const StdinMessageSchema = v.object({
   type: v.literal("STDIN"),
-  id: v.number(),
+  uuid: v.string(),
   data: v.string(),
 });
 
@@ -80,13 +80,13 @@ export const SetMemoryLimitSchema = v.object({
 
 export const RequestTrimmedDataMessageSchema = v.object({
   type: v.literal("REQUEST_TRIMMED_DATA"),
-  id: v.number(),
+  uuid: v.string(),
   stdio: v.picklist(StdioValues),
 });
 
 export const RequestFullDataMessageSchema = v.object({
   type: v.literal("REQUEST_FULL_DATA"),
-  id: v.number(),
+  uuid: v.string(),
   stdio: v.picklist(StdioValues),
 });
 
@@ -122,12 +122,12 @@ export const WebviewMessageTypeSchema = v.picklist(WebviewMessageTypeValues);
 
 export const NewMessageSchema = v.object({
   type: v.literal("NEW"),
-  id: v.number(),
+  uuid: v.string(),
 });
 
 export const SetMessageSchema = v.object({
   type: v.literal("SET"),
-  id: v.number(),
+  uuid: v.string(),
   property: v.picklist([
     "stdin",
     "stderr",
@@ -147,14 +147,14 @@ export const SetMessageSchema = v.object({
 
 export const StdioMessageSchema = v.object({
   type: v.literal("STDIO"),
-  id: v.number(),
+  uuid: v.string(),
   stdio: StdioSchema,
   data: v.string(),
 });
 
 export const DeleteMessageSchema = v.object({
   type: v.literal("DELETE"),
-  id: v.number(),
+  uuid: v.string(),
 });
 
 export const ShowMessageSchema = v.object({

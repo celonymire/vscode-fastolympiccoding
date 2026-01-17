@@ -590,7 +590,7 @@ export function compile(file: string, context: vscode.ExtensionContext): Promise
   const extension = path.extname(file);
   const languageSettings = settings[extension] as LanguageSettings;
   if (!languageSettings.compileCommand) {
-    return null;
+    return Promise.resolve(0);
   }
   return doCompile(file, languageSettings.compileCommand, context);
 }

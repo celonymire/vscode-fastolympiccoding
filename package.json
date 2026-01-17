@@ -75,12 +75,51 @@
           "command": "fastolympiccoding.toggleJudgeSettings",
           "when": "false"
         }
+      ],
+      "view/item/context": [
+        {
+          "command": "fastolympiccoding.listenForCompetitiveCompanion",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == companion-stopped"
+        },
+        {
+          "command": "fastolympiccoding.stopCompetitiveCompanion",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == companion-listening"
+        },
+        {
+          "command": "fastolympiccoding.stopBackgroundTests",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == judge-background-file"
+        },
+        {
+          "command": "fastolympiccoding.stopStressSession",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == stress-background-file"
+        },
+        {
+          "command": "fastolympiccoding.stopAllBackgroundTests",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == judge-background-group"
+        },
+        {
+          "command": "fastolympiccoding.stopAllStressSessions",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == stress-background-group"
+        }
       ]
     },
     "viewsContainers": {
       "activitybar": [
         {
           "id": "fastolympiccoding",
+          "title": "Fast Olympic Coding",
+          "icon": "$(zap)"
+        }
+      ],
+      "panel": [
+        {
+          "id": "fastolympiccodingpanel",
           "title": "Fast Olympic Coding",
           "icon": "$(zap)"
         }
@@ -99,6 +138,13 @@
           "id": "fastolympiccoding.stress",
           "type": "webview",
           "name": "Stress"
+        }
+      ],
+      "fastolympiccodingpanel": [
+        {
+          "id": "fastolympiccoding.panel",
+          "name": "Status",
+          "icon": "$(zap)"
         }
       ]
     },
@@ -295,12 +341,14 @@
       {
         "command": "fastolympiccoding.listenForCompetitiveCompanion",
         "title": "Listen for Competitive Companion",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(broadcast)"
       },
       {
         "command": "fastolympiccoding.stopCompetitiveCompanion",
         "title": "Stop Competitive Companion",
-        "category": "Fast Olympic Coding"
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
       },
       {
         "command": "fastolympiccoding.toggleJudgeSettings",
@@ -318,6 +366,30 @@
         "command": "fastolympiccoding.showChangelog",
         "title": "Show Changelog",
         "category": "Fast Olympic Coding"
+      },
+      {
+        "command": "fastolympiccoding.stopBackgroundTests",
+        "title": "Stop",
+        "category": "Fast Olympic Coding",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "fastolympiccoding.stopStressSession",
+        "title": "Stop Stress Test",
+        "category": "Fast Olympic Coding",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "fastolympiccoding.stopAllBackgroundTests",
+        "title": "Stop All Running Tests",
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "fastolympiccoding.stopAllStressSessions",
+        "title": "Stop All Stress Sessions",
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
       }
     ],
     "keybindings": [
