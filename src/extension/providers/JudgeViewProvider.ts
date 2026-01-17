@@ -629,12 +629,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   protected override _switchToFile(file: string) {
-    console.log(`[JudgeViewProvider] _switchToFile: ${file}`);
     this._moveCurrentStateToBackground();
 
     // Ensure target context exists
     if (!this._contexts.has(file)) {
-      console.log(`[JudgeViewProvider] Creating new context for ${file}`);
       // LOAD FROM DISK (simplified for brevity of replacement, assuming unmodified lines follow)
       const storageData = super.readStorage()[file];
       const fileData = v.parse(FileDataSchema, storageData ?? {});
@@ -676,9 +674,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         timeLimit,
         memoryLimit,
       });
-      console.log(
-        `[JudgeViewProvider] Context set for ${file}. Contexts size: ${this._contexts.size}`
-      );
     }
 
     // Switch file
@@ -931,13 +926,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _saveAllState() {
-    console.log(
-      `[JudgeViewProvider] saving all states. Contexts size: ${this._contexts.size}, Current file: ${this._currentFile}`
-    );
     const allData = this.readStorage();
 
     const serialize = (state: State[], timeLimit: number, memoryLimit: number): FileData => {
-      console.log("state:", state);
       const testcases: ITestcase[] = state.map((testcase) => ({
         uuid: testcase.uuid,
         stdin: testcase.stdin.data,
