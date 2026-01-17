@@ -136,6 +136,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _onDidChangeBackgroundTasks = new vscode.EventEmitter<void>();
   readonly onDidChangeBackgroundTasks = this._onDidChangeBackgroundTasks.event;
 
+  private _viewReady!: Promise<void>;
+  private _resolveViewReady!: () => void;
+
+  private _resetViewReady() {
+    this._viewReady = new Promise<void>((resolve) => {
+      this._resolveViewReady = resolve;
+    });
+  }
+
   // Accessor for the current file's context
   private get _runtime(): RuntimeContext {
     if (!this._currentFile) {
@@ -350,7 +359,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._onDidChangeBackgroundTasks.fire();
 
     await testcase.process.done;
-    this._onDidChangeBackgroundTasks.fire();
     this.requestSave();
   }
 
@@ -481,6 +489,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
       case "LOADED":
+        this._resolveViewReady();
         this.loadCurrentFileData();
         break;
       case "NEXT":
@@ -528,6 +537,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
     }
     this._onDidChangeBackgroundTasks.dispose();
+    this._resetViewReady();
 
     super.onDispose();
   }
@@ -557,6 +567,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })
     );
 
+    this._resetViewReady();
     this.onShow();
   }
 
@@ -620,15 +631,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  private _createTextHandler(initialData?: string): TextHandler {
-    const handler = new TextHandler();
-    if (initialData) {
-      handler.write(initialData, "force");
-    }
-    return handler;
-  }
-
-  protected override _switchToFile(file: string) {
+  protected override async _switchToFile(file: string) {
+    await this._viewReady;
     this._moveCurrentStateToBackground();
 
     // Ensure target context exists
@@ -644,26 +648,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       for (const rawTestcase of fileData.testcases) {
         try {
           const testcase = v.parse(TestcaseSchema, rawTestcase);
-
-          const newState: State = {
-            uuid: testcase.uuid,
-            stdin: this._createTextHandler(testcase.stdin),
-            stderr: this._createTextHandler(testcase.stderr),
-            stdout: this._createTextHandler(testcase.stdout),
-            acceptedStdout: this._createTextHandler(testcase.acceptedStdout),
-            elapsed: testcase.elapsed,
-            memoryBytes: testcase.memoryBytes,
-            status: testcase.status,
-            shown: testcase.shown,
-            toggled: testcase.toggled,
-            skipped: testcase.skipped,
-            mode: testcase.mode,
-            interactorSecret: this._createTextHandler(testcase.interactorSecret),
-            process: new Runnable(),
-            interactorProcess: new Runnable(),
-            donePromise: null,
-          };
-          state.push(newState);
+          state.push(this._createTestcaseState(testcase.mode, testcase));
         } catch (e) {
           console.error("Failed to parse testcase", e);
         }
@@ -697,11 +682,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         void this._awaitTestcaseCompletion(testcase.uuid);
       }
     }
-
-    this._onDidChangeBackgroundTasks.fire();
   }
 
-  protected override _rehydrateWebviewFromState() {
+  protected override async _rehydrateWebviewFromState() {
+    await this._viewReady;
     super._postMessage({
       type: "INITIAL_STATE",
       timeLimit: this._runtime.timeLimit,
