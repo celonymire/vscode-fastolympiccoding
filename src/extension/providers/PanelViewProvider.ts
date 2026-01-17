@@ -68,15 +68,18 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       const judgeDescription =
         judgeTaskCount > 0 ? `${judgeTaskCount} file${judgeTaskCount > 1 ? "s" : ""}` : undefined;
 
+      const judgeItem = new StatusTreeItem(
+        "Judge Background Testcases",
+        vscode.TreeItemCollapsibleState.Expanded,
+        judgeDescription,
+        new vscode.ThemeIcon("run"),
+        undefined
+      );
+      judgeItem.contextValue = "judge-background-group";
+
       return Promise.resolve([
         companionItem,
-        new StatusTreeItem(
-          "Judge Background Testcases",
-          vscode.TreeItemCollapsibleState.Expanded,
-          judgeDescription,
-          new vscode.ThemeIcon("run"),
-          undefined
-        ),
+        judgeItem,
         new StatusTreeItem(
           "Stress Test Background Processes",
           vscode.TreeItemCollapsibleState.Expanded,

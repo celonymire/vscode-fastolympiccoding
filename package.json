@@ -91,6 +91,11 @@
           "command": "fastolympiccoding.stopBackgroundTests",
           "group": "inline",
           "when": "view == fastolympiccoding.panel && viewItem == judge-background-file"
+        },
+        {
+          "command": "fastolympiccoding.stopAllBackgroundTests",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && viewItem == judge-background-group"
         }
       ]
     },
@@ -355,6 +360,12 @@
       {
         "command": "fastolympiccoding.stopBackgroundTests",
         "title": "Stop Running Tests",
+        "category": "Fast Olympic Coding",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "fastolympiccoding.stopAllBackgroundTests",
+        "title": "Stop All Running Tests",
         "category": "Fast Olympic Coding",
         "icon": "$(circle-slash)"
       }

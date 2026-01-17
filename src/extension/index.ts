@@ -271,6 +271,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
       }
     )
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.stopAllBackgroundTests", () => {
+      void judgeViewProvider.stopAllBackgroundTasks();
+    })
+  );
 }
 
 export function activate(context: vscode.ExtensionContext): void {
