@@ -347,8 +347,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         bypassLimits ? 0 : this._runtime.memoryLimit,
         cwd
       );
+    this._onDidChangeBackgroundTasks.fire();
 
     await testcase.process.done;
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   private async _launchInteractiveTestcase(
@@ -441,6 +443,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         bypassLimits ? 0 : this._runtime.memoryLimit,
         cwd
       );
+    this._onDidChangeBackgroundTasks.fire();
 
     const [termination, interactorTermination] = await Promise.all([
       testcase.process.done,
@@ -470,6 +473,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "memoryBytes",
       value: testcase.memoryBytes,
     });
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
@@ -817,9 +821,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   getAllBackgroundTasks(): Map<string, string[]> {
     const result = new Map<string, string[]>();
     for (const [file, context] of this._contexts.entries()) {
-      if (file === this._currentFile) {
-        continue;
-      } // Access current file via normal view, not background list
       const runningTasks = context.state.filter((t) => t.donePromise !== null);
       if (runningTasks.length > 0) {
         result.set(

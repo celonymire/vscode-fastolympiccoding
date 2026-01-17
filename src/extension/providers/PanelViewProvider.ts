@@ -10,7 +10,8 @@ class StatusTreeItem extends vscode.TreeItem {
     public readonly description?: string,
     public readonly iconPath?: vscode.ThemeIcon,
     public readonly command?: vscode.Command,
-    public readonly filePath?: string
+    public readonly filePath?: string,
+    public readonly context?: "judge" | "stress" | "companion"
   ) {
     super(label, collapsibleState);
     this.description = description;
@@ -31,6 +32,9 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
     this._context.subscriptions.push(onDidChangeListening(() => this.refresh()));
     this._context.subscriptions.push(
       this._judgeViewProvider.onDidChangeBackgroundTasks(() => this.refresh())
+    );
+    this._context.subscriptions.push(
+      this._stressViewProvider.onDidChangeBackgroundTasks(() => this.refresh())
     );
   }
 
@@ -57,7 +61,9 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
         vscode.TreeItemCollapsibleState.None,
         description,
         new vscode.ThemeIcon(listening ? "broadcast" : "circle-slash"),
-        undefined
+        undefined,
+        undefined,
+        "companion"
       );
       companionItem.contextValue = listening ? "companion-listening" : "companion-stopped";
 
@@ -72,21 +78,32 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
         vscode.TreeItemCollapsibleState.Expanded,
         judgeDescription,
         new vscode.ThemeIcon("run"),
-        undefined
+        undefined,
+        undefined,
+        "judge"
       );
       judgeItem.contextValue = "judge-background-group";
 
-      return Promise.resolve([
-        companionItem,
-        judgeItem,
-        new StatusTreeItem(
-          "Stress Test Background Processes",
-          vscode.TreeItemCollapsibleState.Expanded,
-          undefined,
-          new vscode.ThemeIcon("debug-alt"),
-          undefined
-        ),
-      ]);
+      // Get count of background stress tasks
+      const stressSessions = this._stressViewProvider.getRunningStressSessions();
+      const stressSessionCount = stressSessions.length;
+      const stressDescription =
+        stressSessionCount > 0
+          ? `${stressSessionCount} file${stressSessionCount > 1 ? "s" : ""}`
+          : undefined;
+
+      const stressItem = new StatusTreeItem(
+        "Stress Test Background Processes",
+        vscode.TreeItemCollapsibleState.Expanded,
+        stressDescription,
+        new vscode.ThemeIcon("debug-alt"),
+        undefined,
+        undefined,
+        "stress"
+      );
+      stressItem.contextValue = "stress-background-group";
+
+      return Promise.resolve([companionItem, judgeItem, stressItem]);
     }
 
     // Children of "Judge Background Testcases"
@@ -106,9 +123,39 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
             title: "Open File",
             arguments: [vscode.Uri.file(file)],
           },
-          file
+          file,
+          "judge"
         );
         item.contextValue = "judge-background-file";
+        items.push(item);
+      }
+
+      // Sort by file name
+      items.sort((a, b) => a.label.localeCompare(b.label));
+      return Promise.resolve(items);
+    }
+
+    // Children of "Stress Test Background Processes"
+    if (element.label === "Stress Test Background Processes") {
+      const stressSessions = this._stressViewProvider.getRunningStressSessions();
+      const items: StatusTreeItem[] = [];
+
+      for (const file of stressSessions) {
+        const relativePath = vscode.workspace.asRelativePath(file);
+        const item = new StatusTreeItem(
+          relativePath,
+          vscode.TreeItemCollapsibleState.None,
+          "Running",
+          new vscode.ThemeIcon("loading~spin"),
+          {
+            command: "vscode.open",
+            title: "Open File",
+            arguments: [vscode.Uri.file(file)],
+          },
+          file,
+          "stress"
+        );
+        item.contextValue = "stress-background-file";
         items.push(item);
       }
 
