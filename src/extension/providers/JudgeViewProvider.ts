@@ -1051,6 +1051,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     await testcase.donePromise;
     testcase.donePromise = null;
+    this._onDidChangeBackgroundTasks.fire();
   }
 
   private async _run(uuid: string, bypassLimits: boolean): Promise<void> {
