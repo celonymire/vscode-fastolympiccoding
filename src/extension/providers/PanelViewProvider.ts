@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import type StressViewProvider from "./StressViewProvider";
 import { isListening, onDidChangeListening } from "../competitiveCompanion";
+import { getStatusBarItem } from "../statusBar";
 
 class StatusTreeItem extends vscode.TreeItem {
   constructor(
@@ -36,10 +37,60 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
     this._context.subscriptions.push(
       this._stressViewProvider.onDidChangeBackgroundTasks(() => this.refresh())
     );
+    this._updateStatus();
   }
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
+    this._updateStatus();
+  }
+
+  private _updateStatus() {
+    const statusBarItem = getStatusBarItem();
+    if (!statusBarItem) {
+      return;
+    }
+
+    const config = vscode.workspace.getConfiguration("fastolympiccoding");
+    const port = config.get<number>("port")!;
+    const listening = isListening();
+
+    // Status parts
+    const parts: string[] = [];
+
+    // Companion status
+    if (listening) {
+      parts.push(`$(broadcast) ${port}`);
+    }
+
+    // Judge status
+    const backgroundTasks = this._judgeViewProvider.getAllBackgroundTasks();
+    let totalRunningTests = 0;
+    for (const uuids of backgroundTasks.values()) {
+      totalRunningTests += uuids.length;
+    }
+
+    if (totalRunningTests > 0) {
+      parts.push(`$(run) ${totalRunningTests}`);
+    }
+
+    // Stress status
+    const stressSessions = this._stressViewProvider.getRunningStressSessions();
+    if (stressSessions.length > 0) {
+      parts.push(`$(debug-alt) ${stressSessions.length}`);
+    }
+
+    if (parts.length === 0) {
+      statusBarItem.text = "$(zap) Fast Olympic Coding";
+      statusBarItem.backgroundColor = undefined;
+    } else {
+      statusBarItem.text = `$(zap) Fast Olympic Coding: ${parts.join("  ")}`;
+      if (totalRunningTests > 0 || stressSessions.length > 0) {
+        statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+      } else {
+        statusBarItem.backgroundColor = undefined;
+      }
+    }
   }
 
   getTreeItem(element: StatusTreeItem): vscode.TreeItem {
