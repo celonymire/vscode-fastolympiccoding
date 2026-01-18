@@ -927,7 +927,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._saveTimer = setTimeout(() => {
       this._saveAllState();
       this._saveTimer = undefined;
-    }, 1000);
+    }, 200);
   }
 
   private _saveAllState() {
