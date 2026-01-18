@@ -39,7 +39,7 @@ class ReadonlyTerminal implements vscode.Pseudoterminal {
 
   constructor(private content: string) {}
 
-  open(_initialDimensions: vscode.TerminalDimensions | undefined): void {
+  open(): void {
     // Normalize newlines for terminal (LF -> CRLF)
     const normalized = this.content.replace(/\r?\n/g, "\r\n");
     this.writeEmitter.fire(normalized);
@@ -354,10 +354,8 @@ function resolveArrayVariables(
 function resolveObjectVariables(
   obj: Record<string, unknown>,
   inContextOfFile?: string,
-  extraVariables?: Record<string, string>,
-  propertyPath?: string
+  extraVariables?: Record<string, string>
 ): Record<string, unknown> {
-  void propertyPath; // suppress eslint
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
     // Pass the current key as propertyName to child resolution
@@ -397,8 +395,7 @@ export function resolveVariables(
     return resolveObjectVariables(
       value as Record<string, unknown>,
       inContextOfFile,
-      extraVariables,
-      propertyName
+      extraVariables
     );
   }
   if (typeof value === "string") {

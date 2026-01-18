@@ -262,6 +262,8 @@
           }
         }}
       >
+        <!-- Safe: ansi-to-html has escapeXML:true which prevents XSS by escaping HTML entities -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html htmlValue}
       </div>
     {:else}

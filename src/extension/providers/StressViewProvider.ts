@@ -379,37 +379,40 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const judgeState = ctx.state.find((s) => s.state === "Judge")!;
 
     const addCompileTask = (state: State, filePath: string): Promise<CompilationResult> => {
-      return new Promise(async (resolve) => {
-        const compilePromise = compile(filePath, this._context);
-        if (!compilePromise) {
-          resolve({ code: 0, stdout: "", stderr: "" });
-          return;
-        }
-        if (this._currentFile === file) {
-          super._postMessage({
-            type: "STATUS",
-            id: state.state,
-            status: "COMPILING",
-          });
-          state.stdout.reset();
-          state.stderr.reset();
-        }
-        const res = await compilePromise;
-        if (res.code !== 0) {
-          state.status = "CE";
-          state.stdout.write(res.stdout, "final");
-          state.stderr.write(res.stderr, "final");
-          if (this._currentFile === file) {
-            super._postMessage({ type: "STATUS", id: state.state, status: "CE" });
+      const compilePromise = compile(filePath, this._context);
+      if (!compilePromise) {
+        return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+      }
+      if (this._currentFile === file) {
+        super._postMessage({
+          type: "STATUS",
+          id: state.state,
+          status: "COMPILING",
+        });
+        state.stdout.reset();
+        state.stderr.reset();
+      }
+      return compilePromise
+        .then((res) => {
+          if (res.code !== 0) {
+            state.status = "CE";
+            state.stdout.write(res.stdout, "final");
+            state.stderr.write(res.stderr, "final");
+            if (this._currentFile === file) {
+              super._postMessage({ type: "STATUS", id: state.state, status: "CE" });
+            }
+          } else {
+            state.status = "NA";
+            if (this._currentFile === file) {
+              super._postMessage({ type: "STATUS", id: state.state, status: "NA" });
+            }
           }
-        } else {
-          state.status = "NA";
-          if (this._currentFile === file) {
-            super._postMessage({ type: "STATUS", id: state.state, status: "NA" });
-          }
-        }
-        resolve(res);
-      });
+          return res;
+        })
+        .catch((err) => {
+          getLogger("stress").error(`Compile task rejected: ${err}`);
+          return { code: 1, stdout: "", stderr: `${err}` };
+        });
     };
 
     super._postMessage({
