@@ -486,7 +486,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this.requestSave();
   }
 
-  onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
+  async onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
+    if (msg.type !== "LOADED") {
+      await this._viewReady;
+    }
+
     switch (msg.type) {
       case "LOADED":
         this._resolveViewReady();
