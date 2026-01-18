@@ -265,7 +265,7 @@
   .state-badge {
     display: flex;
     align-items: center;
-    padding: 1px 6px;
+    padding: 0px 6px;
     border-radius: 11px;
     font-size: 15px;
     font-weight: bold;
