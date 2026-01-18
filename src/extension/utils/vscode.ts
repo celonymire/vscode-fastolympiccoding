@@ -341,9 +341,9 @@ function resolveArrayVariables(
   return array.map((item) => {
     const resolved = resolveVariables(item as never, inContextOfFile, extraVariables);
 
-    // Normalize all string items in command arrays
-    if (isCommandArray && typeof resolved === "string") {
-      return path.normalize(resolved);
+    // Command arrays must only contain strings
+    if (isCommandArray) {
+      return path.normalize(String(resolved));
     }
 
     return resolved;
