@@ -524,13 +524,14 @@ async function doCompile(
       const runnable = new Runnable();
       runnable.run(compileCommand, 0, 0);
 
+      let out = "";
       let err = "";
       runnable
         .on("stderr:data", (data) => {
           err += data;
         })
-        .on("stdout:data", () => {
-          // Ignore stdout but listener ensures stream flows (prevents huge stdout blocking process)
+        .on("stdout:data", (data) => {
+          out += data;
         })
         .on("error", (data) => {
           err += data.stack;
@@ -560,7 +561,20 @@ async function doCompile(
 
         // Ensure the pseudoterminal is opened before writing errors
         await dummy.ready;
+
+        const OSC_PROMPT = "\x1b]133;A\x07";
+        const OSC_COMMAND = "\x1b]133;B\x07";
+        const OSC_EXECUTED = "\x1b]133;C\x07";
+        const OSC_FINISHED = "\x1b]133;D";
+
+        dummy.write(`${OSC_PROMPT}${OSC_COMMAND}Compilation stdout${OSC_EXECUTED}\n`);
+        dummy.write(out);
+        dummy.write(`${OSC_FINISHED};0\x07\n`);
+
+        dummy.write(`${OSC_PROMPT}${OSC_COMMAND}Compilation stderr${OSC_EXECUTED}\n`);
         dummy.write(err);
+        dummy.write(`${OSC_FINISHED};${runnable.exitCode ?? 1}\x07\n`);
+
         return runnable.exitCode ?? 1;
       }
 

@@ -20,6 +20,7 @@
 - Don't save ongoing running statuses to avoid blocking interacting with testcase on malfunction
 - Removed unused save all functionality
 - Allow showing testcase details on compiler error status
+- Enhanced integrated view to display compilation output and errors
 
 ### Fixed
 
