@@ -3,6 +3,7 @@
 ### Added
 
 - Persistent sessions for running testcases and stress tester. Whenever the active editor changes, the previous session is saved and restored when the file is opened again
+- Default run and debug configurations for C++, Python, Java, Go, Rust, JavaScript, Haskell, Ruby, and C# (no default debug configurations for Kotlin due to breakpoints not functioning)
 - Ctrl+Enter hotkey to save currently edited textarea
 - Ctrl+Enter to append newline instead of sending current online input
 - Automatically show notification to check changelog when extension is updated

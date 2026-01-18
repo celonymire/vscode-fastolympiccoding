@@ -4,17 +4,60 @@ import * as vscode from "vscode";
 
 import { deepMerge } from "./utils/vscode";
 
+// FIXME: Kotlin debugging doesn't work well with single files.
+// Remove all debugging configurations for Kotlin for now
+
+const gdbAttachDebugConfig = {
+  debugCommand: [
+    "gdbserver",
+    "localhost:${debugPort}",
+    "${fileDirname}/${fileBasenameNoExtension}",
+  ],
+  debugAttachConfig: "GDB: Attach",
+};
+const javaAttachDebugConfig = {
+  debugCommand: [
+    "java",
+    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}",
+    "-cp",
+    "${fileDirname}",
+    "${fileBasenameNoExtension}",
+  ],
+  debugAttachConfig: "Java: Attach",
+};
+
 const languageTemplates: Record<string, object> = {
-  "C++": {
+  "C++ (GCC)": {
     ".cpp": {
-      compileCommand: ["g++", "${file}", "-o", "${fileDirname}/${fileBasenameNoExtension}"],
+      compileCommand: ["g++", "${file}", "-g", "-o", "${fileDirname}/${fileBasenameNoExtension}"],
       runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
-      debugCommand: [
-        "gdbserver",
-        "localhost:${debugPort}",
+      ...gdbAttachDebugConfig,
+    },
+  },
+  "C++ (Clang)": {
+    ".cpp": {
+      compileCommand: [
+        "clang++",
+        "${file}",
+        "-g",
+        "-o",
         "${fileDirname}/${fileBasenameNoExtension}",
       ],
-      debugAttachConfig: "C++: Attach",
+      runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
+      ...gdbAttachDebugConfig,
+    },
+  },
+  "C++ (MSVC)": {
+    ".cpp": {
+      compileCommand: [
+        "cl",
+        "/EHsc",
+        "${file}",
+        "/Fe:${fileDirname}/${fileBasenameNoExtension}.exe",
+      ],
+      runCommand: ["${fileDirname}/${fileBasenameNoExtension}.exe"],
+      debugCommand: ["${fileDirname}/${fileBasenameNoExtension}.exe"],
+      debugAttachConfig: "C++ (MSVC): Attach",
     },
   },
   Python: {
@@ -32,31 +75,127 @@ const languageTemplates: Record<string, object> = {
       debugAttachConfig: "Python: Attach",
     },
   },
+  PyPy: {
+    ".py": {
+      runCommand: ["pypy3", "${file}"],
+    },
+  },
   Java: {
     ".java": {
-      compileCommand: ["javac", "${file}"],
+      compileCommand: ["javac", "-g", "${file}"],
       runCommand: ["java", "-cp", "${fileDirname}", "${fileBasenameNoExtension}"],
+      ...javaAttachDebugConfig,
+    },
+  },
+  Go: {
+    ".go": {
+      compileCommand: ["go", "build", "-o", "${fileDirname}/${fileBasenameNoExtension}", "${file}"],
+      runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
       debugCommand: [
-        "java",
-        "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}",
-        "-cp",
-        "${fileDirname}",
-        "${fileBasenameNoExtension}",
+        "dlv",
+        "debug",
+        "--headless",
+        "--listen=localhost:${debugPort}",
+        "--api-version=2",
+        "--accept-multiclient",
+        "${file}",
       ],
-      debugAttachConfig: "Java: Attach",
+      debugAttachConfig: "Go: Attach",
+    },
+  },
+  Rust: {
+    ".rs": {
+      compileCommand: ["rustc", "${file}", "-g", "-o", "${fileDirname}/${fileBasenameNoExtension}"],
+      runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
+      ...gdbAttachDebugConfig,
+    },
+  },
+  JavaScript: {
+    ".js": {
+      runCommand: ["node", "${file}"],
+      debugCommand: ["node", "--inspect-brk=localhost:${debugPort}", "${file}"],
+      debugAttachConfig: "JavaScript: Attach",
+    },
+  },
+  Haskell: {
+    ".hs": {
+      compileCommand: [
+        "ghc",
+        "${file}",
+        "-O",
+        "-g",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}",
+      ],
+      runCommand: ["${fileDirname}/${fileBasenameNoExtension}"],
+      ...gdbAttachDebugConfig,
+    },
+  },
+  Ruby: {
+    ".rb": {
+      runCommand: ["ruby", "${file}"],
+      debugCommand: ["rdbg", "--open", "--port", "${debugPort}", "--", "${file}"],
+      debugAttachConfig: "Ruby: Attach",
+    },
+  },
+  "C#": {
+    ".cs": {
+      compileCommand: [
+        "csc",
+        "-debug",
+        "/out:${fileDirname}/${fileBasenameNoExtension}.exe",
+        "${file}",
+      ],
+      runCommand: ["mono", "${fileDirname}/${fileBasenameNoExtension}.exe"],
+      debugCommand: [
+        "mono",
+        "--debug",
+        "--debugger-agent=transport=dt_socket,server=y,address=127.0.0.1:${debugPort},suspend=y",
+        "${fileDirname}/${fileBasenameNoExtension}.exe",
+      ],
+      debugAttachConfig: "C#: Attach",
+    },
+  },
+  Kotlin: {
+    ".kt": {
+      compileCommand: [
+        "kotlinc",
+        "${file}",
+        "-include-runtime",
+        "-d",
+        "${fileDirname}/${fileBasenameNoExtension}.jar",
+      ],
+      runCommand: ["java", "-jar", "${fileDirname}/${fileBasenameNoExtension}.jar"],
     },
   },
 };
 
+const gdbAttachConfig = {
+  name: "GDB: Attach",
+  type: "gdb",
+  request: "attach",
+  executable: "${fileDirname}/${fileBasenameNoExtension}",
+  target: ":${debugPort}",
+  remote: true,
+  cwd: "${workspaceFolder}",
+  valuesFormatting: "prettyPrinters",
+};
+const javaAttachConfig = {
+  name: "Java: Attach",
+  type: "java",
+  request: "attach",
+  hostName: "localhost",
+  port: "${debugPort}",
+};
+
 const launchTemplates: Record<string, vscode.DebugConfiguration> = {
-  "C++": {
-    name: "C++: Attach",
-    type: "cppdbg",
-    request: "launch",
-    MIMode: "gdb",
-    miDebuggerServerAddress: "localhost:${debugPort}",
-    program: "${fileDirname}/${fileBasenameNoExtension}",
-    cwd: "${fileDirname}",
+  "C++ (GCC)": gdbAttachConfig,
+  "C++ (Clang)": gdbAttachConfig,
+  "C++ (MSVC)": {
+    name: "C++ (MSVC): Attach",
+    type: "cppvsdbg",
+    request: "attach",
+    processId: "${debugPid}",
   },
   Python: {
     name: "Python: Attach",
@@ -67,19 +206,54 @@ const launchTemplates: Record<string, vscode.DebugConfiguration> = {
       port: "${debugPort}",
     },
   },
-  Java: {
-    name: "Java: Attach",
-    type: "java",
+  Java: javaAttachConfig,
+  Go: {
+    name: "Go: Attach",
+    type: "go",
     request: "attach",
-    hostName: "localhost",
+    mode: "remote",
+    port: "${debugPort}",
+    host: "localhost",
+  },
+  Rust: gdbAttachConfig,
+  JavaScript: {
+    name: "JavaScript: Attach",
+    type: "node",
+    request: "attach",
+    port: "${debugPort}",
+    address: "localhost",
+    continueOnAttach: true,
+  },
+  "C#": {
+    name: "C#: Attach",
+    type: "mono",
+    request: "attach",
+    address: "localhost",
     port: "${debugPort}",
   },
+  Ruby: {
+    name: "Ruby: Attach",
+    type: "rdbg",
+    request: "attach",
+    debugPort: "${debugPort}",
+    localfs: true,
+  },
+  Haskell: gdbAttachConfig,
 };
 
 const recommendedDebugExtensions: Record<string, string> = {
-  "C++": "webfreak.debug",
+  "C++ (GCC)": "webfreak.debug",
+  "C++ (Clang)": "webfreak.debug",
+  "C++ (MSVC)": "ms-vscode.cpptools",
   Python: "ms-python.python",
+  PyPy: "ms-python.python",
   Java: "redhat.java",
+  Go: "golang.go",
+  Rust: "webfreak.debug",
+  JavaScript: "ms-vscode.js-debug",
+  Haskell: "webfreak.debug",
+  Ruby: "KoichiSasada.vscode-rdbg",
+  "C#": "ms-vscode.mono-debug",
 };
 
 function getDefaultTemplatesPreview(): Record<string, object> {
