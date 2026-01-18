@@ -1095,7 +1095,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           resolve();
           return;
         }
-        const extraVariables = { debugPort: String(debugPort) };
+        const extraVariables: Record<string, string> = { debugPort: String(debugPort) };
 
         const ctx = await this._getExecutionContext(uuid, extraVariables);
         if (!ctx || !this._currentFile) {
@@ -1176,7 +1176,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
 
         // resolve the values in the attach configuration
-        const resolvedConfig = resolveVariables(attachConfig, this._currentFile, extraVariables);
+        if (ctx.testcase.process.pid) {
+          extraVariables.debugPid = String(ctx.testcase.process.pid);
+        }
+        const resolvedConfig = resolveVariables(
+          attachConfig,
+          this._currentFile,
+          extraVariables
+        ) as vscode.DebugConfiguration;
 
         // Tag this debug session so we can identify which testcase is being debugged.
         // VS Code preserves custom fields on session.configuration.
