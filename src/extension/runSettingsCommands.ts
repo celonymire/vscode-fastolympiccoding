@@ -47,19 +47,6 @@ const languageTemplates: Record<string, object> = {
       ...gdbAttachDebugConfig,
     },
   },
-  "C++ (MSVC)": {
-    ".cpp": {
-      compileCommand: [
-        "cl",
-        "/EHsc",
-        "${file}",
-        "/Fe:${fileDirname}/${fileBasenameNoExtension}.exe",
-      ],
-      runCommand: ["${fileDirname}/${fileBasenameNoExtension}.exe"],
-      debugCommand: ["${fileDirname}/${fileBasenameNoExtension}.exe"],
-      debugAttachConfig: "C++ (MSVC): Attach",
-    },
-  },
   Python: {
     ".py": {
       runCommand: ["python", "${file}"],
@@ -191,12 +178,6 @@ const javaAttachConfig = {
 const launchTemplates: Record<string, vscode.DebugConfiguration> = {
   "C++ (GCC)": gdbAttachConfig,
   "C++ (Clang)": gdbAttachConfig,
-  "C++ (MSVC)": {
-    name: "C++ (MSVC): Attach",
-    type: "cppvsdbg",
-    request: "attach",
-    processId: "${debugPid}",
-  },
   Python: {
     name: "Python: Attach",
     type: "python",
@@ -244,7 +225,6 @@ const launchTemplates: Record<string, vscode.DebugConfiguration> = {
 const recommendedDebugExtensions: Record<string, string> = {
   "C++ (GCC)": "webfreak.debug",
   "C++ (Clang)": "webfreak.debug",
-  "C++ (MSVC)": "ms-vscode.cpptools",
   Python: "ms-python.python",
   PyPy: "ms-python.python",
   Java: "redhat.java",
