@@ -60,7 +60,7 @@ export class ReadonlyTerminal implements vscode.Pseudoterminal {
 
   write(text: string): void {
     // VSCode requires \r\n for newline, but keep existing \r\n
-    const normalized = text.replace(/\n/g, "\r\n");
+    const normalized = text.replace(/\r?\n/g, "\r\n");
     if (!this._opened) {
       this._buffer.push(normalized);
       return;
