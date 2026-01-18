@@ -7,6 +7,7 @@
 - Ctrl+Enter to append newline instead of sending current online input
 - Automatically show notification to check changelog when extension is updated
 - Option to create file directly from the error popup if it doesn't exist
+- `${debugPid}` for PID of the process for debugging
 - Example debug command and attach configurations for C++, Python, and Java as well as convenient ways to automatically add them to launch.json file
 
 ### Changed
