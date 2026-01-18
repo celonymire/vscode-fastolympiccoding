@@ -463,7 +463,7 @@
     "globals": "^16.5.0",
     "node-addon-api": "^8.5.0",
     "node-api-headers": "^1.7.0",
-    "node-gyp": "^10.1.0",
+    "node-gyp": "^12.1.0",
     "prettier": "3.6.2",
     "prettier-plugin-svelte": "^3.4.0",
     "svelte": "^5.46.0",
