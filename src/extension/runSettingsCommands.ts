@@ -481,7 +481,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
 
         const languageList = languageChoices.join(", ");
         void vscode.window.showInformationMessage(
-          `Added ${languageList} template${languageChoices.length > 1 ? "s" : ""} to run settings`
+          `Merged ${languageList} template${languageChoices.length > 1 ? "s" : ""} to run settings`
         );
       }
     )
