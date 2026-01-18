@@ -185,6 +185,20 @@
             {/snippet}
           </AutoresizeTextarea>
         {/if}
+      {:else}
+        <AutoresizeTextarea
+          value={testcase.stderr}
+          readonly
+          hiddenOnEmpty
+          variant="stderr"
+          onexpand={() => handleExpandStdio("STDERR")}
+        />
+        <AutoresizeTextarea
+          value={testcase.stdout}
+          readonly
+          hiddenOnEmpty
+          onexpand={() => handleExpandStdio("STDOUT")}
+        />
       {/if}
     {/if}
   </div>

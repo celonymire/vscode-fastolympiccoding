@@ -23,6 +23,7 @@ import type { RunTermination, Severity } from "../utils/runtime";
 import {
   getFileRunSettings,
   openInNewEditor,
+  openInTerminalTab,
   ReadonlyStringProvider,
   resolveVariables,
   showOpenRunSettingsErrorWindow,
@@ -197,9 +198,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
       compilePromises.push(interactorCompilePromise);
     }
-    const errored = await Promise.all(compilePromises);
-    const anyErrored = errored.some((hadError) => hadError);
-    if (anyErrored) {
+    const results = await Promise.all(compilePromises);
+    const compilationError = results.find((r) => r.code !== 0);
+    if (compilationError) {
       testcase.status = "CE";
       super._postMessage({
         type: "SET",
@@ -207,6 +208,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         property: "status",
         value: "CE",
       });
+      super._postMessage({
+        type: "SET",
+        uuid,
+        property: "stdout",
+        value: "",
+      });
+      super._postMessage({
+        type: "SET",
+        uuid,
+        property: "stderr",
+        value: "",
+      });
+      testcase.stdout.reset();
+      testcase.stderr.reset();
+      testcase.stdout.write(compilationError.stdout, "final");
+      testcase.stderr.write(compilationError.stderr, "final");
       return null;
     }
 
@@ -1356,10 +1373,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         void openInNewEditor(testcase.stdin.data);
         break;
       case "STDERR":
-        void openInNewEditor(testcase.stderr.data);
+        if (testcase.status === "CE") {
+          void openInTerminalTab(testcase.stderr.data, "Compilation Error");
+        } else {
+          void openInNewEditor(testcase.stderr.data);
+        }
         break;
       case "STDOUT":
-        void openInNewEditor(testcase.stdout.data);
+        if (testcase.status === "CE") {
+          void openInTerminalTab(testcase.stdout.data, "Compilation Output");
+        } else {
+          void openInNewEditor(testcase.stdout.data);
+        }
         break;
       case "ACCEPTED_STDOUT":
         void openInNewEditor(testcase.acceptedStdout.data);

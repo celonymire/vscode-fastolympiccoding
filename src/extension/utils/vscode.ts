@@ -31,45 +31,23 @@ const STRING_PATH_PROPERTIES = new Set([
  */
 const COMMAND_ARRAY_PROPERTIES = new Set(["compileCommand", "runCommand", "debugCommand"]);
 
-export class ReadonlyTerminal implements vscode.Pseudoterminal {
-  private _writeEmitter: vscode.EventEmitter<string> = new vscode.EventEmitter();
-  private _closeEmitter: vscode.EventEmitter<number> = new vscode.EventEmitter();
-  private _readyResolver: (() => void) | undefined = undefined;
-  private _ready: Promise<void>;
-  private _buffer: string[] = [];
-  private _opened = false;
+class ReadonlyTerminal implements vscode.Pseudoterminal {
+  private readonly writeEmitter = new vscode.EventEmitter<string>();
+  onDidWrite = this.writeEmitter.event;
+  private readonly closeEmitter = new vscode.EventEmitter<number>();
+  onDidClose = this.closeEmitter.event;
 
-  onDidWrite: vscode.Event<string> = this._writeEmitter.event;
-  onDidClose: vscode.Event<number> = this._closeEmitter.event;
-  get ready(): Promise<void> {
-    return this._ready;
-  }
+  constructor(private content: string) {}
 
-  constructor() {
-    this._ready = new Promise<void>((resolve) => {
-      this._readyResolver = resolve;
-    });
-  }
-
-  open(): void {
-    this._opened = true;
-    this._readyResolver?.();
-    this._buffer.forEach((text) => this._writeEmitter.fire(text));
-    this._buffer = [];
-  }
-
-  write(text: string): void {
-    // VSCode requires \r\n for newline, but keep existing \r\n
-    const normalized = text.replace(/\r?\n/g, "\r\n");
-    if (!this._opened) {
-      this._buffer.push(normalized);
-      return;
-    }
-    this._writeEmitter.fire(normalized);
+  open(_initialDimensions: vscode.TerminalDimensions | undefined): void {
+    // Normalize newlines for terminal (LF -> CRLF)
+    const normalized = this.content.replace(/\r?\n/g, "\r\n");
+    this.writeEmitter.fire(normalized);
   }
 
   close(): void {
-    this._closeEmitter.fire(0);
+    this.writeEmitter.dispose();
+    this.closeEmitter.dispose();
   }
 }
 
@@ -231,6 +209,29 @@ export class ReadonlyStringProvider implements vscode.TextDocumentContentProvide
     const id = uri.path.replace(/^\/data-/, "");
     return ReadonlyStringProvider._contents.get(id);
   }
+}
+
+/**
+ * Opens content in a read-only text document.
+ */
+export async function openInNewEditor(content: string): Promise<void> {
+  const uri = ReadonlyStringProvider.createUri(content);
+  const document = await vscode.workspace.openTextDocument(uri);
+  vscode.window.showTextDocument(document);
+}
+
+/**
+ * Opens content in a read-only terminal tab (using VS Code's native terminal).
+ * This supports ANSI colors and native clickable file links.
+ */
+export function openInTerminalTab(content: string, title: string = "Output") {
+  const pty = new ReadonlyTerminal(content);
+  const terminal = vscode.window.createTerminal({
+    name: title,
+    pty,
+    location: vscode.TerminalLocation.Editor,
+  });
+  terminal.show();
 }
 
 function getRelativeFileDirname(relativeFilePath: string | undefined): string {
@@ -404,12 +405,6 @@ export function resolveVariables(
     return resolveStringVariables(value, inContextOfFile, extraVariables, propertyName);
   }
   return value;
-}
-
-export async function openInNewEditor(content: string): Promise<void> {
-  const uri = ReadonlyStringProvider.createUri(content);
-  const document = await vscode.workspace.openTextDocument(uri);
-  vscode.window.showTextDocument(document);
 }
 
 const _runSettingsCache = new Map<string, Record<string, unknown>>();

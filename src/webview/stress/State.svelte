@@ -144,6 +144,14 @@
         </div>
       </div>
     </div>
+    <AutoresizeTextarea
+      value={state.stderr}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea value={state.stdout} readonly hiddenOnEmpty onexpand={handleViewStdout} />
   </div>
 {:else}
   <div class="state-container">

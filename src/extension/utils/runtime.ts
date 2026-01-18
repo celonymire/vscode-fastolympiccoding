@@ -6,7 +6,7 @@ import os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { getFileRunSettings, ReadonlyTerminal } from "./vscode";
+import { getFileRunSettings } from "./vscode";
 import { getLogger } from "./logging";
 import type { Status } from "../../shared/enums";
 import type { LanguageSettings } from "../../shared/schemas";
@@ -493,15 +493,21 @@ export async function getFileChecksum(file: string): Promise<string> {
   return crypto.createHash("md5").update(content).digest("hex");
 }
 
+export type CompilationResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+};
+
 async function doCompile(
   file: string,
   compileCommand: string[],
   context: vscode.ExtensionContext
-): Promise<number> {
+): Promise<CompilationResult> {
   const currentChecksum = await getFileChecksum(file);
   const [cachedChecksum, cachedCommand] = lastCompiled.get(file) ?? [-1, []];
   if (currentChecksum === cachedChecksum && arrayEquals(compileCommand, cachedCommand)) {
-    return 0; // avoid unnecessary recompilation
+    return { code: 0, stdout: "", stderr: "" }; // avoid unnecessary recompilation
   }
 
   let promise = compilePromise.get(file);
@@ -538,8 +544,7 @@ async function doCompile(
         });
 
       const termination = await runnable.done;
-      // runnable.cleanup(); // Handled internally
-      await runnable.dispose();
+      runnable.dispose();
       compilationStatusItem.dispose();
 
       const status = mapCompilationTermination(termination);
@@ -547,55 +552,31 @@ async function doCompile(
         logger.error(
           `Compilation failed (file=${file}, command=${compileCommand}, exitCode=${runnable.exitCode}, termination=${termination}, stderr=${err.substring(0, 500)})`
         );
-
-        const dummy = new ReadonlyTerminal();
-        const terminal = vscode.window.createTerminal({
-          name: path.basename(file),
-          pty: dummy,
-          iconPath: { id: "zap" },
-          location: { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-        });
-        errorTerminal.set(file, terminal);
-
-        terminal.show(true);
-
-        // Ensure the pseudoterminal is opened before writing errors
-        await dummy.ready;
-
-        const OSC_PROMPT = "\x1b]133;A\x07";
-        const OSC_COMMAND = "\x1b]133;B\x07";
-        const OSC_EXECUTED = "\x1b]133;C\x07";
-        const OSC_FINISHED = "\x1b]133;D";
-
-        dummy.write(`${OSC_PROMPT}${OSC_COMMAND}Compilation stdout${OSC_EXECUTED}\n`);
-        dummy.write(out);
-        dummy.write(`${OSC_FINISHED};0\x07\n`);
-
-        dummy.write(`${OSC_PROMPT}${OSC_COMMAND}Compilation stderr${OSC_EXECUTED}\n`);
-        dummy.write(err);
-        dummy.write(`${OSC_FINISHED};${runnable.exitCode ?? 1}\x07\n`);
-
-        return runnable.exitCode ?? 1;
+      } else {
+        lastCompiled.set(file, [currentChecksum, compileCommand]);
       }
 
-      lastCompiled.set(file, [currentChecksum, compileCommand]);
-      return 0;
+      return {
+        code: runnable.exitCode ?? 1,
+        stdout: out,
+        stderr: err,
+      };
     })();
     compilePromise.set(file, promise);
   }
 
-  const code = await promise;
+  const result = await promise;
   compilePromise.delete(file);
-  return code;
+  return result;
 }
 
-const errorTerminal: Map<string, vscode.Terminal> = new Map();
 const lastCompiled: Map<string, [string, string[]]> = new Map(); // [file checksum, compile command]
-const compilePromise: Map<string, Promise<number>> = new Map();
+const compilePromise: Map<string, Promise<CompilationResult>> = new Map();
 
-export function compile(file: string, context: vscode.ExtensionContext): Promise<number> | null {
-  errorTerminal.get(file)?.dispose();
-
+export function compile(
+  file: string,
+  context: vscode.ExtensionContext
+): Promise<CompilationResult> | null {
   const settings = getFileRunSettings(file);
   if (!settings) {
     return null;
@@ -604,7 +585,7 @@ export function compile(file: string, context: vscode.ExtensionContext): Promise
   const extension = path.extname(file);
   const languageSettings = settings[extension] as LanguageSettings;
   if (!languageSettings.compileCommand) {
-    return Promise.resolve(0);
+    return Promise.resolve({ code: 0, stdout: "", stderr: "" });
   }
   return doCompile(file, languageSettings.compileCommand, context);
 }

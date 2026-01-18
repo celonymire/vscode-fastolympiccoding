@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import Convert from "ansi-to-html";
 
   type Variant = "default" | "stderr" | "accepted" | "active" | "interactor-secret";
 
@@ -45,6 +46,32 @@
   let showEditButtons = $state(false);
 
   let canvasContext: CanvasRenderingContext2D | null = null;
+
+  // Just use the standard 16 colors and let CSS handle the rest.
+  const convert = new Convert({
+    fg: "var(--vscode-editor-foreground)",
+    bg: "var(--vscode-editor-background)",
+    stream: false,
+    escapeXML: true,
+    colors: {
+      0: "var(--vscode-terminal-ansiBlack)",
+      1: "var(--vscode-terminal-ansiRed)",
+      2: "var(--vscode-terminal-ansiGreen)",
+      3: "var(--vscode-terminal-ansiYellow)",
+      4: "var(--vscode-terminal-ansiBlue)",
+      5: "var(--vscode-terminal-ansiMagenta)",
+      6: "var(--vscode-terminal-ansiCyan)",
+      7: "var(--vscode-terminal-ansiWhite)",
+      8: "var(--vscode-terminal-ansiBrightBlack)",
+      9: "var(--vscode-terminal-ansiBrightRed)",
+      10: "var(--vscode-terminal-ansiBrightGreen)",
+      11: "var(--vscode-terminal-ansiBrightYellow)",
+      12: "var(--vscode-terminal-ansiBrightBlue)",
+      13: "var(--vscode-terminal-ansiBrightMagenta)",
+      14: "var(--vscode-terminal-ansiBrightCyan)",
+      15: "var(--vscode-terminal-ansiBrightWhite)",
+    },
+  });
 
   function checkCursorOverlap() {
     if (!textarea || !actionButtonsElement) return;
@@ -214,6 +241,7 @@
 
   const hasValue = $derived(!!value && value !== "\n");
   const hidden = $derived(hiddenOnEmpty && !hasValue);
+  const htmlValue = $derived(hasValue ? convert.toHtml(value) : placeholder);
 </script>
 
 {#if !hidden}
@@ -234,7 +262,7 @@
           }
         }}
       >
-        {hasValue ? value : placeholder}
+        {@html htmlValue}
       </div>
     {:else}
       <textarea
