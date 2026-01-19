@@ -116,6 +116,8 @@ The extension typically attaches the debugger to an existing process, which allo
 2. Detects when the debugging server fails to launch at the chosen port within a timeframe
 3. Frees the port when error occurs
 
+**We also have `${debugPid}` for PID of the process for other debugging configurations without a server.**
+
 **‼️NOT ALL DEBUGGERS ARE EQUAL!** Between debugging servers for the same language, they may not have the same set of features or work the same way! Same warning applies to VSCode debugger extensions!
 
 ![Debugging Gif](media/debugging.gif)

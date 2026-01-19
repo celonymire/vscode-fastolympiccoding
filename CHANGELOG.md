@@ -18,11 +18,9 @@
 - Changes are debounced on judge prevent rapid IO bottlenecks
 - Trim off trailing whitespaces when requesting full data
 - Don't save ongoing running statuses to avoid blocking interacting with testcase on malfunction
-- Removed unused save all functionality
 - Allow showing testcase details on compiler error status
 - Enhanced integrated view to display compilation output and errors
 - Made the bubble texts in the UI more compact
-- Removed custom caret placing from the textarea because it acts inconsistently with the custom truncated display of IO texts
 
 ### Fixed
 
@@ -37,3 +35,5 @@
 ### Removed
 
 - Walkthrough. It never showed up by itself and was only accessible through the command palette. The README already covers majority of the information and the built-in error messages help fill in the necessary information.
+- Removed unused save all functionality
+- Removed custom caret placing from the textarea because it acts inconsistently with the custom truncated display of IO texts
