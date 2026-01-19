@@ -22,6 +22,7 @@
 - Allow showing testcase details on compiler error status
 - Enhanced integrated view to display compilation output and errors
 - Made the bubble texts in the UI more compact
+- Removed custom caret placing from the textarea because it acts inconsistently with the custom truncated display of IO texts
 
 ### Fixed
 

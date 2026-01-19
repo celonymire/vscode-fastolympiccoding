@@ -40,7 +40,6 @@
   let containerElement: HTMLDivElement | undefined = $state();
   let actionButtonsElement: HTMLDivElement | undefined = $state();
   let isHovered = $state();
-  let initialCursorPosition = $state(0);
   let cursorOverlapsActions = $state(false);
   let showExpandButton = $state(false);
   let showEditButtons = $state(false);
@@ -173,21 +172,6 @@
 
   function handleTextareaTransition(event?: MouseEvent) {
     if (!readonly) {
-      if (event instanceof MouseEvent && value) {
-        // caretPositionFromPoint is a VERY new function (December 2025!) so fallback to VSCode's
-        // older caretRangeFromPoint (which is deprecated but still widely supported)
-        if (typeof (document as any).caretPositionFromPoint === "function") {
-          const position = (document as any).caretPositionFromPoint(event.clientX, event.clientY);
-          initialCursorPosition = position?.offset ?? value.length;
-        } else if (typeof document.caretRangeFromPoint === "function") {
-          const range = document.caretRangeFromPoint(event.clientX, event.clientY);
-          initialCursorPosition = range?.startOffset ?? value.length;
-        } else {
-          initialCursorPosition = value.length;
-        }
-      } else {
-        initialCursorPosition = value?.length ?? 0;
-      }
       editing = true;
       onpreedit?.();
     }
@@ -196,8 +180,6 @@
   $effect(() => {
     if (editing && textarea && document.activeElement !== textarea) {
       textarea.focus();
-      const pos = Math.min(initialCursorPosition, value?.length ?? 0);
-      textarea.setSelectionRange(pos, pos);
     }
   });
 
