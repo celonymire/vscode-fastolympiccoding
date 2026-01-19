@@ -85,14 +85,17 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       statusBarItem.backgroundColor = undefined;
     } else {
       let icon;
+      let tooltip;
       if (totalRunningTests > 0 || stressSessions.length > 0) {
         icon = "$(loading~spin)";
+        tooltip = "View currently running sessions";
         statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
       } else {
         icon = "$(zap)";
         statusBarItem.backgroundColor = undefined;
       }
       statusBarItem.text = `${icon} Fast Olympic Coding: ${parts.join("  ")}`;
+      statusBarItem.tooltip = tooltip;
     }
   }
 
