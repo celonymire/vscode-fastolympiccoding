@@ -170,7 +170,7 @@
     }
   }
 
-  function handleTextareaTransition(event?: MouseEvent) {
+  function handleTextareaTransition() {
     if (!readonly) {
       editing = true;
       onpreedit?.();
