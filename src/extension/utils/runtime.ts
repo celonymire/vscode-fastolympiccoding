@@ -199,6 +199,7 @@ export class Runnable extends EventEmitter {
   private _maxMemoryBytes = 0;
   private _memoryLimitExceeded = false;
   private _stopped = false;
+  private _termination: RunTermination = "exit";
   private _cancel: (() => void) | undefined;
 
   private _pipeServers: [net.Server, net.Server, net.Server] | null = null;
@@ -243,6 +244,7 @@ export class Runnable extends EventEmitter {
     this._memoryLimitExceeded = result.memoryLimitExceeded;
     this._stopped = result.stopped;
     this._exitCode = result.exitCode;
+    this._termination = this._computeTermination();
   }
 
   run(command: string[], timeout: number, memoryLimit: number, cwd?: string) {
@@ -258,6 +260,7 @@ export class Runnable extends EventEmitter {
     this._maxMemoryBytes = 0;
     this._memoryLimitExceeded = false;
     this._stopped = false;
+    this._termination = "exit";
     this.pid = undefined;
     this.stdin = undefined;
     this.stdout = undefined;
@@ -395,12 +398,14 @@ export class Runnable extends EventEmitter {
                 resolve();
               })
               .catch((err: Error) => {
+                this._termination = "error";
                 this.emit("error", err);
                 this.emit("close", this._exitCode, null);
                 this._cleanup();
                 resolve();
               });
           } catch (e) {
+            this._termination = "error";
             this.emit("error", new Error(`${e}`));
             this.emit("close", this._exitCode, null);
             this._cleanup();
@@ -408,6 +413,7 @@ export class Runnable extends EventEmitter {
             resolve();
           }
         } else {
+          this._termination = "error";
           this.emit("error", new Error("Native addon not found"));
           this.emit("close", this._exitCode, null);
           this._cleanup();
@@ -436,9 +442,11 @@ export class Runnable extends EventEmitter {
   get spawned(): Promise<boolean> {
     return this._spawnPromise ?? Promise.resolve(false);
   }
-  get done(): Thenable<RunTermination> {
-    const promise = this._promise ?? Promise.resolve();
-    return promise.then(() => this._computeTermination());
+  get done(): Promise<void> {
+    return this._promise ?? Promise.resolve();
+  }
+  get termination(): RunTermination {
+    return this._termination;
   }
 
   stop() {
@@ -543,14 +551,14 @@ async function doCompile(
           err += data.stack;
         });
 
-      const termination = await runnable.done;
+      await runnable.done;
       runnable.dispose();
       compilationStatusItem.dispose();
 
-      const status = mapCompilationTermination(termination);
+      const status = mapCompilationTermination(runnable.termination);
       if (status === "CE" || status === "RE") {
         logger.error(
-          `Compilation failed (file=${file}, command=${compileCommand}, exitCode=${runnable.exitCode}, termination=${termination}, stderr=${err.substring(0, 500)})`
+          `Compilation failed (file=${file}, command=${compileCommand}, exitCode=${runnable.exitCode}, termination=${runnable.termination})`
         );
       } else {
         lastCompiled.set(file, [currentChecksum, compileCommand]);

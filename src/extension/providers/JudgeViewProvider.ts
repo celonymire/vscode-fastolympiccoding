@@ -170,6 +170,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return null;
     }
 
+    // Don't set compiling status to the testcase because if the user exits
+    // before the compile is finished, the testcase will be left in a compiling
+    // state.
     super._postMessage({
       type: "SET",
       uuid,
@@ -218,14 +221,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       testcase.stderr.write(compilationError.stderr, "final");
       return null;
     }
-
-    testcase.status = "NA";
-    super._postMessage({
-      type: "SET",
-      uuid,
-      property: "status",
-      value: "NA",
-    });
 
     let interactorArgs: string[] | null = null;
     if (testcase.mode === "interactive") {
@@ -350,12 +345,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           ctx.file
         );
       })
-      .on("close", async () => {
+      .on("close", () => {
         if (token.isCancellationRequested) {
           return;
         }
-        const termination = await testcase.process.done;
-        updateTestcaseFromTermination(testcase, termination);
+        updateTestcaseFromTermination(testcase, testcase.process.termination);
         super._postMessage(
           {
             type: "SET",
@@ -488,16 +482,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       );
     this._onDidChangeBackgroundTasks.fire();
 
-    const [termination, interactorTermination] = await Promise.all([
-      testcase.process.done,
-      testcase.interactorProcess.done,
-    ]);
+    await Promise.all([testcase.process.done, testcase.interactorProcess.done]);
 
     testcase.stdin.write("", "final");
     testcase.stderr.write("", "final");
     testcase.stdout.write("", "final");
 
-    updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
+    updateInteractiveTestcaseFromTermination(
+      testcase,
+      testcase.process.termination,
+      testcase.interactorProcess.termination
+    );
     super._postMessage(
       {
         type: "SET",
@@ -1219,8 +1214,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
 
         if (!allSpawned || ctx.token.isCancellationRequested) {
-          await ctx.testcase.process.done;
-          await ctx.testcase.interactorProcess.done;
           const logger = getLogger("judge");
           logger.error(`Debug process failed to spawn`);
           vscode.window.showErrorMessage(`Debug process failed to spawn`);
@@ -1261,8 +1254,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           this._stop(uuid);
         }
 
-        await testcase.process.done;
-        await testcase.interactorProcess.done;
+        await Promise.all([testcase.process.done, testcase.interactorProcess.done]);
         resolve();
       })();
     });
@@ -1442,7 +1434,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private async _save({ uuid, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
+  private _save({ uuid, stdio, data }: v.InferOutput<typeof SaveMessageSchema>) {
     const testcase = this._findTestcase(uuid);
     if (!testcase) {
       return;
@@ -1493,12 +1485,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     if (testcase.mode === "interactive") {
-      const termination = await testcase.process.done;
-      const interactorTermination = await testcase.interactorProcess.done;
-      updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
+      updateInteractiveTestcaseFromTermination(
+        testcase,
+        testcase.process.termination,
+        testcase.interactorProcess.termination
+      );
     } else {
-      const termination = await testcase.process.done;
-      updateTestcaseFromTermination(testcase, termination);
+      updateTestcaseFromTermination(testcase, testcase.process.termination);
     }
     super._postMessage({
       type: "SET",

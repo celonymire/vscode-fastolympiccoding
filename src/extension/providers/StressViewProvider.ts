@@ -498,8 +498,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       const executionPromise = (state: State) => {
         return new Promise<number>((resolve) => {
           void (async () => {
-            const termination = await state.process.done;
-            state.status = mapTestcaseTermination(termination);
+            await state.process.done;
+            state.status = mapTestcaseTermination(state.process.termination);
             super._postMessage(
               {
                 type: "STATUS",
@@ -508,7 +508,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
               },
               file
             );
-            resolve(terminationSeverityNumber(termination));
+            resolve(terminationSeverityNumber(state.process.termination));
           })();
         });
       };
@@ -837,7 +837,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private async _onStdoutEnd(file: string, stateId: StateId) {
+  private _onStdoutEnd(file: string, stateId: StateId) {
     const ctx = this._contexts.get(file);
     if (!ctx) return;
     const state = ctx.state.find((s) => s.state === stateId);
@@ -846,7 +846,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private async _onStderrData(file: string, stateId: StateId, data: string) {
+  private _onStderrData(file: string, stateId: StateId, data: string) {
     const ctx = this._contexts.get(file);
     if (!ctx) return;
     const state = ctx.state.find((s) => s.state === stateId);
@@ -855,7 +855,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private async _onStderrEnd(file: string, stateId: StateId) {
+  private _onStderrEnd(file: string, stateId: StateId) {
     const ctx = this._contexts.get(file);
     if (!ctx) return;
     const state = ctx.state.find((s) => s.state === stateId);
@@ -864,7 +864,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private async _onProcessClose(file: string, stateId: StateId, code: number | null) {
+  private _onProcessClose(file: string, stateId: StateId, code: number | null) {
     const ctx = this._contexts.get(file);
     if (!ctx) return;
     const state = ctx.state.find((s) => s.state === stateId);
