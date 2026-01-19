@@ -84,12 +84,15 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       statusBarItem.text = "$(zap) Fast Olympic Coding";
       statusBarItem.backgroundColor = undefined;
     } else {
-      statusBarItem.text = `$(zap) Fast Olympic Coding: ${parts.join("  ")}`;
+      let icon;
       if (totalRunningTests > 0 || stressSessions.length > 0) {
+        icon = "$(loading~spin)";
         statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
       } else {
+        icon = "$(zap)";
         statusBarItem.backgroundColor = undefined;
       }
+      statusBarItem.text = `${icon} Fast Olympic Coding: ${parts.join("  ")}`;
     }
   }
 
