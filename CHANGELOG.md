@@ -31,6 +31,7 @@
 - Compilation errors being double logged resulting in unhandled promise rejections
 - Interactor file compiling prematurely setting status of the testcase
 - Race condition due to unnecessary async calls causing status to be incorrect in few scenarios
+- Stress Tester would hang in some situations when some files returned with non-zero exit code
 
 ### Removed
 

@@ -794,7 +794,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (ctx) {
       for (const s of ctx.state) {
-        s.process.kill();
+        if (s.state !== stateId) {
+          s.process.stop();
+        }
       }
     }
   }
@@ -868,14 +870,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const ctx = this._contexts.get(file);
     if (!ctx) return;
     const state = ctx.state.find((s) => s.state === stateId);
-    if (state) {
-      state.stderr.write("", "final");
-    }
+    state?.stderr.write("", "final");
 
-    if (code !== 0 && code !== null) {
-      // Something went wrong
-      if (stateId === "Generator" || (ctx.interactiveMode && stateId === "Judge")) {
-        ctx.stopFlag = true;
+    if (code !== 0) {
+      for (const state of ctx.state) {
+        if (state.state !== stateId) {
+          state.process.stop();
+        }
       }
     }
   }
