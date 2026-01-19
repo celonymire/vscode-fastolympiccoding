@@ -87,6 +87,7 @@ type ExecutionContext = {
   languageSettings: LanguageSettings;
   interactorArgs: string[] | null;
   cwd?: string;
+  file: string;
 };
 
 function updateTestcaseFromTermination(state: State, termination: RunTermination) {
@@ -136,15 +137,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _onDidChangeBackgroundTasks = new vscode.EventEmitter<void>();
   readonly onDidChangeBackgroundTasks = this._onDidChangeBackgroundTasks.event;
-
-  private _viewReady!: Promise<void>;
-  private _resolveViewReady!: () => void;
-
-  private _resetViewReady() {
-    this._viewReady = new Promise<void>((resolve) => {
-      this._resolveViewReady = resolve;
-    });
-  }
 
   // Accessor for the current file's context
   private get _runtime(): RuntimeContext {
@@ -264,40 +256,53 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       languageSettings: settings.languageSettings,
       interactorArgs,
       cwd: settings.languageSettings.currentWorkingDirectory,
+      file: this._currentFile,
     };
   }
 
-  private _prepareRunningState(testcase: State) {
+  private _prepareRunningState(testcase: State, file: string) {
     testcase.status = "RUNNING";
-    super._postMessage({
-      type: "SET",
-      uuid: testcase.uuid,
-      property: "status",
-      value: "RUNNING",
-    });
-    if (testcase.mode === "interactive") {
-      testcase.stdin.reset();
-      super._postMessage({
+    super._postMessage(
+      {
         type: "SET",
         uuid: testcase.uuid,
-        property: "stdin",
-        value: "",
-      });
+        property: "status",
+        value: "RUNNING",
+      },
+      file
+    );
+    if (testcase.mode === "interactive") {
+      testcase.stdin.reset();
+      super._postMessage(
+        {
+          type: "SET",
+          uuid: testcase.uuid,
+          property: "stdin",
+          value: "",
+        },
+        file
+      );
     }
     testcase.stderr.reset();
-    super._postMessage({
-      type: "SET",
-      uuid: testcase.uuid,
-      property: "stderr",
-      value: "",
-    });
+    super._postMessage(
+      {
+        type: "SET",
+        uuid: testcase.uuid,
+        property: "stderr",
+        value: "",
+      },
+      file
+    );
     testcase.stdout.reset();
-    super._postMessage({
-      type: "SET",
-      uuid: testcase.uuid,
-      property: "stdout",
-      value: "",
-    });
+    super._postMessage(
+      {
+        type: "SET",
+        uuid: testcase.uuid,
+        property: "stdout",
+        value: "",
+      },
+      file
+    );
   }
 
   private async _launchTestcase(ctx: ExecutionContext, bypassLimits: boolean, debugMode: boolean) {
@@ -309,7 +314,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
-    this._prepareRunningState(testcase);
+    this._prepareRunningState(testcase, ctx.file);
 
     const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
     if (!runCommand) {
@@ -335,12 +340,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
-        super._postMessage({
-          type: "SET",
-          uuid: testcase.uuid,
-          property: "status",
-          value: "RE",
-        });
+        super._postMessage(
+          {
+            type: "SET",
+            uuid: testcase.uuid,
+            property: "status",
+            value: "RE",
+          },
+          ctx.file
+        );
       })
       .on("close", async () => {
         if (token.isCancellationRequested) {
@@ -348,24 +356,33 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
         const termination = await testcase.process.done;
         updateTestcaseFromTermination(testcase, termination);
-        super._postMessage({
-          type: "SET",
-          uuid: testcase.uuid,
-          property: "status",
-          value: testcase.status,
-        });
-        super._postMessage({
-          type: "SET",
-          uuid: testcase.uuid,
-          property: "elapsed",
-          value: testcase.elapsed,
-        });
-        super._postMessage({
-          type: "SET",
-          uuid: testcase.uuid,
-          property: "memoryBytes",
-          value: testcase.memoryBytes,
-        });
+        super._postMessage(
+          {
+            type: "SET",
+            uuid: testcase.uuid,
+            property: "status",
+            value: testcase.status,
+          },
+          ctx.file
+        );
+        super._postMessage(
+          {
+            type: "SET",
+            uuid: testcase.uuid,
+            property: "elapsed",
+            value: testcase.elapsed,
+          },
+          ctx.file
+        );
+        super._postMessage(
+          {
+            type: "SET",
+            uuid: testcase.uuid,
+            property: "memoryBytes",
+            value: testcase.memoryBytes,
+          },
+          ctx.file
+        );
       })
       .run(
         runCommand,
@@ -392,7 +409,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
     // we don't need to check debug command and config because they were checked at the caller
-    this._prepareRunningState(testcase);
+    this._prepareRunningState(testcase, ctx.file);
 
     const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
     if (!runCommand) {
@@ -481,36 +498,40 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.stdout.write("", "final");
 
     updateInteractiveTestcaseFromTermination(testcase, termination, interactorTermination);
-    super._postMessage({
-      type: "SET",
-      uuid: testcase.uuid,
-      property: "status",
-      value: testcase.status,
-    });
-    super._postMessage({
-      type: "SET",
-      uuid: testcase.uuid,
-      property: "elapsed",
-      value: testcase.elapsed,
-    });
-    super._postMessage({
-      type: "SET",
-      uuid: testcase.uuid,
-      property: "memoryBytes",
-      value: testcase.memoryBytes,
-    });
+    super._postMessage(
+      {
+        type: "SET",
+        uuid: testcase.uuid,
+        property: "status",
+        value: testcase.status,
+      },
+      ctx.file
+    );
+    super._postMessage(
+      {
+        type: "SET",
+        uuid: testcase.uuid,
+        property: "elapsed",
+        value: testcase.elapsed,
+      },
+      ctx.file
+    );
+    super._postMessage(
+      {
+        type: "SET",
+        uuid: testcase.uuid,
+        property: "memoryBytes",
+        value: testcase.memoryBytes,
+      },
+      ctx.file
+    );
     this._onDidChangeBackgroundTasks.fire();
     this.requestSave();
   }
 
-  async onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
-    if (msg.type !== "LOADED") {
-      await this._viewReady;
-    }
-
+  protected handleMessage(msg: v.InferOutput<typeof ProviderMessageSchema>) {
     switch (msg.type) {
       case "LOADED":
-        this._resolveViewReady();
         this.loadCurrentFileData();
         break;
       case "NEXT":
@@ -558,7 +579,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       }
     }
     this._onDidChangeBackgroundTasks.dispose();
-    this._resetViewReady();
 
     super.onDispose();
   }
@@ -588,7 +608,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })
     );
 
-    this._resetViewReady();
     this.onShow();
   }
 
@@ -652,8 +671,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     });
   }
 
-  protected override async _switchToFile(file: string) {
-    await this._viewReady;
+  protected override _switchToFile(file: string) {
     this._moveCurrentStateToBackground();
 
     // Ensure target context exists
@@ -669,7 +687,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       for (const rawTestcase of fileData.testcases) {
         try {
           const testcase = v.parse(TestcaseSchema, rawTestcase);
-          state.push(this._createTestcaseState(testcase.mode, testcase));
+          state.push(this._createTestcaseState(testcase.mode, testcase, file));
         } catch (e) {
           console.error("Failed to parse testcase", e);
         }
@@ -705,8 +723,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  protected override async _rehydrateWebviewFromState() {
-    await this._viewReady;
+  protected override _rehydrateWebviewFromState() {
     super._postMessage({
       type: "INITIAL_STATE",
       timeLimit: this._runtime.timeLimit,
@@ -966,17 +983,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _addTestcase(mode: Mode, testcase?: Partial<ITestcase>) {
-    const newState = this._createTestcaseState(mode, testcase);
+    const newState = this._createTestcaseState(mode, testcase, this._currentFile!);
     this._runtime.state.push(newState);
 
     return newState.uuid;
   }
 
-  private _createTestcaseState(mode: Mode, testcase?: Partial<ITestcase>) {
+  private _createTestcaseState(mode: Mode, testcase: Partial<ITestcase> | undefined, file: string) {
     const uuid = testcase?.uuid ?? crypto.randomUUID();
 
     // Create a new testcase in webview
-    super._postMessage({ type: "NEW", uuid });
+    super._postMessage({ type: "NEW", uuid }, file);
 
     const newTestcase: State = {
       uuid,
@@ -999,40 +1016,55 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     };
 
     newTestcase.stdin.callback = (data: string) =>
-      super._postMessage({
-        type: "STDIO",
-        uuid,
-        stdio: "STDIN",
-        data,
-      });
+      super._postMessage(
+        {
+          type: "STDIO",
+          uuid,
+          stdio: "STDIN",
+          data,
+        },
+        file
+      );
     newTestcase.stderr.callback = (data: string) =>
-      super._postMessage({
-        type: "STDIO",
-        uuid,
-        stdio: "STDERR",
-        data,
-      });
+      super._postMessage(
+        {
+          type: "STDIO",
+          uuid,
+          stdio: "STDERR",
+          data,
+        },
+        file
+      );
     newTestcase.stdout.callback = (data: string) =>
-      super._postMessage({
-        type: "STDIO",
-        uuid,
-        stdio: "STDOUT",
-        data,
-      });
+      super._postMessage(
+        {
+          type: "STDIO",
+          uuid,
+          stdio: "STDOUT",
+          data,
+        },
+        file
+      );
     newTestcase.acceptedStdout.callback = (data: string) =>
-      super._postMessage({
-        type: "STDIO",
-        uuid,
-        stdio: "ACCEPTED_STDOUT",
-        data,
-      });
+      super._postMessage(
+        {
+          type: "STDIO",
+          uuid,
+          stdio: "ACCEPTED_STDOUT",
+          data,
+        },
+        file
+      );
     newTestcase.interactorSecret.callback = (data: string) =>
-      super._postMessage({
-        type: "STDIO",
-        uuid,
-        stdio: "INTERACTOR_SECRET",
-        data,
-      });
+      super._postMessage(
+        {
+          type: "STDIO",
+          uuid,
+          stdio: "INTERACTOR_SECRET",
+          data,
+        },
+        file
+      );
 
     newTestcase.stdin.write(testcase?.stdin ?? "", testcase ? "final" : "batch");
     newTestcase.stderr.write(testcase?.stderr ?? "", testcase ? "final" : "batch");

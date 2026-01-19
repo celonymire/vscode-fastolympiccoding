@@ -103,7 +103,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  onMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
+  protected handleMessage(msg: v.InferOutput<typeof ProviderMessageSchema>): void {
     switch (msg.type) {
       case "LOADED":
         this.loadCurrentFileData();
@@ -230,14 +230,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     // Set up callbacks to send STDIO messages to webview if this is current file
     const updateWebview = (stdio: "STDIN" | "STDOUT" | "STDERR", data: string) => {
-      if (this._currentFile === file) {
-        super._postMessage({
+      super._postMessage(
+        {
           type: "STDIO",
           id,
           stdio,
           data,
-        });
-      }
+        },
+        file
+      );
     };
 
     state.stdin.callback = (data) => updateWebview("STDIN", data);
@@ -383,29 +384,26 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (!compilePromise) {
         return Promise.resolve({ code: 0, stdout: "", stderr: "" });
       }
-      if (this._currentFile === file) {
-        super._postMessage({
+      super._postMessage(
+        {
           type: "STATUS",
           id: state.state,
           status: "COMPILING",
-        });
-        state.stdout.reset();
-        state.stderr.reset();
-      }
+        },
+        file
+      );
+      state.stdout.reset();
+      state.stderr.reset();
       return compilePromise
         .then((res) => {
           if (res.code !== 0) {
             state.status = "CE";
             state.stdout.write(res.stdout, "final");
             state.stderr.write(res.stderr, "final");
-            if (this._currentFile === file) {
-              super._postMessage({ type: "STATUS", id: state.state, status: "CE" });
-            }
+            super._postMessage({ type: "STATUS", id: state.state, status: "CE" }, file);
           } else {
             state.status = "NA";
-            if (this._currentFile === file) {
-              super._postMessage({ type: "STATUS", id: state.state, status: "NA" });
-            }
+            super._postMessage({ type: "STATUS", id: state.state, status: "NA" }, file);
           }
           return res;
         })
@@ -415,9 +413,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         });
     };
 
-    super._postMessage({
-      type: "CLEAR",
-    });
+    super._postMessage(
+      {
+        type: "CLEAR",
+      },
+      file
+    );
     const results = await Promise.all([
       addCompileTask(generatorState, solutionSettings.generatorFile!),
       addCompileTask(solutionState, file),
@@ -437,21 +438,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const start = Date.now();
     while (!ctx.stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
-      if (this._currentFile === file) {
-        super._postMessage({ type: "CLEAR" });
-      }
+      super._postMessage({ type: "CLEAR" }, file);
       for (const state of ctx.state) {
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
 
-        if (this._currentFile === file) {
-          super._postMessage({
+        super._postMessage(
+          {
             type: "STATUS",
             id: state.state,
             status: "RUNNING",
-          });
-        }
+          },
+          file
+        );
       }
       const seed = crypto.randomBytes(8).readBigUInt64BE();
       ctx.interactiveSecretPromise = new Promise<void>((resolve) => {
@@ -500,13 +500,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           void (async () => {
             const termination = await state.process.done;
             state.status = mapTestcaseTermination(termination);
-            if (this._currentFile === file) {
-              super._postMessage({
+            super._postMessage(
+              {
                 type: "STATUS",
                 id: state.state,
                 status: state.status,
-              });
-            }
+              },
+              file
+            );
             resolve(terminationSeverityNumber(termination));
           })();
         });
@@ -523,13 +524,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         if (maxSeverity === 0) {
           // All finished successfully
           solutionState.status = "AC";
-          if (this._currentFile === file) {
-            super._postMessage({
+          super._postMessage(
+            {
               type: "STATUS",
               id: solutionState.state,
               status: solutionState.status,
-            });
-          }
+            },
+            file
+          );
         } else if (maxSeverity === 1) {
           // Stopped
           break;
@@ -543,18 +545,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           // WA
           judgeState.status = "NA";
           solutionState.status = "WA";
-          if (this._currentFile === file) {
-            super._postMessage({
+          super._postMessage(
+            {
               type: "STATUS",
               id: judgeState.state,
               status: judgeState.status,
-            });
-            super._postMessage({
+            },
+            file
+          );
+          super._postMessage(
+            {
               type: "STATUS",
               id: solutionState.state,
               status: solutionState.status,
-            });
-          }
+            },
+            file
+          );
           break;
         }
       } else {
@@ -562,23 +568,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           break;
         } else if (solutionState.stdout.data !== judgeState.stdout.data) {
           solutionState.status = "WA";
-          if (this._currentFile === file) {
-            super._postMessage({
+          super._postMessage(
+            {
               type: "STATUS",
               id: solutionState.state,
               status: solutionState.status,
-            });
-          }
+            },
+            file
+          );
           break;
         } else {
           solutionState.status = "AC";
-          if (this._currentFile === file) {
-            super._postMessage({
+          super._postMessage(
+            {
               type: "STATUS",
               id: solutionState.state,
               status: solutionState.status,
-            });
-          }
+            },
+            file
+          );
         }
       }
 
@@ -595,9 +603,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         state.status = "NA";
       }
 
-      if (this._currentFile === file) {
-        super._postMessage({ type: "CLEAR" });
-      }
+      super._postMessage({ type: "CLEAR" }, file);
     }
     ctx.clearFlag = false;
 

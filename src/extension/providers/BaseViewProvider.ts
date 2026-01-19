@@ -23,14 +23,33 @@ export default abstract class BaseViewProvider<
   private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
   protected _currentFile?: string;
 
+  private _viewReady!: Promise<void>;
+  private _resolveViewReady!: () => void;
+
   constructor(
     readonly view: string,
     protected _context: vscode.ExtensionContext,
     private _schema: Schema
-  ) {}
+  ) {
+    this._resetViewReady();
+  }
 
-  abstract onMessage(msg: v.InferOutput<Schema>): void;
+  protected abstract handleMessage(msg: v.InferOutput<Schema>): void;
   abstract onShow(): void;
+
+  private _resetViewReady(): void {
+    this._viewReady = new Promise<void>((resolve) => {
+      this._resolveViewReady = resolve;
+    });
+  }
+
+  onMessage(msg: v.InferOutput<Schema>): void {
+    // Intercept LOADED message to resolve the view ready promise
+    if (typeof msg === "object" && msg !== null && "type" in msg && msg.type === "LOADED") {
+      this._resolveViewReady();
+    }
+    this.handleMessage(msg);
+  }
 
   onDispose(): void {
     this._onDidChangeActiveTextEditorDisposable?.dispose();
@@ -116,6 +135,7 @@ export default abstract class BaseViewProvider<
   // --- End file persistence lifecycle ---
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this._resetViewReady();
     this._webview = webviewView.webview;
     webviewView.webview.options = {
       enableScripts: true,
@@ -170,7 +190,11 @@ export default abstract class BaseViewProvider<
     await this._context.workspaceState.update(this.view, undefined);
   }
 
-  protected _postMessage(msg: WebviewMessageType): void {
+  protected async _postMessage(msg: WebviewMessageType, file?: string): Promise<void> {
+    await this._viewReady;
+    if (file && this._currentFile !== file) {
+      return;
+    }
     this._webview?.postMessage(msg);
   }
 
