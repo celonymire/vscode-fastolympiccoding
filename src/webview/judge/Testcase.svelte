@@ -70,31 +70,31 @@
   <div class="testcase-container">
     <TestcaseToolbar {testcase} {onprerun} />
     {#if showDetails}
-      {#if testcase.mode === "interactive"}
-        <AutoresizeTextarea
-          bind:value={testcase.interactorSecret}
-          bind:editing={interactorSecretEditing}
-          placeholder="Interactor secret..."
-          variant="interactor-secret"
-          onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
-          onpreedit={() => {
-            postProviderMessage({
-              type: "REQUEST_FULL_DATA",
-              uuid: testcase.uuid,
-              stdio: "INTERACTOR_SECRET",
-            });
-          }}
-          onsave={handleSaveInteractorSecret}
-          oncancel={() => {
-            postProviderMessage({
-              type: "REQUEST_TRIMMED_DATA",
-              uuid: testcase.uuid,
-              stdio: "INTERACTOR_SECRET",
-            });
-          }}
-        />
-      {/if}
       {#if status !== "CE"}
+        {#if testcase.mode === "interactive"}
+          <AutoresizeTextarea
+            bind:value={testcase.interactorSecret}
+            bind:editing={interactorSecretEditing}
+            placeholder="Interactor secret..."
+            variant="interactor-secret"
+            onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+            onpreedit={() => {
+              postProviderMessage({
+                type: "REQUEST_FULL_DATA",
+                uuid: testcase.uuid,
+                stdio: "INTERACTOR_SECRET",
+              });
+            }}
+            onsave={handleSaveInteractorSecret}
+            oncancel={() => {
+              postProviderMessage({
+                type: "REQUEST_TRIMMED_DATA",
+                uuid: testcase.uuid,
+                stdio: "INTERACTOR_SECRET",
+              });
+            }}
+          />
+        {/if}
         <AutoresizeTextarea
           bind:value={testcase.stdin}
           bind:editing={stdinEditing}
