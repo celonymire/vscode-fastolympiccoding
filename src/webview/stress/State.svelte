@@ -39,20 +39,6 @@
   }
 
   const status = $derived(state.status);
-
-  const statusText = $derived(
-    status === "WA"
-      ? "Wrong Answer"
-      : status === "RE"
-        ? "Runtime Error"
-        : status === "TL"
-          ? "Time Limit Exceeded"
-          : status === "ML"
-            ? "Memory Limit Exceeded"
-            : status === "AC"
-              ? "Accepted"
-              : ""
-  );
 </script>
 
 {#if status === "COMPILING"}
@@ -159,19 +145,12 @@
       <div class="state-toolbar-left">
         <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-play"></div>
+            <div class="codicon codicon-bolded codicon-code"></div>
           </div>
           <p class="state-badge-text">
             {id}
           </p>
         </div>
-        {#if interactiveMode}
-          <div class="state-badge state-status" data-status="CE">
-            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-              <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-            </div>
-          </div>
-        {/if}
         {#if status !== "NA"}
           <div class="state-badge state-status" data-status={status}>
             <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
@@ -187,7 +166,14 @@
                 <div class="codicon codicon-bolded codicon-check"></div>
               {/if}
             </div>
-            <p class="state-badge-text">{statusText}</p>
+            <p class="state-badge-text">{status}</p>
+          </div>
+        {/if}
+        {#if interactiveMode}
+          <div class="state-badge state-status" data-status="CE">
+            <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+              <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+            </div>
           </div>
         {/if}
       </div>
