@@ -260,8 +260,8 @@
   .toolbar-badge-container {
     display: flex;
     align-items: center;
-    padding: 0px 6px;
-    border-radius: 11px;
+    padding: 0px 3px;
+    border-radius: 5px;
     font-size: 15px;
     font-weight: bold;
     line-height: 1;
