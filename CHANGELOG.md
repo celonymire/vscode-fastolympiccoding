@@ -21,6 +21,7 @@
 - Allow showing testcase details on compiler error status
 - Enhanced integrated view to display compilation output and errors
 - Made the bubble texts in the UI more compact
+- Combined IO from solution and interactor to display the order of interactions
 
 ### Fixed
 

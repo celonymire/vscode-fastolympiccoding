@@ -94,25 +94,30 @@
               });
             }}
           />
+        {:else}
+          <AutoresizeTextarea
+            bind:value={testcase.stdin}
+            bind:editing={stdinEditing}
+            placeholder="Input..."
+            readonly={testcase.mode === "interactive"}
+            onexpand={() => handleExpandStdio("STDIN")}
+            onpreedit={() => {
+              postProviderMessage({
+                type: "REQUEST_FULL_DATA",
+                uuid: testcase.uuid,
+                stdio: "STDIN",
+              });
+            }}
+            onsave={handleSaveStdin}
+            oncancel={() => {
+              postProviderMessage({
+                type: "REQUEST_TRIMMED_DATA",
+                uuid: testcase.uuid,
+                stdio: "STDIN",
+              });
+            }}
+          />
         {/if}
-        <AutoresizeTextarea
-          bind:value={testcase.stdin}
-          bind:editing={stdinEditing}
-          placeholder="Input..."
-          readonly={testcase.mode === "interactive"}
-          onexpand={() => handleExpandStdio("STDIN")}
-          onpreedit={() => {
-            postProviderMessage({ type: "REQUEST_FULL_DATA", uuid: testcase.uuid, stdio: "STDIN" });
-          }}
-          onsave={handleSaveStdin}
-          oncancel={() => {
-            postProviderMessage({
-              type: "REQUEST_TRIMMED_DATA",
-              uuid: testcase.uuid,
-              stdio: "STDIN",
-            });
-          }}
-        />
         <AutoresizeTextarea
           value={testcase.stderr}
           readonly

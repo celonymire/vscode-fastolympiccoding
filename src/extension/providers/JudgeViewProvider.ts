@@ -431,7 +431,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
       .on("stdout:data", (data: string) => {
-        testcase.stdin.write(data, "force");
+        testcase.stdout.write(data, "force");
         testcase.process.stdin?.write(data);
       })
       .on("error", (data: Error) => {

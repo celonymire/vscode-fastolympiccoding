@@ -65,6 +65,11 @@ type State = {
 
 interface StressContext {
   state: State[];
+
+  // For interactive mode, combined stdout and stderr and maintains the order
+  combinedInteractiveStderr: string;
+  combinedInteractiveStdout: string;
+
   stopFlag: boolean;
   clearFlag: boolean;
   running: boolean;
@@ -206,6 +211,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       stopFlag: false,
       clearFlag: false,
       running: false,
+      combinedInteractiveStderr: "",
+      combinedInteractiveStdout: "",
       interactiveMode: persistedState.interactiveMode,
       interactiveSecretPromise: null,
       donePromise: null,
@@ -453,6 +460,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           file
         );
       }
+      if (ctx.interactiveMode) {
+        ctx.combinedInteractiveStderr = "";
+        ctx.combinedInteractiveStdout = "";
+      }
+
       const seed = crypto.randomBytes(8).readBigUInt64BE();
       ctx.interactiveSecretPromise = new Promise<void>((resolve) => {
         ctx.interactorSecretResolver = resolve;
@@ -592,7 +604,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
     }
-
     ctx.running = false;
 
     if (ctx.clearFlag) {
@@ -671,9 +682,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       if (currentState?.state === "Solution") {
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
           uuid: crypto.randomUUID(),
-          stdin: judgeState.stdout.data, // Interactor output is stdin for solution
-          stderr: solutionState.stderr.data + judgeState.stderr.data,
-          stdout: solutionState.stdout.data,
+          stdin: "",
+          stderr: ctx.combinedInteractiveStderr,
+          stdout: ctx.combinedInteractiveStdout,
           acceptedStdout: "",
           elapsed: currentState?.process.elapsed ?? 0,
           memoryBytes: currentState?.process.maxMemoryBytes ?? 0,
@@ -689,7 +700,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._testcaseViewProvider.addTestcaseToFile(resolvedFile, {
           uuid: crypto.randomUUID(),
           stdin: generatorState.stdout.data + solutionState.stdout.data,
-          stderr: solutionState.stderr.data + judgeState.stderr.data,
+          stderr: judgeState.stderr.data,
           stdout: judgeState.stdout.data,
           acceptedStdout: "",
           elapsed: currentState?.process.elapsed ?? 0,
@@ -829,12 +840,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         await ctx.interactiveSecretPromise; // wait for secret to be sent first
         const judgeState = ctx.state.find((s) => s.state === "Judge")!;
         judgeState.process.stdin?.write(data);
+        ctx.combinedInteractiveStdout += data;
       }
     } else if (stateId === "Judge") {
       state.stdout.write(data, writeMode);
       if (ctx.interactiveMode) {
         const solutionState = ctx.state.find((s) => s.state === "Solution")!;
         solutionState.process.stdin?.write(data);
+        ctx.combinedInteractiveStdout += data;
       }
     }
   }
@@ -854,6 +867,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const state = ctx.state.find((s) => s.state === stateId);
     if (state) {
       state.stderr.write(data, "batch");
+    }
+    if (ctx.interactiveMode && (stateId === "Solution" || stateId === "Judge")) {
+      ctx.combinedInteractiveStderr += data;
     }
   }
 
