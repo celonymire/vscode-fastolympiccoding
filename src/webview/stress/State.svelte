@@ -47,7 +47,7 @@
       <div class="state-toolbar-left">
         <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-play"></div>
+            <div class="codicon codicon-bolded codicon-file-code"></div>
           </div>
           <p class="state-badge-text">
             {id}
@@ -75,7 +75,7 @@
       <div class="state-toolbar-left">
         <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-play"></div>
+            <div class="codicon codicon-bolded codicon-file-code"></div>
           </div>
           <p class="state-badge-text">
             {id}
@@ -109,7 +109,7 @@
       <div class="state-toolbar-left">
         <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-play"></div>
+            <div class="codicon codicon-bolded codicon-file-code"></div>
           </div>
           <p class="state-badge-text">
             {id}
@@ -145,7 +145,7 @@
       <div class="state-toolbar-left">
         <div class="state-badge state-status" data-status="NA">
           <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-code"></div>
+            <div class="codicon codicon-bolded codicon-file-code"></div>
           </div>
           <p class="state-badge-text">
             {id}
