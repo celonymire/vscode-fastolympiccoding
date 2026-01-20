@@ -443,6 +443,34 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     ctx.running = true;
     this._onDidChangeBackgroundTasks.fire();
 
+    const setupProcess = (state: State) => {
+      state.process
+        .on("error", state.errorHandler)
+        .on("stdout:data", state.stdoutDataHandler)
+        .on("stdout:end", state.stdoutEndHandler)
+        .on("stderr:data", state.stderrDataHandler)
+        .on("stderr:end", state.stderrEndHandler)
+        .on("close", state.closeHandler);
+    };
+
+    const executionPromise = (state: State) => {
+      return new Promise<number>((resolve) => {
+        void (async () => {
+          await state.process.done;
+          state.status = mapTestcaseTermination(state.process.termination);
+          super._postMessage(
+            {
+              type: "STATUS",
+              id: state.state,
+              status: state.status,
+            },
+            file
+          );
+          resolve(terminationSeverityNumber(state.process.termination));
+        })();
+      });
+    };
+
     const start = Date.now();
     while (!ctx.stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
       super._postMessage({ type: "CLEAR" }, file);
@@ -470,16 +498,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         ctx.interactorSecretResolver = resolve;
       });
 
-      const setupProcess = (state: State) => {
-        state.process
-          .on("error", state.errorHandler)
-          .on("stdout:data", state.stdoutDataHandler)
-          .on("stdout:end", state.stdoutEndHandler)
-          .on("stderr:data", state.stderrDataHandler)
-          .on("stderr:end", state.stderrEndHandler)
-          .on("close", state.closeHandler);
-      };
-
       setupProcess(judgeState);
       judgeState.process.run(
         judgeSettings.languageSettings.runCommand,
@@ -506,24 +524,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcaseMemoryLimit,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
-
-      const executionPromise = (state: State) => {
-        return new Promise<number>((resolve) => {
-          void (async () => {
-            await state.process.done;
-            state.status = mapTestcaseTermination(state.process.termination);
-            super._postMessage(
-              {
-                type: "STATUS",
-                id: state.state,
-                status: state.status,
-              },
-              file
-            );
-            resolve(terminationSeverityNumber(state.process.termination));
-          })();
-        });
-      };
 
       const generatorPromise = executionPromise(generatorState);
       const solutionPromise = executionPromise(solutionState);
