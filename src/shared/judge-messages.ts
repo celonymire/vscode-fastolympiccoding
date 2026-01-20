@@ -90,6 +90,12 @@ export const RequestFullDataMessageSchema = v.object({
   stdio: v.picklist(StdioValues),
 });
 
+export const NewInteractorSecretMessageSchema = v.object({
+  type: v.literal("NEW_INTERACTOR_SECRET"),
+  uuid: v.string(),
+  data: v.string(),
+});
+
 export const ProviderMessageSchema = v.union([
   LoadedMessageSchema,
   NextMessageSchema,
@@ -101,6 +107,7 @@ export const ProviderMessageSchema = v.union([
   SetMemoryLimitSchema,
   RequestTrimmedDataMessageSchema,
   RequestFullDataMessageSchema,
+  NewInteractorSecretMessageSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;

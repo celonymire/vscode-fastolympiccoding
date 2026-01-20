@@ -94,30 +94,30 @@
               });
             }}
           />
-        {:else}
-          <AutoresizeTextarea
-            bind:value={testcase.stdin}
-            bind:editing={stdinEditing}
-            placeholder="Input..."
-            readonly={testcase.mode === "interactive"}
-            onexpand={() => handleExpandStdio("STDIN")}
-            onpreedit={() => {
-              postProviderMessage({
-                type: "REQUEST_FULL_DATA",
-                uuid: testcase.uuid,
-                stdio: "STDIN",
-              });
-            }}
-            onsave={handleSaveStdin}
-            oncancel={() => {
-              postProviderMessage({
-                type: "REQUEST_TRIMMED_DATA",
-                uuid: testcase.uuid,
-                stdio: "STDIN",
-              });
-            }}
-          />
         {/if}
+        <AutoresizeTextarea
+          bind:value={testcase.stdin}
+          bind:editing={stdinEditing}
+          placeholder="Input..."
+          hiddenOnEmpty={testcase.mode === "interactive"}
+          readonly={testcase.mode === "interactive"}
+          onexpand={() => handleExpandStdio("STDIN")}
+          onpreedit={() => {
+            postProviderMessage({
+              type: "REQUEST_FULL_DATA",
+              uuid: testcase.uuid,
+              stdio: "STDIN",
+            });
+          }}
+          onsave={handleSaveStdin}
+          oncancel={() => {
+            postProviderMessage({
+              type: "REQUEST_TRIMMED_DATA",
+              uuid: testcase.uuid,
+              stdio: "STDIN",
+            });
+          }}
+        />
         <AutoresizeTextarea
           value={testcase.stderr}
           readonly
@@ -223,9 +223,8 @@
             variant="interactor-secret"
             onsave={() => {
               postProviderMessage({
-                type: "SAVE",
+                type: "NEW_INTERACTOR_SECRET",
                 uuid: testcase.uuid,
-                stdio: "INTERACTOR_SECRET",
                 data: newInteractorSecret,
               });
               newInteractorSecret = "";

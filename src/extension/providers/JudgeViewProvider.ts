@@ -32,6 +32,7 @@ import {
 import { getLogger } from "../utils/logging";
 import {
   ActionMessageSchema,
+  NewInteractorSecretMessageSchema,
   NextMessageSchema,
   ProviderMessageSchema,
   RequestFullDataMessageSchema,
@@ -312,15 +313,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._prepareRunningState(testcase, ctx.file);
 
     const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
-    if (!runCommand) {
+    if (!runCommand || token.isCancellationRequested) {
       return;
     }
 
     testcase.process
       .on("spawn", () => {
-        if (token.isCancellationRequested) {
-          return;
-        }
         testcase.process.stdin?.write(testcase.stdin.data);
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "batch"))
@@ -328,9 +326,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       .on("stderr:end", () => testcase.stderr.write("", "final"))
       .on("stdout:end", () => testcase.stdout.write("", "final"))
       .on("error", (data: Error) => {
-        if (token.isCancellationRequested) {
-          return;
-        }
         const logger = getLogger("judge");
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write(data.message, "final");
@@ -346,9 +341,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         );
       })
       .on("close", () => {
-        if (token.isCancellationRequested) {
-          return;
-        }
         updateTestcaseFromTermination(testcase, testcase.process.termination);
         super._postMessage(
           {
@@ -406,7 +398,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._prepareRunningState(testcase, ctx.file);
 
     const runCommand = debugMode ? languageSettings.debugCommand : languageSettings.runCommand;
-    if (!runCommand) {
+    if (!runCommand || token.isCancellationRequested) {
       return;
     }
 
@@ -423,11 +415,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       .on("spawn", async () => {
         if (testcase.interactorSecret.isEmpty()) {
           await secretPromise;
-        } else {
-          testcase.interactorSecretResolver?.();
-          testcase.interactorSecretResolver = undefined;
         }
         testcase.interactorProcess.stdin?.write(testcase.interactorSecret.data);
+        testcase.interactorSecretResolver?.();
+        testcase.interactorSecretResolver = undefined;
       })
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
       .on("stdout:data", (data: string) => {
@@ -435,21 +426,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.process.stdin?.write(data);
       })
       .on("error", (data: Error) => {
-        if (token.isCancellationRequested) {
-          return;
-        }
         const logger = getLogger("judge");
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
-
-        testcase.process.stop();
-      })
-      .on("close", () => {
-        testcase.process.stdin?.end();
-      })
-      .run(interactorArgs!, 0, 0, cwd);
+      });
 
     testcase.process
       .on("stderr:data", (data: string) => testcase.stderr.write(data, "force"))
@@ -461,25 +443,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.interactorProcess.stdin?.write(data);
       })
       .on("error", (data: Error) => {
-        if (token.isCancellationRequested) {
-          return;
-        }
         const logger = getLogger("judge");
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
+      });
 
-        testcase.interactorProcess.stop();
-      })
-      .on("close", () => {
-        testcase.interactorProcess.stdin?.end();
-      })
-      .run(
-        runCommand,
-        bypassLimits ? 0 : this._runtime.timeLimit,
-        bypassLimits ? 0 : this._runtime.memoryLimit,
-        cwd
-      );
+    testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
+    testcase.process.run(
+      runCommand,
+      bypassLimits ? 0 : this._runtime.timeLimit,
+      bypassLimits ? 0 : this._runtime.memoryLimit,
+      cwd
+    );
     this._onDidChangeBackgroundTasks.fire();
 
     await Promise.all([testcase.process.done, testcase.interactorProcess.done]);
@@ -555,6 +531,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "REQUEST_FULL_DATA":
         this._requestFullData(msg);
+        break;
+      case "NEW_INTERACTOR_SECRET":
+        this._newInteractorSecret(msg);
         break;
     }
   }
@@ -1479,10 +1458,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "INTERACTOR_SECRET":
         testcase.interactorSecret.reset();
         testcase.interactorSecret.write(data, "final");
-        if (testcase.interactorSecretResolver) {
-          testcase.interactorSecretResolver();
-          testcase.interactorSecretResolver = undefined;
-        }
         break;
       case "STDERR":
       case "STDOUT":
@@ -1601,6 +1576,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property,
       value: value.trimEnd(),
     });
+  }
+
+  private _newInteractorSecret(msg: v.InferOutput<typeof NewInteractorSecretMessageSchema>) {
+    const testcase = this._findTestcase(msg.uuid);
+    if (!testcase) {
+      return;
+    }
+    testcase.interactorSecret.reset();
+    testcase.interactorSecret.write(msg.data, "final");
+    testcase.interactorSecretResolver?.();
+    testcase.interactorSecretResolver = undefined;
   }
 
   private _findTestcase(uuid: string): State | undefined {
