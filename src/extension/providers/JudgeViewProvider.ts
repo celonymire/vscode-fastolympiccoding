@@ -783,11 +783,17 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   addTestcaseToFile(file: string, testcase: ITestcase) {
     // used by stress view
 
-    const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
-    if (file === current) {
+    if (file === this._currentFile) {
       this._addTestcase(testcase.mode, testcase);
       this.requestSave();
+    } else if (this._contexts.has(file)) {
+      this._contexts
+        .get(file)!
+        .state.push(this._createTestcaseState(testcase.mode, testcase, file));
+      this.requestSave();
     } else {
+      // The file hasn't been opened at all so we need to write to Momento storage
+      // When the file is opened it will read from Momento storage
       const storageData = super.readStorage()[file];
       const parseResult = v.safeParse(FileDataSchema, storageData);
       const fileData = parseResult.success
