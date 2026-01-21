@@ -267,13 +267,25 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       },
       file
     );
-    if (testcase.mode === "interactive") {
+    if (testcase.mode === "interactive" || testcase.stdin.isEmpty()) {
       testcase.stdin.reset();
       super._postMessage(
         {
           type: "SET",
           uuid: testcase.uuid,
           property: "stdin",
+          value: "",
+        },
+        file
+      );
+    }
+    if (testcase.mode === "interactive" && testcase.interactorSecret.isEmpty()) {
+      testcase.interactorSecret.reset();
+      super._postMessage(
+        {
+          type: "SET",
+          uuid: testcase.uuid,
+          property: "interactorSecret",
           value: "",
         },
         file
