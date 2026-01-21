@@ -817,6 +817,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (ctx) {
       for (const s of ctx.state) {
         if (s.state !== stateId) {
+          await s.process.spawned;
           s.process.stop();
         }
       }
