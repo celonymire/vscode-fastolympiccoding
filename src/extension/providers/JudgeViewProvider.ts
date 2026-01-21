@@ -448,12 +448,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stdout.write(data, "force");
         testcase.process.stdin?.write(data);
       })
-      .on("error", (data: Error) => {
+      .on("error", async (data: Error) => {
         const logger = getLogger("judge");
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
+
+        await testcase.process.spawned;
         testcase.process.stop();
       });
 
@@ -466,11 +468,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stdout.write(data, "force");
         testcase.interactorProcess.stdin?.write(data);
       })
-      .on("error", (data: Error) => {
+      .on("error", async (data: Error) => {
         const logger = getLogger("judge");
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
+
+        await testcase.interactorProcess.spawned;
         testcase.interactorProcess.stop();
       });
 
@@ -484,6 +488,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._onDidChangeBackgroundTasks.fire();
 
     await Promise.all([testcase.process.done, testcase.interactorProcess.done]);
+    console.log("done");
 
     testcase.stdin.write("", "final");
     testcase.stderr.write("", "final");
