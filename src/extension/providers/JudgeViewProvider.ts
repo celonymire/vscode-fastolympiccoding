@@ -19,7 +19,7 @@ import {
   severityNumberToInteractiveStatus,
   terminationSeverityNumber,
 } from "../utils/runtime";
-import type { RunTermination, Severity } from "../utils/runtime";
+import type { Severity } from "../utils/runtime";
 import {
   getFileRunSettings,
   openInNewEditor,
