@@ -138,20 +138,20 @@
         <div class="codicon codicon-debug-alt"></div>
       </button>
       <button
-        class="toolbar-icon"
-        data-tooltip="Delete Testcase"
-        aria-label="Delete"
-        onclick={handleDelete}
-      >
-        <div class="codicon codicon-trash"></div>
-      </button>
-      <button
         class="toolbar-icon toolbar-icon--visibility"
         data-tooltip={skipped ? "Unskip Testcase" : "Skip Testcase"}
         aria-label={skipped ? "Unskip" : "Skip"}
         onclick={handleToggleSkip}
       >
         <div class="codicon {skipped ? 'codicon-run-coverage' : 'codicon-run-errors'}"></div>
+      </button>
+      <button
+        class="toolbar-icon"
+        data-tooltip="Delete Testcase"
+        aria-label="Delete"
+        onclick={handleDelete}
+      >
+        <div class="codicon codicon-trash"></div>
       </button>
     </div>
   </div>
