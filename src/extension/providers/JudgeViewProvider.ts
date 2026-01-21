@@ -1075,6 +1075,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     await testcase.donePromise;
     testcase.donePromise = null;
+    testcase.cancellationSource?.dispose();
     this._onDidChangeBackgroundTasks.fire();
   }
 
