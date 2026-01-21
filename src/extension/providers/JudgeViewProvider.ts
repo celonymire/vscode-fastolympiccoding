@@ -91,10 +91,10 @@ type ExecutionContext = {
   file: string;
 };
 
-function updateTestcaseFromTermination(state: State, termination: RunTermination) {
+function updateTestcaseFromTermination(state: State) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
-  state.status = mapTestcaseTermination(termination);
+  state.status = mapTestcaseTermination(state.process.termination);
   if (state.status === "NA") {
     // Exit succeeded; refine with output comparison
     if (state.acceptedStdout.isEmpty()) {
@@ -350,7 +350,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         );
       })
       .on("close", () => {
-        updateTestcaseFromTermination(testcase, testcase.process.termination);
+        updateTestcaseFromTermination(testcase);
         super._postMessage(
           {
             type: "SET",
@@ -1475,7 +1475,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (testcase.mode === "interactive") {
       updateInteractiveTestcaseFromTermination(testcase);
     } else {
-      updateTestcaseFromTermination(testcase, testcase.process.termination);
+      updateTestcaseFromTermination(testcase);
     }
     super._postMessage({
       type: "SET",
