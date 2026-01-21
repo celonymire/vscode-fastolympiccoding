@@ -3,8 +3,6 @@ import * as v from "valibot";
 import * as crypto from "crypto";
 
 import {
-  ProblemSchema,
-  TestSchema,
   TestcaseSchema,
   type LanguageSettings,
   type Mode,
@@ -46,8 +44,6 @@ import {
 } from "../../shared/judge-messages";
 import type { Stdio } from "../../shared/enums";
 
-type IProblem = v.InferOutput<typeof ProblemSchema>;
-type ITest = v.InferOutput<typeof TestSchema>;
 type ITestcase = v.InferOutput<typeof TestcaseSchema>;
 type FileData = v.InferOutput<typeof FileDataSchema>;
 
@@ -740,75 +736,53 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  addFromCompetitiveCompanion(file: string, data: IProblem) {
-    const testcases: ITestcase[] = data.tests.map(
-      (test: ITest): ITestcase => ({
-        uuid: crypto.randomUUID(),
-        stdin: test.input,
-        stderr: "",
-        stdout: "",
-        acceptedStdout: test.output,
-        elapsed: 0,
-        memoryBytes: 0,
-        status: "WA",
-        shown: true,
-        toggled: false,
-        skipped: false,
-        mode: data.interactive ? "interactive" : "standard",
-        interactorSecret: "", // Competitive Companion doesn't provide interactor secret
-      })
-    );
-
-    const current = this._currentFile ?? vscode.window.activeTextEditor?.document.fileName;
-    if (file === current) {
-      this.deleteAll();
-      this._runtime.timeLimit = data.timeLimit;
-      this._runtime.memoryLimit = data.memoryLimit;
-      for (const testcase of testcases) {
-        this._addTestcase(data.interactive ? "interactive" : "standard", testcase);
+  addTestcaseToFile(file: string, testcase: ITestcase, timeLimit?: number, memoryLimit?: number) {
+    if (file === this._currentFile) {
+      if (timeLimit !== undefined) {
+        this._runtime.timeLimit = timeLimit;
+      }
+      if (memoryLimit !== undefined) {
+        this._runtime.memoryLimit = memoryLimit;
+      }
+      if (timeLimit !== undefined || memoryLimit !== undefined) {
+        super._postMessage({
+          type: "INITIAL_STATE",
+          timeLimit: this._runtime.timeLimit,
+          memoryLimit: this._runtime.memoryLimit,
+        });
       }
 
-      super._postMessage({
-        type: "INITIAL_STATE",
-        timeLimit: data.timeLimit,
-        memoryLimit: data.memoryLimit,
-      });
-
-      this.requestSave();
-    } else {
-      const fileData: FileData = {
-        timeLimit: data.timeLimit,
-        memoryLimit: data.memoryLimit,
-        testcases,
-      };
-      void super.writeStorage(file, fileData);
-    }
-  }
-
-  addTestcaseToFile(file: string, testcase: ITestcase) {
-    // used by stress view
-
-    if (file === this._currentFile) {
       this._addTestcase(testcase.mode, testcase);
       this.requestSave();
     } else if (this._contexts.has(file)) {
-      this._contexts
-        .get(file)!
-        .state.push(this._createTestcaseState(testcase.mode, testcase, file));
+      const ctx = this._contexts.get(file)!;
+      if (timeLimit !== undefined) {
+        ctx.timeLimit = timeLimit;
+      }
+      if (memoryLimit !== undefined) {
+        ctx.memoryLimit = memoryLimit;
+      }
+      ctx.state.push(this._createTestcaseState(testcase.mode, testcase, file));
       this.requestSave();
     } else {
-      // The file hasn't been opened at all so we need to write to Momento storage
-      // When the file is opened it will read from Momento storage
       const storageData = super.readStorage()[file];
       const parseResult = v.safeParse(FileDataSchema, storageData);
       const fileData = parseResult.success
         ? parseResult.output
         : { timeLimit: 0, memoryLimit: 0, testcases: [] };
+
+      if (timeLimit !== undefined) {
+        fileData.timeLimit = timeLimit;
+      }
+      if (memoryLimit !== undefined) {
+        fileData.memoryLimit = memoryLimit;
+      }
+
       const testcases = fileData.testcases || [];
       testcases.push(testcase);
       const data: FileData = {
-        timeLimit: fileData.timeLimit ?? 0,
-        memoryLimit: fileData.memoryLimit ?? 0,
+        timeLimit: fileData.timeLimit,
+        memoryLimit: fileData.memoryLimit,
         testcases,
       };
       void super.writeStorage(file, data);
@@ -833,10 +807,32 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  deleteAll() {
-    const uuids = [...this._runtime.state.map((testcase) => testcase.uuid)];
-    for (const uuid of uuids) {
-      this._delete(uuid);
+  deleteAll(file?: string) {
+    const targetFile = file ?? this._currentFile;
+    if (!targetFile) {
+      return;
+    }
+
+    if (targetFile === this._currentFile) {
+      const uuids = [...this._runtime.state.map((testcase) => testcase.uuid)];
+      for (const uuid of uuids) {
+        this._delete(uuid);
+      }
+    } else if (this._contexts.has(targetFile)) {
+      const ctx = this._contexts.get(targetFile)!;
+      for (const testcase of ctx.state) {
+        testcase.process.stop();
+        testcase.interactorProcess.stop();
+        void testcase.process.dispose();
+        void testcase.interactorProcess.dispose();
+      }
+      ctx.state.length = 0;
+      this.requestSave();
+    } else {
+      const storageData = super.readStorage()[targetFile];
+      const fileData = v.parse(FileDataSchema, storageData ?? {});
+      fileData.testcases.length = 0;
+      void super.writeStorage(targetFile, fileData);
     }
   }
 

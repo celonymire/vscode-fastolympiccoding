@@ -1,10 +1,11 @@
 import * as fs from "node:fs/promises";
 import * as http from "node:http";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 import * as vscode from "vscode";
 import * as v from "valibot";
 
-import { ProblemSchema } from "../shared/schemas";
+import { ProblemSchema, type Testcase } from "../shared/schemas";
 import type JudgeViewProvider from "./providers/JudgeViewProvider";
 import { getLogger } from "./utils/logging";
 
@@ -167,7 +168,25 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
     return;
   }
 
-  judge.addFromCompetitiveCompanion(absolutePath, problem);
+  judge.deleteAll(absolutePath);
+  for (const test of problem.tests) {
+    const testcase: Testcase = {
+      uuid: crypto.randomUUID(),
+      stdin: test.input,
+      stderr: "",
+      stdout: "",
+      acceptedStdout: test.output,
+      elapsed: 0,
+      memoryBytes: 0,
+      status: "WA",
+      shown: true,
+      toggled: false,
+      skipped: false,
+      mode: problem.interactive ? "interactive" : "standard",
+      interactorSecret: "",
+    };
+    judge.addTestcaseToFile(absolutePath, testcase, problem.timeLimit, problem.memoryLimit);
+  }
 
   if (openSelectedFiles) {
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
