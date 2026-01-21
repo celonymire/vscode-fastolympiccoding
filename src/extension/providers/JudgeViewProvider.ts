@@ -927,7 +927,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._compare(uuid);
         break;
       case "OPEN_INTERACTOR":
-        this._openInteractor(uuid);
+        this._openInteractor();
         break;
     }
     this.requestSave();
@@ -1431,7 +1431,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _openInteractor(uuid: string) {
+  private _openInteractor() {
     if (!this._currentFile) {
       return;
     }
