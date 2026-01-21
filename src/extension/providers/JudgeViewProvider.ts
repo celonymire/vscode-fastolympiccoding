@@ -431,6 +431,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         testcase.stderr.write("=== INTERACTOR ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
         testcase.status = "RE";
+        testcase.process.stop();
       });
 
     testcase.process
@@ -447,6 +448,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         logger.error(`Process error during testcase execution: ${data.message}`);
         testcase.stderr.write("=== SOLUTION ERROR ===\n", "batch");
         testcase.stderr.write(data.message, "final");
+        testcase.interactorProcess.stop();
       });
 
     testcase.interactorProcess.run(interactorArgs!, 0, 0, cwd);
