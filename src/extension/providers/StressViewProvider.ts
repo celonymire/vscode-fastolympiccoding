@@ -28,6 +28,7 @@ import {
   ProviderMessageSchema,
   SaveMessageSchema,
   StateIdValue,
+  ToggleVisibilityMessageSchema,
   ViewMessageSchema,
   type StateId,
   type WebviewMessage,
@@ -749,9 +750,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  private _toggleVisibility({
-    id,
-  }: v.InferOutput<typeof import("../../shared/stress-messages").ToggleVisibilityMessageSchema>) {
+  private _toggleVisibility({ id }: v.InferOutput<typeof ToggleVisibilityMessageSchema>) {
     const ctx = this._currentContext;
     if (!ctx) {
       return;
@@ -805,7 +804,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     );
   }
 
-  private _onProcessError(file: string, stateId: StateId, data: Error) {
+  private async _onProcessError(file: string, stateId: StateId, data: Error) {
     const logger = getLogger("stress");
     const ctx = this._contexts.get(file);
     const state = ctx?.state.find((s) => s.state === stateId);
