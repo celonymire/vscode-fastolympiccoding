@@ -15,10 +15,11 @@
     id: StateId;
     interactiveMode: boolean;
     placeholder: string;
+    shown: boolean;
     onView: (id: StateId, stdio: Stdio) => void;
   }
 
-  let { state, id, interactiveMode, placeholder, onView }: Props = $props();
+  let { state, id, interactiveMode, placeholder, shown, onView }: Props = $props();
 
   function handleViewStdin() {
     onView(id, "STDIN");
@@ -35,41 +36,43 @@
   const status = $derived(state.status);
 </script>
 
-{#if status === "RUNNING"}
-  <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
-  <AutoresizeTextarea
-    value={state.stderr}
-    readonly
-    hiddenOnEmpty
-    onexpand={handleViewStderr}
-    variant="stderr"
-  />
-  <AutoresizeTextarea value={state.stdout} readonly {placeholder} onexpand={handleViewStdout} />
-{:else if status === "CE"}
-  <AutoresizeTextarea
-    value={state.stderr}
-    readonly
-    hiddenOnEmpty
-    onexpand={handleViewStderr}
-    variant="stderr"
-  />
-  <AutoresizeTextarea value={state.stdout} readonly hiddenOnEmpty onexpand={handleViewStdout} />
-{:else if status !== "COMPILING"}
-  <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
-  <AutoresizeTextarea
-    value={state.stderr}
-    readonly
-    hiddenOnEmpty
-    onexpand={handleViewStderr}
-    variant="stderr"
-  />
-  <AutoresizeTextarea
-    value={state.stdout}
-    readonly
-    {placeholder}
-    onexpand={handleViewStdout}
-    variant={id === "Generator" && interactiveMode ? "interactor-secret" : "default"}
-  />
+{#if shown}
+  {#if status === "RUNNING"}
+    <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
+    <AutoresizeTextarea
+      value={state.stderr}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea value={state.stdout} readonly {placeholder} onexpand={handleViewStdout} />
+  {:else if status === "CE"}
+    <AutoresizeTextarea
+      value={state.stderr}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea value={state.stdout} readonly hiddenOnEmpty onexpand={handleViewStdout} />
+  {:else if status !== "COMPILING"}
+    <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
+    <AutoresizeTextarea
+      value={state.stderr}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea
+      value={state.stdout}
+      readonly
+      {placeholder}
+      onexpand={handleViewStdout}
+      variant={id === "Generator" && interactiveMode ? "interactor-secret" : "default"}
+    />
+  {/if}
 {/if}
 
 <style>

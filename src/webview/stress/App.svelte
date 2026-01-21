@@ -26,6 +26,7 @@
     status: Status;
     id: StateId;
     placeholder: string;
+    shown: boolean;
   }
 
   const placeholderMap: Record<StateId, string> = {
@@ -42,6 +43,7 @@
       status: "NA",
       id,
       placeholder: placeholderMap[id],
+      shown: true,
     }))
   );
   let showView = $state(true);
@@ -109,6 +111,17 @@
     showSettings = !showSettings;
   }
 
+  function handleSet({ id, property, value }: { id: StateId; property: string; value: unknown }) {
+    const state = findState(id);
+    if (state && property === "shown") {
+      state.shown = value as boolean;
+    }
+  }
+
+  function handleToggleVisibility(id: StateId) {
+    postProviderMessage({ type: "TOGGLE_VISIBILITY", id });
+  }
+
   function handleInteractiveModeChange(e: Event) {
     const target = e.target as HTMLInputElement;
     interactiveMode = target.checked;
@@ -139,6 +152,9 @@
           break;
         case "SETTINGS_TOGGLE":
           handleSettingsToggle();
+          break;
+        case "SET":
+          handleSet(event.data);
           break;
       }
     };
@@ -179,12 +195,20 @@
     {:else}
       {#each states as item (item.id)}
         <div class="state-item">
-          <StateToolbar id={item.id} status={item.status} {interactiveMode} onAdd={handleAdd} />
+          <StateToolbar
+            id={item.id}
+            status={item.status}
+            {interactiveMode}
+            shown={item.shown}
+            onAdd={handleAdd}
+            onToggleVisibility={handleToggleVisibility}
+          />
           <State
             id={item.id}
             state={item}
             placeholder={item.placeholder}
             {interactiveMode}
+            shown={item.shown}
             onView={handleView}
           />
         </div>

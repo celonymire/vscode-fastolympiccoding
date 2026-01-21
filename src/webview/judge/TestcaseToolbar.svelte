@@ -176,6 +176,23 @@
 {:else if status === "RUNNING"}
   <div class="toolbar">
     <div class="toolbar-left">
+      <div
+        class="toolbar-badge-container toolbar-dropdown-container toolbar-badge"
+        data-status={status}
+      >
+        <button
+          class="toolbar-icon toolbar-icon-exclude-highlight"
+          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+          aria-label={showDetails ? "Hide" : "Show"}
+          onclick={handleToggleVisibility}
+        >
+          <div
+            class="codicon codicon-bolded {showDetails
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="toolbar-icon toolbar-icon-exclude-highlight">
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>

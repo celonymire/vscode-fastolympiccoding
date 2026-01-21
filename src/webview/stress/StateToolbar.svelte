@@ -7,14 +7,23 @@
     id: StateId;
     status: Status;
     interactiveMode: boolean;
+    shown: boolean;
     onAdd: (id: StateId) => void;
+    onToggleVisibility: (id: StateId) => void;
   }
 
-  let { id, status, interactiveMode, onAdd }: Props = $props();
+  let { id, status, interactiveMode, shown, onAdd, onToggleVisibility }: Props = $props();
 
   function handleAdd() {
     onAdd(id);
   }
+
+  function handleToggleVisibility() {
+    onToggleVisibility(id);
+  }
+
+  // Derived value for whether details should be shown
+  const showDetails = $derived(shown);
 </script>
 
 {#if status === "COMPILING"}
@@ -44,6 +53,20 @@
 {:else if status === "RUNNING"}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
+      <div class="state-badge state-status state-toolbar-dropdown-container" data-status="NA">
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+          aria-label={showDetails ? "Hide" : "Show"}
+          onclick={handleToggleVisibility}
+        >
+          <div
+            class="codicon codicon-bolded {showDetails
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="state-badge state-status" data-status="NA">
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
@@ -65,6 +88,20 @@
 {:else if status === "CE"}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
+      <div class="state-badge state-status state-toolbar-dropdown-container" data-status={status}>
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+          aria-label={showDetails ? "Hide" : "Show"}
+          onclick={handleToggleVisibility}
+        >
+          <div
+            class="codicon codicon-bolded {showDetails
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="state-badge state-status" data-status="NA">
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
@@ -89,6 +126,23 @@
 {:else}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
+      <div
+        class="state-badge state-status state-toolbar-dropdown-container"
+        data-status={status !== "NA" ? status : "NA"}
+      >
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+          aria-label={showDetails ? "Hide" : "Show"}
+          onclick={handleToggleVisibility}
+        >
+          <div
+            class="codicon codicon-bolded {showDetails
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="state-badge state-status" data-status="NA">
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
@@ -194,6 +248,10 @@
 
   .state-badge-text {
     margin: 0 3px 0 0;
+  }
+
+  .state-toolbar-dropdown-container {
+    padding: 0px;
   }
 
   .codicon-bolded {

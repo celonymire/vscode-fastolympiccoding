@@ -1,7 +1,15 @@
 import * as v from "valibot";
 import { StatusSchema, StdioValues } from "./enums";
 
-export const WebviewMessageTypeValues = ["STATUS", "STDIO", "CLEAR", "SHOW"] as const;
+export const WebviewMessageTypeValues = [
+  "INIT",
+  "STATUS",
+  "STDIO",
+  "CLEAR",
+  "SHOW",
+  "SET",
+  "SETTINGS_TOGGLE",
+] as const;
 
 export const StateIdValue = ["Generator", "Solution", "Judge"] as const;
 
@@ -42,6 +50,13 @@ export const SettingsToggleSchema = v.object({
   type: v.literal("SETTINGS_TOGGLE"),
 });
 
+export const SetMessageSchema = v.object({
+  type: v.literal("SET"),
+  id: v.picklist(StateIdValue),
+  property: v.picklist(["shown"]),
+  value: v.unknown(),
+});
+
 export const WebviewMessageSchema = v.union([
   InitMessageSchema,
   StatusMessageSchema,
@@ -49,6 +64,7 @@ export const WebviewMessageSchema = v.union([
   ClearMessageSchema,
   ShowMessageSchema,
   SettingsToggleSchema,
+  SetMessageSchema,
 ]);
 
 export type WebviewMessage = v.InferOutput<typeof WebviewMessageSchema>;
@@ -61,6 +77,7 @@ export const ProviderMessageTypeValues = [
   "ADD",
   "CLEAR",
   "SAVE",
+  "TOGGLE_VISIBILITY",
 ] as const;
 
 export type ProviderMessageTypeValue = (typeof ProviderMessageTypeValues)[number];
@@ -99,6 +116,11 @@ export const SaveMessageSchema = v.object({
   interactiveMode: v.boolean(),
 });
 
+export const ToggleVisibilityMessageSchema = v.object({
+  type: v.literal("TOGGLE_VISIBILITY"),
+  id: v.picklist(StateIdValue),
+});
+
 export const ProviderMessageSchema = v.union([
   LoadedMessageSchema,
   RunMessageSchema,
@@ -107,6 +129,7 @@ export const ProviderMessageSchema = v.union([
   AddMessageSchema,
   ResetMessageSchema,
   SaveMessageSchema,
+  ToggleVisibilityMessageSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;

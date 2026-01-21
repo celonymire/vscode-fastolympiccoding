@@ -39,6 +39,7 @@ const StressDataSchema = v.object({
   stderr: v.fallback(v.string(), ""),
   status: v.fallback(StatusSchema, "NA"),
   state: v.picklist(StateIdValue),
+  shown: v.fallback(v.boolean(), true),
 });
 
 const FileDataSchema = v.object({
@@ -54,6 +55,7 @@ type State = {
   stdout: TextHandler;
   stderr: TextHandler;
   status: Status;
+  shown: boolean;
   process: Runnable;
   errorHandler: (err: Error) => void;
   stdoutDataHandler: (data: string) => void;
@@ -130,6 +132,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "SAVE":
         this._save(msg);
+        break;
+      case "TOGGLE_VISIBILITY":
+        this._toggleVisibility(msg);
     }
   }
 
@@ -204,6 +209,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       state.stdin.write(fileState.stdin, "force");
       state.stdout.write(fileState.stdout, "force");
       state.stderr.write(fileState.stderr, "force");
+      state.shown = fileState.shown;
     }
 
     return {
@@ -226,6 +232,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       stdout: new TextHandler(),
       stderr: new TextHandler(),
       status: "NA",
+      shown: true,
       process: new Runnable(),
       errorHandler: (err) => this._onProcessError(file, id, err),
       stdoutDataHandler: (data) => this._onStdoutData(file, id, data),
@@ -285,6 +292,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         id: state.state,
         stdio: "STDERR",
         data: state.stderr.data,
+      });
+      super._postMessage({
+        type: "SET",
+        id: state.state,
+        property: "shown",
+        value: state.shown,
       });
     }
   }
@@ -736,6 +749,35 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
+  private _toggleVisibility({
+    id,
+  }: v.InferOutput<typeof import("../../shared/stress-messages").ToggleVisibilityMessageSchema>) {
+    const ctx = this._currentContext;
+    if (!ctx) {
+      return;
+    }
+
+    const state = ctx.state.find((s) => s.state === id);
+    if (!state) {
+      return;
+    }
+
+    // Simple toggle - just flip the shown state
+    state.shown = !state.shown;
+
+    // Notify webview
+    super._postMessage({
+      type: "SET",
+      id,
+      property: "shown",
+      value: state.shown,
+    });
+
+    if (this._currentFile) {
+      void this._saveState(this._currentFile);
+    }
+  }
+
   private _saveState(file: string) {
     const ctx = this._contexts.get(file);
     if (!ctx) {
@@ -754,6 +796,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         stdin: state.stdin.data,
         stdout: state.stdout.data,
         stderr: state.stderr.data,
+        shown: state.shown,
       });
     }
     void super.writeStorage(
