@@ -176,7 +176,7 @@
       <div class="state-toolbar-right">
         <button
           class="state-toolbar-icon"
-          data-tooltip="Add to Judge"
+          data-tooltip="Add to File"
           aria-label="Add"
           onclick={handleAdd}
         >
