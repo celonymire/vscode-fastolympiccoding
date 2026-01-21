@@ -14,6 +14,7 @@
   } from "../../shared/stress-messages";
   import { postProviderMessage } from "./message";
   import State from "./State.svelte";
+  import StateToolbar from "./StateToolbar.svelte";
 
   type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
   type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
@@ -97,7 +98,6 @@
       state.stdin = "";
       state.stdout = "";
       state.stderr = "";
-      state.status = "NA";
     }
   }
 
@@ -178,14 +178,16 @@
       </button>
     {:else}
       {#each states as item (item.id)}
-        <State
-          id={item.id}
-          state={item}
-          placeholder={item.placeholder}
-          {interactiveMode}
-          onView={handleView}
-          onAdd={handleAdd}
-        />
+        <div class="state-item">
+          <StateToolbar id={item.id} status={item.status} {interactiveMode} onAdd={handleAdd} />
+          <State
+            id={item.id}
+            state={item}
+            placeholder={item.placeholder}
+            {interactiveMode}
+            onView={handleView}
+          />
+        </div>
       {/each}
     {/if}
   </div>
@@ -200,6 +202,10 @@
   .state-container {
     margin-top: 4px;
     margin-bottom: 24px;
+  }
+
+  .state-item {
+    margin-bottom: 28px;
   }
 
   #empty-state {

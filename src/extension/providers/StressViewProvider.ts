@@ -451,6 +451,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         .on("stderr:data", state.stderrDataHandler)
         .on("stderr:end", state.stderrEndHandler)
         .on("close", state.closeHandler);
+
+      super._postMessage(
+        {
+          type: "STATUS",
+          id: state.state,
+          status: "RUNNING",
+        },
+        file
+      );
     };
 
     const executionPromise = (state: State) => {
@@ -458,14 +467,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         void (async () => {
           await state.process.done;
           state.status = mapTestcaseTermination(state.process.termination);
-          super._postMessage(
-            {
-              type: "STATUS",
-              id: state.state,
-              status: state.status,
-            },
-            file
-          );
+          // Don't update the status in the UI here. Let the code decide if it's
+          // time to stop, which the status will be set after the loop.
           resolve(terminationSeverityNumber(state.process.termination));
         })();
       });
@@ -478,15 +481,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
-
-        super._postMessage(
-          {
-            type: "STATUS",
-            id: state.state,
-            status: "RUNNING",
-          },
-          file
-        );
       }
       if (ctx.interactiveMode) {
         ctx.combinedInteractiveStderr = "";
@@ -534,16 +528,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
       if (ctx.interactiveMode) {
         if (maxSeverity === 0) {
-          // All finished successfully
-          solutionState.status = "AC";
-          super._postMessage(
-            {
-              type: "STATUS",
-              id: solutionState.state,
-              status: solutionState.status,
-            },
-            file
-          );
+          // All finished successfully. Do nothing
         } else if (maxSeverity === 1) {
           // Stopped
           break;
@@ -557,22 +542,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           // WA
           judgeState.status = "NA";
           solutionState.status = "WA";
-          super._postMessage(
-            {
-              type: "STATUS",
-              id: judgeState.state,
-              status: judgeState.status,
-            },
-            file
-          );
-          super._postMessage(
-            {
-              type: "STATUS",
-              id: solutionState.state,
-              status: solutionState.status,
-            },
-            file
-          );
           break;
         }
       } else {
@@ -580,31 +549,24 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           break;
         } else if (solutionState.stdout.data !== judgeState.stdout.data) {
           solutionState.status = "WA";
-          super._postMessage(
-            {
-              type: "STATUS",
-              id: solutionState.state,
-              status: solutionState.status,
-            },
-            file
-          );
           break;
-        } else {
-          solutionState.status = "AC";
-          super._postMessage(
-            {
-              type: "STATUS",
-              id: solutionState.state,
-              status: solutionState.status,
-            },
-            file
-          );
         }
       }
 
       await new Promise<void>((resolve) => setTimeout(() => resolve(), delayBetweenTestcases));
     }
     ctx.running = false;
+
+    for (const state of ctx.state) {
+      super._postMessage(
+        {
+          type: "STATUS",
+          id: state.state,
+          status: state.status,
+        },
+        file
+      );
+    }
 
     if (ctx.clearFlag) {
       for (const state of ctx.state) {
@@ -747,9 +709,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         state.stdout.reset();
         state.stderr.reset();
         state.status = "NA";
-      }
 
+        super._postMessage({
+          type: "STATUS",
+          id: state.state,
+          status: "NA",
+        });
+      }
       super._postMessage({ type: "CLEAR" });
+
       if (this._currentFile) {
         void this._saveState(this._currentFile);
       }
