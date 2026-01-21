@@ -2,51 +2,77 @@
 applyTo: "src/addons/**/*.cpp"
 ---
 
-This repo includes **platform-specific** native addons used for efficient process execution and monitoring. These addons replace Node.js `child_process` for running user code to strictly enforce time and memory limits and provide accurate resource usage statistics.
+## Purpose
 
-- **Windows:** `win32-process-monitor` – uses **Job Objects** and efficient completion ports/events.
-- **Linux:** `linux-process-monitor` – uses **pidfd** (kernel 5.3+) and polling for memory limits.
-- **macOS:** `darwin-process-monitor` – uses **kqueue** for process events and **proc_pid_rusage** for accurate stats.
+Platform-specific native addons for strict process execution with:
 
-When working on these files:
+- Hard time and memory limit enforcement
+- Accurate resource usage statistics
+- Non-blocking execution via Node.js Async Workers
 
-### 1. Unified Spawn & Monitor
-The addons export a `spawn` function that handles the entire lifecycle:
--   **Spawning**: Forks/Creates the process with the correct flags (e.g., suspended on Windows).
--   **Limits**: Enforces Time and Memory limits natively.
-    -   *Windows*: Job Object limits (Hard enforcement).
-    -   *Linux/macOS*: Polling (50ms interval) for memory; `SIGXCPU` / wall-clock checks for time.
--   **Waiting**: Uses non-blocking OS primitives (`pidfd_open`+`poll`, `kqueue`, `WaitForMultipleObjects`) in a `Napi::AsyncWorker`.
--   **IPC**: Communicates stdio via Named Pipes (Windows) or Unix Sockets (Linux/macOS) established *before* execution.
+## Platform Implementations
 
-### 2. Platform Implementation Details (Parity Required)
-Functionality must be consistent across all three platforms.
+### Linux (`linux-process-monitor.cpp`)
 
-#### Linux (`linux-process-monitor.cpp`)
--   **Mechanism**: Uses `pidfd_open` (available in Linux 5.3+) to avoid PID reuse races.
--   **Memory**: Polls `/proc/[pid]/status` for `VmHWM` (Peak Resident Set Size). This is preferred over `RLIMIT_AS` which is unreliable for V8/Node runtimes.
--   **Zombie Handling**: MUST capture `VmHWM` *before* reaping the zombie logic, as the entry disappears or resets after `wait4`.
+- Uses `pidfd_open` (kernel 5.3+) to avoid PID reuse races
+- Polls `/proc/[pid]/status` for `VmHWM` (Peak Resident Set Size)
+- **Critical**: Capture `VmHWM` before reaping zombie; values disappear after `wait4`
+- Memory enforcement via polling (50ms interval), not `RLIMIT_AS`
 
-#### macOS (`darwin-process-monitor.cpp`)
--   **Mechanism**: Uses `kqueue` with `EVFILT_PROC` (for exit) and `EVFILT_USER` (for cancellation).
--   **Stats**: Uses `proc_pid_rusage` to get `phys_footprint` (most accurate memory metric) and nanosecond-precision CPU time.
--   **Timebase**: Handles Mach absolute time conversion for Apple Silicon correctness.
+### macOS (`darwin-process-monitor.cpp`)
 
-#### Windows (`win32-process-monitor.cpp`)
--   **Mechanism**: Uses **Job Objects** to group the process. This allows the OS to automatically terminate the process if it exceeds hard memory/CPU limits.
--   **Unicode**: usage of Wide String APIs (`CreateProcessW`, `std::wstring`) is mandatory.
+- Uses `kqueue` with `EVFILT_PROC` (exit events) and `EVFILT_USER` (cancellation)
+- Uses `proc_pid_rusage` for accurate stats: `phys_footprint` (memory), nanosecond CPU time
+- Handles Mach absolute time conversion for Apple Silicon
 
-### 3. Runtime Integration (`src/extension/utils/runtime.ts`)
--   The `Runnable` class delegates execution entirely to the native addon when available.
--   **No Fallback**: Unlike previous versions, we do *not* fallback to `child_process` + `pidusage` for these heavy tasks, as strict limit enforcement is required.
--   **Cancellation**: The addon exposes a `cancel()` function that sets an event/writes to a generic FD to wake up the worker thread immediately.
+### Windows (`win32-process-monitor.cpp`)
 
-### 4. Build & Distribution
--   **Commands**: `npm run build:addon` builds via `node-gyp`.
--   **CI**: GitHub Actions builds the specific addon for the target platform (Linux/Windows/macOS) during the VSIX packaging step.
--   **Bundling**: `rspack.config.ts` copies the appropriate `.node` file to `dist/` based on the generic platform.
+- Uses **Job Objects** for hard memory/CPU limits (OS-enforced)
+- Process created suspended, added to Job, then resumed
+- Uses completion ports for efficient wait
+- **All APIs use Wide Strings** (`CreateProcessW`, `std::wstring`)
 
-### 5. Code Style
--   **Safety**: Always check return codes (`errno`, `GetLastError`) and return meaningful errors to JS.
--   **Non-blocking**: Changes must preserve the asynchronous nature of the worker. Never block the main thread.
--   **Memory**: Use `std::shared_ptr` for state shared between the main thread (cancellation) and the worker thread.
+## Spawn API
+
+```typescript
+interface NativeSpawnResult {
+  pid: number;
+  stdio: [number, number, number]; // fd handles
+  result: Promise<AddonResult>;
+  cancel: () => void;
+}
+
+interface AddonResult {
+  elapsedMs: number;
+  peakMemoryBytes: number;
+  exitCode: number | null;
+  timedOut: boolean;
+  memoryLimitExceeded: boolean;
+  stopped: boolean; // Cancelled
+}
+```
+
+## IPC
+
+Stdio uses Named Pipes (Windows) or Unix Sockets (Linux/macOS) established before process spawn. The extension's `Runnable` class connects to these pipes.
+
+## Cancellation
+
+Each addon exposes a `cancel()` function that:
+
+- Writes to a signal fd / sets an event
+- Wakes the worker thread immediately
+- Process is terminated, `stopped: true` in result
+
+## Build
+
+- `npm run build:addon`: Builds via node-gyp
+- CI builds platform-specific `.node` files during VSIX packaging
+- rspack copies the appropriate addon to `dist/`
+
+## Code Guidelines
+
+- Always check return codes (`errno`, `GetLastError`)
+- Never block the Node.js main thread
+- Use `std::shared_ptr` for state shared between main thread and worker
+- Return meaningful errors to JavaScript

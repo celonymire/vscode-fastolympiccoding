@@ -2,40 +2,90 @@
 applyTo: "src/extension/**/*.ts"
 ---
 
-This repository is a VS Code extension called "Fast Olympic Coding." The `src/extension/**` tree contains the extension backend code (Node.js, VS Code API) that powers the Judge and Stress views.
+## Architecture
 
-When changing files under `src/extension/**`:
+- **BaseViewProvider**: Abstract base for webview providers. Handles webview setup, CSP nonce generation, message validation via Valibot, and workspaceState access keyed by file path.
+- **JudgeViewProvider** / **StressViewProvider**: File-scoped controllers extending BaseViewProvider. Hiding the webview does not tear down state or stop processes; teardown belongs in `onDispose()`.
+- **PanelViewProvider**: Tree data provider for the status bar popup view. Shows Competitive Companion status, running judge testcases (by file), and running stress sessions.
 
-- Treat `JudgeViewProvider` and `StressViewProvider` as the main controllers for their respective webviews. They extend `BaseViewProvider`, which encapsulates webview setup, CSP nonce generation, message posting via Valibot-validated schemas, and workspaceState access keyed by active file path.
-- Judge and Stress are file-scoped and are expected to be **persistent**: hiding the webview should not tear down in-memory state or stop running processes. Teardown belongs in `onDispose()`. Switching the active editor to a different file should switch state (and stop any per-file running processes) using the file persistence lifecycle pattern.
-- **File persistence lifecycle:** Both providers implement `loadCurrentFileData()` as the entry point. `BaseViewProvider` provides `_ensureActiveEditorListener()`, `_handleActiveEditorChange()`, and `_syncOrSwitchToTargetFile()` for consistent file switching. Subclasses implement `_switchToFile(file)`, `_switchToNoFile()`, `_rehydrateWebviewFromState()`, `_sendShowMessage(visible)`, and optionally `_hasState()` to check if in-memory state exists for the current file.
-- Webviews rely on Codicons for icons; `BaseViewProvider` already includes `dist/` in local resource roots and loads `dist/codicons/codicon.css`. Preserve that setup (CSP, resource roots, and link tag) whenever adjusting webview HTML or resource handling so icons keep rendering.
-- All extension ⇄ webview communication must go through the discriminated unions and Valibot schemas in `src/shared/*-messages.ts`. Do not introduce ad-hoc string message types; instead, extend the shared string literal arrays and message unions.
-- Shared enums are defined as `const` string literal tuples (e.g., `StatusValues = ["CE", "RE", "WA", "AC", "NA", "TL", "COMPILING", "RUNNING", "EDITING", "ML"] as const`) validated via `v.picklist(...)`. Append new values at the end; do not rename or reorder existing values.
-- The `Status` type in `src/shared/enums.ts` represents the lifecycle: COMPILING → RUNNING → (AC | WA | RE | TL | ML | CE | NA). Preserve existing string values and append new states only at the end.
-- Use `getLanguageSettings(file)` from `src/extension/utils/vscode.ts` to retrieve and validate per-extension run settings from `fastolympiccoding.runSettings`. It returns `undefined` and shows a warning if settings are invalid or missing. `getLanguageSettings(file)` also handles merging folder-specific settings to return the overall merged config. The settings are merged from workspace root to the file folder, merging in that order.
-- Persisted testcases and limits are stored in `workspaceState`, with a top-level key per view ("judge" / "stress") and an inner key per absolute file path. Treat the "default" state (no testcases and timeLimit = 0) as "no data" and delete storage entries rather than persisting defaults indefinitely.
-- Use `TextHandler` (from the extension utilities) for all streamed output shown in the webviews. It must keep the full data for comparisons while truncating display output, normalizes CRLF to LF, and ensures a trailing newline on final writes. Always call `.reset()` before a fresh run and `.write(data, mode)` to update output (where mode is `"batch"`, `"force"`, or `"final"`) so truncation, batching, and whitespace handling remain correct. When the webview requests full data (for editing) or trimmed data (after cancelling edit), use the `TextHandler` to retrieve the internal full data buffer or re-emit content via `.write(..., 'final')` to apply truncation rules and send the "STDIO" message back to the webview.
-- For compilation and execution, use the helpers in `src/extension/utils/runtime.ts`. Specifically, use `compile()` (which caches builds by file checksum and compile command) and `Runnable` (which wraps child processes with timing, timeout via `AbortSignal.timeout`, and exit/timeout information) instead of spawning processes manually.
-- In the Stress view logic, keep the sequential generator pattern that feeds testcases to the solution and reference solution, and ensure the loop respects both per-test (`stressTestcaseTimeLimit`) and global (`stressTimeLimit`) limits while exiting early on the first mismatch or failure for speed.
-- Always resolve command variables via `resolveVariables` / `resolveCommand` from `src/extension/utils/vscode.ts` before spawning external processes.
-- Keep patches minimal, prefer existing patterns, and avoid introducing heavy new dependencies in the extension backend unless strictly necessary.
+## File Persistence Lifecycle
 
-When extending functionality from the extension side:
+Both Judge and Stress implement the same file-switching pattern:
 
-- Follow the shared feature workflow: update contracts in `src/shared/**`, extend the appropriate Provider (`JudgeViewProvider`, `StressViewProvider`, or a new view provider) to send/receive the new messages, then adjust the corresponding webview handlers.
-- For a new view, mirror the existing pattern: create `<NewView>ViewProvider` extending `BaseViewProvider`, register it in `src/extension/index.ts`, add the view configuration and activation events in `package.json`, and define matching message contracts under `src/shared/`.
-- For a new Judge action (for example, a new testcase operation), extend the `ActionValues` array and interfaces in `src/shared/judge-messages.ts`, handle the new case in the provider's action switch, and wire a matching UI trigger in the Judge webview's `App.svelte`.
-- Debugging is supported from Judge as an **attach-mode** workflow: start the debug-wrapped process via `Runnable` (so stdin can be supplied by the extension), then call `vscode.debug.startDebugging(...)` using the configured `debugAttachConfig` name. Per-language settings are stored under `fastolympiccoding.runSettings` (`debugCommand`, `debugAttachConfig`).
-- **Debug session lifecycle:** JudgeViewProvider subscribes to `vscode.debug.onDidStartDebugSession` and `vscode.debug.onDidTerminateDebugSession` to track active debug sessions. It tags debug configurations with `fastolympiccodingTestcaseId` to identify which testcase is being debugged and stops the testcase process when the debug session terminates.
-- **Dynamic debug ports:** The extension generates a fresh `${debugPort}` for every debug run via `findAvailablePort()` and injects it into both `debugCommand` and the selected `launch.json` configuration. VS Code does not resolve `${debugPort}` by itself; the extension resolves variables and passes a fully-resolved config to `vscode.debug.startDebugging(...)`.
-- **Competitive Companion integration:** `src/extension/utils/competitiveCompanion.ts` implements an HTTP server that receives problem data from the Competitive Companion browser extension. Problems are queued and processed sequentially via `ProblemQueue`. The `ProblemSchema` in `schemas.ts` validates incoming data. Users can select target files via QuickPick when receiving multi-problem batches.
-- **Utility classes:** `ReadonlyTerminal` provides a pseudo-terminal for displaying compilation errors. `ReadonlyStringProvider` implements a virtual document provider for viewing large stdio content in a new editor tab.
-- When unsure about control flow, message patterns, or state persistence, inspect the existing implementations in `JudgeViewProvider` and `StressViewProvider` and stay consistent with those designs.
+1. `loadCurrentFileData()` is the entry point when the webview becomes visible
+2. `_ensureActiveEditorListener()` subscribes to editor changes
+3. `_handleActiveEditorChange()` filters non-file schemes and calls `_switchToFile()`
+4. `_switchToFile(file)` loads persisted data from workspaceState, creates in-memory state, and rehydrates the webview
+5. `_switchToNoFile()` handles cases where no valid file is open
+6. `_rehydrateWebviewFromState()` sends current in-memory state to the webview
 
-**Logging:**
+When switching files, stop any running processes for the previous file before switching to the new one.
 
-- Use `getLogger(component)` from `src/extension/utils/logging.ts` to create component-scoped loggers. Component names should match the module (e.g., `"runtime"`, `"judge"`, `"stress"`, `"competitive-companion"`).
-- Log levels are controlled via VS Code's built-in "Developer: Set Log Level" UI (no custom settings). Use `trace` for high-frequency events (per-iteration), `debug` for sampling/diagnostics, `info` for lifecycle events (process start/stop), `warn` for recoverable issues (invalid input, missing config), and `error` for failures (process spawn, file I/O, schema validation).
-- Log only information not visible in the webview or notifications: internal diagnostic context (command args, cwd, exit codes), schema validation details, port allocations, and file system operations. Do not log full stdin/stdout/stderr or Competitive Companion payloads; log sizes/errors instead.
-- Inline metadata directly into log messages as strings (e.g., "Compilation started: /path/to/file (gcc -o out main.c)") rather than passing objects. Use `...args` to pass Error objects when needed.
+## TextHandler
+
+Use `TextHandler` from `src/extension/utils/vscode.ts` for all streamed output. It:
+
+- Keeps full data internally for comparisons (answer checking)
+- Truncates display output (max characters/lines)
+- Normalizes CRLF to LF
+- Ensures trailing newline on final writes
+
+Write modes:
+
+- `"batch"`: Batched updates, throttled for performance
+- `"force"`: Immediate update, bypasses throttling
+- `"final"`: Final write, applies truncation rules and trailing newline
+
+Always call `.reset()` before a fresh run.
+
+## Runnable and runtime.ts
+
+The `Runnable` class wraps process execution with:
+
+- Native addon integration for strict time/memory enforcement
+- Named pipe/socket IPC for stdio
+- Termination tracking (`RunTermination` type)
+
+Termination mapping helpers:
+
+- `mapCompilationTermination()`: Maps to CE status on failure
+- `mapTestcaseTermination()`: Maps to RE/TL/ML/AC based on exit conditions
+- `severityNumberToInteractiveStatus()`: For interactive testcases with multiple processes
+
+Use `compile()` for compilation (caches by file checksum and compile command).
+
+## Debug Workflow
+
+Debug support uses **attach mode**:
+
+1. Generate a fresh port via `findAvailablePort()`
+2. Resolve `${debugPort}` in both `debugCommand` and launch config
+3. Start debug-wrapped process via `Runnable`
+4. Call `vscode.debug.startDebugging()` with fully-resolved config
+
+Track debug sessions via `onDidStartDebugSession` / `onDidTerminateDebugSession`. Tag configs with `fastolympiccodingTestcaseId` to identify which testcase is being debugged.
+
+## Competitive Companion
+
+`competitiveCompanion.ts` implements an HTTP server receiving problem data from the browser extension. Problems are queued in `ProblemQueue` and processed sequentially. Users select target files via QuickPick for batch problems.
+
+## Logging
+
+Use `getLogger(component)` from `src/extension/utils/logging.ts`. Component names: `"runtime"`, `"judge"`, `"stress"`, `"competitive-companion"`.
+
+Log levels (controlled via VS Code's "Developer: Set Log Level"):
+
+- `trace`: High-frequency events (per-iteration)
+- `debug`: Sampling/diagnostics
+- `info`: Lifecycle events (process start/stop)
+- `warn`: Recoverable issues (invalid input, missing config)
+- `error`: Failures (process spawn, file I/O, schema validation)
+
+Log diagnostic context not visible in UI (command args, cwd, exit codes, port allocations). Avoid logging full stdin/stdout/stderr or CC payloads.
+
+## Extending Functionality
+
+1. Update contracts in `src/shared/` (add to string literal arrays, create Valibot schema, add to union)
+2. Extend the Provider to handle new messages
+3. Persist state via `writeStorage()` only after all mutations complete
+4. Implement webview handling in `App.svelte`
