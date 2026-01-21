@@ -25,6 +25,7 @@ import { getLogger } from "../utils/logging";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
+  OpenMessageSchema,
   ProviderMessageSchema,
   SaveMessageSchema,
   StateIdValue,
@@ -127,6 +128,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "ADD":
         this._add(msg);
+        break;
+      case "OPEN":
+        this._open(msg);
         break;
       case "CLEAR":
         this.clear();
@@ -707,6 +711,34 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         mode: "standard",
         interactorSecret: "",
       });
+    }
+
+    vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));
+  }
+
+  private _open({ id }: v.InferOutput<typeof OpenMessageSchema>) {
+    if (!this._currentFile) {
+      return;
+    }
+
+    const ctx = this._currentContext;
+    if (!ctx) return;
+
+    const settings = getFileRunSettings(this._currentFile);
+    if (!settings) {
+      return;
+    }
+
+    let resolvedFile: string | undefined;
+    if (id === "Generator") {
+      resolvedFile = settings.generatorFile;
+    } else if (id === "Solution") {
+      resolvedFile = this._currentFile;
+    } else if (id === "Judge") {
+      resolvedFile = ctx.interactiveMode ? settings.interactorFile : settings.goodSolutionFile;
+    }
+    if (!resolvedFile) {
+      return;
     }
 
     vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));

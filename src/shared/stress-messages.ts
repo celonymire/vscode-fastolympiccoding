@@ -75,6 +75,7 @@ export const ProviderMessageTypeValues = [
   "STOP",
   "VIEW",
   "ADD",
+  "OPEN",
   "CLEAR",
   "SAVE",
   "TOGGLE_VISIBILITY",
@@ -107,6 +108,11 @@ export const AddMessageSchema = v.object({
   id: v.picklist(StateIdValue),
 });
 
+export const OpenMessageSchema = v.object({
+  type: v.literal("OPEN"),
+  id: v.picklist(StateIdValue),
+});
+
 export const ResetMessageSchema = v.object({
   type: v.literal("CLEAR"),
 });
@@ -127,6 +133,7 @@ export const ProviderMessageSchema = v.union([
   StopMessageSchema,
   ViewMessageSchema,
   AddMessageSchema,
+  OpenMessageSchema,
   ResetMessageSchema,
   SaveMessageSchema,
   ToggleVisibilityMessageSchema,

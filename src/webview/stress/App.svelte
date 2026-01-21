@@ -67,6 +67,10 @@
     postProviderMessage({ type: "ADD", id });
   }
 
+  function handleOpen(id: StateId) {
+    postProviderMessage({ type: "OPEN", id });
+  }
+
   function handleInit({ interactiveMode: mode }: v.InferOutput<typeof InitMessageSchema>) {
     interactiveMode = mode;
   }
@@ -201,6 +205,7 @@
             {interactiveMode}
             shown={item.shown}
             onAdd={handleAdd}
+            onOpen={handleOpen}
             onToggleVisibility={handleToggleVisibility}
           />
           <State

@@ -9,13 +9,18 @@
     interactiveMode: boolean;
     shown: boolean;
     onAdd: (id: StateId) => void;
+    onOpen: (id: StateId) => void;
     onToggleVisibility: (id: StateId) => void;
   }
 
-  let { id, status, interactiveMode, shown, onAdd, onToggleVisibility }: Props = $props();
+  let { id, status, interactiveMode, shown, onAdd, onOpen, onToggleVisibility }: Props = $props();
 
   function handleAdd() {
     onAdd(id);
+  }
+
+  function handleOpen() {
+    onOpen(id);
   }
 
   function handleToggleVisibility() {
@@ -172,8 +177,16 @@
         </div>
       {/if}
     </div>
-    {#if status !== "NA" && status !== "AC"}
-      <div class="state-toolbar-right">
+    <div class="state-toolbar-right">
+      <button
+        class="state-toolbar-icon"
+        data-tooltip="Open File"
+        aria-label="Open"
+        onclick={handleOpen}
+      >
+        <div class="codicon codicon-go-to-file"></div>
+      </button>
+      {#if status !== "NA" && status !== "AC"}
         <button
           class="state-toolbar-icon"
           data-tooltip="Add to File"
@@ -182,8 +195,8 @@
         >
           <div class="codicon codicon-insert"></div>
         </button>
-      </div>
-    {/if}
+      {/if}
+    </div>
   </div>
 {/if}
 
@@ -211,7 +224,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 3px;
   }
 
   .state-toolbar-icon {
