@@ -193,9 +193,6 @@
           ></div>
         </button>
       </div>
-      <div class="toolbar-icon toolbar-icon-exclude-highlight">
-        <div class="codicon codicon-loading codicon-modifier-spin"></div>
-      </div>
       {#if testcase.mode === "interactive"}
         <div class="toolbar-badge-container toolbar-badge" data-status="CE">
           <div class="toolbar-icon toolbar-icon-exclude-highlight">
@@ -203,6 +200,9 @@
           </div>
         </div>
       {/if}
+      <div class="toolbar-icon toolbar-icon-exclude-highlight">
+        <div class="codicon codicon-loading codicon-modifier-spin"></div>
+      </div>
       <button
         class="toolbar-icon"
         data-tooltip="Stop Testcase"
