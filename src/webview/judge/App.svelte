@@ -14,6 +14,7 @@
   } from "../../shared/judge-messages";
   import { postProviderMessage } from "./message";
   import Testcase from "./Testcase.svelte";
+  import TestcaseToolbar from "./TestcaseToolbar.svelte";
 
   // Reactive state using Svelte 5 runes
   let testcases = $state<TestcaseType[]>([]);
@@ -22,6 +23,7 @@
   let show = $state(true);
   let showSettings = $state(false);
   let showTestcaseDropdown = $state(false);
+  let testcaseRefs = $state<Record<string, { reset: () => void }>>({});
 
   // Helper to find testcase by uuid
   function findTestcaseIndex(uuid: string): number {
@@ -136,6 +138,12 @@
     newMemoryLimit = Number(target.value);
   }
 
+  function handlePrerun(uuid: string) {
+    if (testcaseRefs[uuid]) {
+      testcaseRefs[uuid].reset();
+    }
+  }
+
   // Listen for messages from extension
   onMount(() => {
     const handleMessage = (msg: MessageEvent<WebviewMessage>) => {
@@ -222,7 +230,8 @@
   {:else}
     <div class="testcase-container">
       {#each testcases as testcase, index (testcase.uuid)}
-        <Testcase bind:testcase={testcases[index]} />
+        <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
+        <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
       {/each}
       <div class="new-button-wrapper">
         <button class="text-button grow-1" type="button" onclick={handleNewTestcase}>

@@ -3,7 +3,6 @@
   import type { Testcase } from "../../shared/schemas";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
   import { postProviderMessage } from "./message";
-  import TestcaseToolbar from "./TestcaseToolbar.svelte";
 
   interface Props {
     testcase: Testcase;
@@ -11,17 +10,10 @@
 
   let { testcase = $bindable() }: Props = $props();
   let newStdin = $state("");
-
-  function onprerun() {
-    newStdin = "";
-    newInteractorSecret = "";
-    stdinEditing = false;
-    acceptedStdoutEditing = false;
-    interactorSecretEditing = false;
-    handleSaveStdin();
-    handleSaveAcceptedStdout();
-    handleSaveInteractorSecret();
-  }
+  let newInteractorSecret = $state("");
+  let stdinEditing = $state(false);
+  let acceptedStdoutEditing = $state(false);
+  let interactorSecretEditing = $state(false);
 
   function handleExpandStdio(stdio: Stdio) {
     postProviderMessage({ type: "VIEW", uuid: testcase.uuid, stdio });
@@ -60,15 +52,20 @@
   const toggled = $derived(testcase.toggled);
   const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
 
-  let newInteractorSecret = $state("");
-  let stdinEditing = $state(false);
-  let acceptedStdoutEditing = $state(false);
-  let interactorSecretEditing = $state(false);
+  export function reset() {
+    newStdin = "";
+    newInteractorSecret = "";
+    stdinEditing = false;
+    acceptedStdoutEditing = false;
+    interactorSecretEditing = false;
+    handleSaveStdin();
+    handleSaveAcceptedStdout();
+    handleSaveInteractorSecret();
+  }
 </script>
 
 {#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE"}
   <div class="testcase-container">
-    <TestcaseToolbar {testcase} {onprerun} />
     {#if showDetails}
       {#if status !== "CE"}
         {#if testcase.mode === "interactive"}
@@ -208,12 +205,9 @@
     {/if}
   </div>
 {:else if status === "COMPILING"}
-  <div class="testcase-container">
-    <TestcaseToolbar {testcase} {onprerun} />
-  </div>
+  <div class="testcase-container"></div>
 {:else if status === "RUNNING"}
   <div class="testcase-container">
-    <TestcaseToolbar {testcase} {onprerun} />
     {#if visible}
       {#if testcase.mode === "interactive"}
         {#if testcase.interactorSecret === "" || testcase.interactorSecret === "\n"}

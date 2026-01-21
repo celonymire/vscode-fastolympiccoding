@@ -22,7 +22,7 @@
 - Enhanced integrated view to display compilation output and errors
 - Made the bubble texts in the UI more compact
 - Combined IO from solution and interactor to display the order of interactions
-- Optimized the toolbar of the stress tester to avoid unnecessary updates
+- Optimized the toolbar of the judge and stress tester to avoid unnecessary updates
 
 ### Fixed
 
