@@ -38,7 +38,7 @@
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
         </div>
-        <p class="state-badge-text">{id}</p>
+        <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
       {#if interactiveMode}
         <div class="state-badge state-status" data-status="CE">
@@ -76,7 +76,7 @@
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
         </div>
-        <p class="state-badge-text">{id}</p>
+        <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
       {#if interactiveMode}
         <div class="state-badge state-status" data-status="CE">
@@ -111,7 +111,7 @@
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
         </div>
-        <p class="state-badge-text">{id}</p>
+        <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
       {#if interactiveMode}
         <div class="state-badge state-status" data-status="CE">
@@ -149,7 +149,7 @@
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>
         </div>
-        <p class="state-badge-text">{id}</p>
+        <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
       {#if status !== "NA"}
         <div class="state-badge state-status" data-status={status}>
@@ -258,6 +258,10 @@
 
   .state-badge-text {
     margin: 0 3px 0 0;
+  }
+
+  .state-badge-text-id {
+    margin-left: 1px;
   }
 
   .state-toolbar-dropdown-container {
