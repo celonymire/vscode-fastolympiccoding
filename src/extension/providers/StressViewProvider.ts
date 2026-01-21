@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 import * as crypto from "crypto";
+import * as fs from "fs";
 
 import { StatusSchema, type Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
@@ -713,7 +714,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
     }
 
-    vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));
+    if (fs.existsSync(resolvedFile)) {
+      void vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));
+    } else {
+      void vscode.window.showWarningMessage(`${resolvedFile} does not exist`);
+    }
   }
 
   private _open({ id }: v.InferOutput<typeof OpenMessageSchema>) {
@@ -741,7 +746,11 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));
+    if (fs.existsSync(resolvedFile)) {
+      void vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));
+    } else {
+      void vscode.window.showWarningMessage(`${resolvedFile} does not exist`);
+    }
   }
 
   clear() {
