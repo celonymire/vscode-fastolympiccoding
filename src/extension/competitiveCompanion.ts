@@ -282,10 +282,13 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
 /**
  * Stops listening for Competitive Companion connections.
  */
-export function stopCompetitiveCompanion(): void {
+export async function stopCompetitiveCompanion(): Promise<void> {
   if (server) {
-    server.close();
+    const s = server;
     server = undefined;
+    await new Promise<void>((resolve) => {
+      s.close(() => resolve());
+    });
   }
 }
 

@@ -294,6 +294,37 @@ function registerCommands(context: vscode.ExtensionContext): void {
       void judgeViewProvider.stopAllBackgroundTasks();
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.changePort", async () => {
+      const config = vscode.workspace.getConfiguration("fastolympiccoding");
+      const currentPort = config.get<number>("port")!;
+      const newPort = await vscode.window.showInputBox({
+        title: "Change Competitive Companion Port",
+        value: currentPort.toString(),
+        validateInput: (value) => {
+          const port = parseInt(value, 10);
+          if (isNaN(port) || port < 1024 || port > 65535) {
+            return "Port must be a number between 1024 and 65535";
+          }
+          return undefined;
+        },
+      });
+
+      if (newPort !== undefined) {
+        await config.update("port", parseInt(newPort, 10), vscode.ConfigurationTarget.Global);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(async (e) => {
+      if (e.affectsConfiguration("fastolympiccoding.port")) {
+        await stopCompetitiveCompanion();
+        createListener(judgeViewProvider);
+      }
+    })
+  );
 }
 
 export function activate(context: vscode.ExtensionContext): void {

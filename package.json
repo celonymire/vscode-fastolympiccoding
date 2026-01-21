@@ -68,6 +68,11 @@
           "command": "fastolympiccoding.toggleStressSettings",
           "group": "navigation@4",
           "when": "view == fastolympiccoding.stress"
+        },
+        {
+          "command": "fastolympiccoding.changePort",
+          "group": "navigation@5",
+          "when": "view == fastolympiccoding.judge || view == fastolympiccoding.stress"
         }
       ],
       "commandPalette": [
@@ -106,6 +111,11 @@
           "command": "fastolympiccoding.stopAllStressSessions",
           "group": "inline",
           "when": "view == fastolympiccoding.panel && viewItem == stress-background-group"
+        },
+        {
+          "command": "fastolympiccoding.changePort",
+          "group": "inline",
+          "when": "view == fastolympiccoding.panel && (viewItem == companion-listening || viewItem == companion-stopped)"
         }
       ]
     },
@@ -390,6 +400,12 @@
         "title": "Stop All Stress Sessions",
         "category": "Fast Olympic Coding",
         "icon": "$(circle-slash)"
+      },
+      {
+        "command": "fastolympiccoding.changePort",
+        "title": "Competitive Companion: Change Port",
+        "category": "Fast Olympic Coding",
+        "icon": "$(edit)"
       }
     ],
     "keybindings": [

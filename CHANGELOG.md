@@ -13,6 +13,7 @@
 - Toggle show details button for stress tester as well as more statuses for judge
 - Icon to open the corresponding file for stress tester
 - Icon to open the interactor for judge
+- Command and context menu to change the port for Competitive Companion
 
 ### Changed
 
