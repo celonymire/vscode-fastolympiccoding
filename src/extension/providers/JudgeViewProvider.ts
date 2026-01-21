@@ -44,7 +44,7 @@ import {
 } from "../../shared/judge-messages";
 import type { Stdio } from "../../shared/enums";
 
-type ITestcase = v.InferOutput<typeof TestcaseSchema>;
+type Testcase = v.InferOutput<typeof TestcaseSchema>;
 type FileData = v.InferOutput<typeof FileDataSchema>;
 
 const FileDataSchema = v.fallback(
@@ -57,7 +57,7 @@ const FileDataSchema = v.fallback(
 );
 
 type State = Omit<
-  ITestcase,
+  Testcase,
   "stdin" | "stderr" | "stdout" | "acceptedStdout" | "interactorSecret"
 > & {
   stdin: TextHandler;
@@ -736,7 +736,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  addTestcaseToFile(file: string, testcase: ITestcase, timeLimit?: number, memoryLimit?: number) {
+  addTestcaseToFile(file: string, testcase: Testcase, timeLimit?: number, memoryLimit?: number) {
     if (file === this._currentFile) {
       if (timeLimit !== undefined) {
         this._runtime.timeLimit = timeLimit;
@@ -953,7 +953,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const allData = this.readStorage();
 
     const serialize = (state: State[], timeLimit: number, memoryLimit: number): FileData => {
-      const testcases: ITestcase[] = state.map((testcase) => ({
+      const testcases: Testcase[] = state.map((testcase) => ({
         uuid: testcase.uuid,
         stdin: testcase.stdin.data,
         stderr: testcase.stderr.data,
@@ -984,14 +984,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     void this._context.workspaceState.update(this.view, allData);
   }
 
-  private _addTestcase(mode: Mode, testcase?: Partial<ITestcase>) {
+  private _addTestcase(mode: Mode, testcase?: Partial<Testcase>) {
     const newState = this._createTestcaseState(mode, testcase, this._currentFile!);
     this._runtime.state.push(newState);
 
     return newState.uuid;
   }
 
-  private _createTestcaseState(mode: Mode, testcase: Partial<ITestcase> | undefined, file: string) {
+  private _createTestcaseState(mode: Mode, testcase: Partial<Testcase> | undefined, file: string) {
     const uuid = testcase?.uuid ?? crypto.randomUUID();
 
     // Create a new testcase in webview
