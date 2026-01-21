@@ -273,7 +273,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!ctx) return;
 
     super._postMessage({ type: "INIT", interactiveMode: ctx.interactiveMode });
-    super._postMessage({ type: "CLEAR" }); // Reset view
+    super._postMessage({ type: "CLEAR" });
+
+    const resendTruncatedData = (handler: TextHandler) => {
+      const data = handler.data;
+      handler.reset();
+      handler.write(data, "final");
+    };
 
     for (const state of ctx.state) {
       super._postMessage({
@@ -282,29 +288,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         status: state.status,
       });
       super._postMessage({
-        type: "STDIO",
-        id: state.state,
-        stdio: "STDIN",
-        data: state.stdin.data,
-      });
-      super._postMessage({
-        type: "STDIO",
-        id: state.state,
-        stdio: "STDOUT",
-        data: state.stdout.data,
-      });
-      super._postMessage({
-        type: "STDIO",
-        id: state.state,
-        stdio: "STDERR",
-        data: state.stderr.data,
-      });
-      super._postMessage({
         type: "SET",
         id: state.state,
         property: "shown",
         value: state.shown,
       });
+
+      resendTruncatedData(state.stdin);
+      resendTruncatedData(state.stdout);
+      resendTruncatedData(state.stderr);
     }
   }
 

@@ -644,15 +644,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _syncTestcaseState(testcase: State) {
     const uuid = testcase.uuid;
-    super._postMessage({ type: "SET", uuid, property: "stdin", value: testcase.stdin.data });
-    super._postMessage({ type: "SET", uuid, property: "stderr", value: testcase.stderr.data });
-    super._postMessage({ type: "SET", uuid, property: "stdout", value: testcase.stdout.data });
-    super._postMessage({
-      type: "SET",
-      uuid,
-      property: "acceptedStdout",
-      value: testcase.acceptedStdout.data,
-    });
+
     super._postMessage({ type: "SET", uuid, property: "elapsed", value: testcase.elapsed });
     super._postMessage({ type: "SET", uuid, property: "memoryBytes", value: testcase.memoryBytes });
     super._postMessage({ type: "SET", uuid, property: "status", value: testcase.status });
@@ -660,12 +652,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: "SET", uuid, property: "toggled", value: testcase.toggled });
     super._postMessage({ type: "SET", uuid, property: "skipped", value: testcase.skipped });
     super._postMessage({ type: "SET", uuid, property: "mode", value: testcase.mode });
-    super._postMessage({
-      type: "SET",
-      uuid,
-      property: "interactorSecret",
-      value: testcase.interactorSecret.data,
-    });
+
+    const resendTruncatedData = (
+      property: "stdin" | "stderr" | "stdout" | "acceptedStdout" | "interactorSecret",
+      handler: TextHandler
+    ) => {
+      const data = handler.data;
+      super._postMessage({ type: "SET", uuid, property, value: "" }); // clear out old data
+      handler.reset();
+      handler.write(data, "final");
+    };
+
+    resendTruncatedData("stdin", testcase.stdin);
+    resendTruncatedData("stderr", testcase.stderr);
+    resendTruncatedData("stdout", testcase.stdout);
+    resendTruncatedData("acceptedStdout", testcase.acceptedStdout);
+    resendTruncatedData("interactorSecret", testcase.interactorSecret);
   }
 
   protected override _switchToFile(file: string) {
