@@ -230,8 +230,10 @@
   {:else}
     <div class="testcase-container">
       {#each testcases as testcase, index (testcase.uuid)}
-        <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
-        <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+        <div class="testcase-item">
+          <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
+          <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+        </div>
       {/each}
       <div class="new-button-wrapper">
         <button class="text-button grow-1" type="button" onclick={handleNewTestcase}>
@@ -271,6 +273,10 @@
 {/if}
 
 <style>
+  .testcase-item {
+    margin-bottom: 24px;
+  }
+
   /* Standard VSCode styling */
   .text-button {
     box-sizing: border-box;
