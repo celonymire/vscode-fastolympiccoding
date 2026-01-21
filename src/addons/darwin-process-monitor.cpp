@@ -160,8 +160,8 @@ public:
 
 protected:
   void Execute() override {
-    // Note: Resource limits (RLIMIT_CPU) are set in the child process
-    // prior to exec(). RLIMIT_AS is NOT set because we enforce RSS via polling.
+    // Note: Resource limits (CPU and Memory) are enforced via polling in the
+    // monitoring loop. RLIMIT_CPU/RLIMIT_AS are not set here.
 
     int status = 0;
     struct rusage rusage;
@@ -316,6 +316,12 @@ protected:
         (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
         (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
     elapsedMs_ = std::round(static_cast<double>(cpuUs) / 1000.0);
+
+    // Post-mortem CPU Time Check: Catch CPU time that exceeded limit between
+    // poll intervals or if process ended naturally just before detection
+    if (timeoutMs_ > 0 && elapsedMs_ > timeoutMs_) {
+      timedOut_ = true;
+    }
 
     // Get peak memory (ru_maxrss is in bytes on macOS)
     peakMemoryBytes_ = static_cast<uint64_t>(rusage.ru_maxrss);

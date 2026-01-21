@@ -347,6 +347,11 @@ protected:
     double rawElapsedMs =
         static_cast<double>(kernelTime.QuadPart + userTime.QuadPart) / 10000.0;
     elapsedMs_ = std::round(rawElapsedMs);
+
+    // Post-mortem CPU Time Check
+    if (timeoutMs_ > 0 && elapsedMs_ > timeoutMs_) {
+      timedOut_ = true;
+    }
   }
 
   void OnOK() override {

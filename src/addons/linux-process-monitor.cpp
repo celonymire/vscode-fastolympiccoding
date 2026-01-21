@@ -156,7 +156,7 @@ protected:
           }
         }
 
-        // Timeout or Interval Wakeup - CHECK MEMORY/TIMEOUT
+        // Timeout or Interval Wakeup - CHECK MEMORY/CPU TIME/TIMEOUT
 
         // Check Memory
         long peakRSS = GetPeakRSS();
@@ -175,7 +175,18 @@ protected:
           }
         }
 
-        // Check Wall Clock Timeout
+        // Check CPU Time Limit
+        if (timeoutMs_ > 0) {
+          uint64_t currentCpuTimeMs = GetCurrentCpuTimeMs();
+          if (currentCpuTimeMs > timeoutMs_) {
+            timedOut_ = true;
+            kill(pid_, SIGKILL);
+            close(pidfd);
+            break;
+          }
+        }
+
+        // Check Wall Clock Timeout (fallback safety mechanism)
         if (timeoutMs_ > 0) {
           auto now = std::chrono::steady_clock::now();
           auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -206,6 +217,12 @@ protected:
         (rusage.ru_utime.tv_sec + rusage.ru_stime.tv_sec) * 1000000ULL +
         (rusage.ru_utime.tv_usec + rusage.ru_stime.tv_usec);
     elapsedMs_ = std::round(static_cast<double>(cpuUs) / 1000.0);
+
+    // Post-mortem CPU Time Check: Catch CPU time that exceeded limit between
+    // poll intervals or if process ended naturally just before detection
+    if (timeoutMs_ > 0 && elapsedMs_ > timeoutMs_) {
+      timedOut_ = true;
+    }
 
     // Post-mortem Memory Check: Catch spikes that happened between poll
     // intervals
@@ -321,6 +338,28 @@ private:
     }
     fclose(f);
     return hwm;
+  }
+
+  uint64_t GetCurrentCpuTimeMs() {
+    std::string path = "/proc/" + std::to_string(pid_) + "/stat";
+    FILE *f = fopen(path.c_str(), "r");
+    if (!f)
+      return 0;
+
+    // Read the stat file - format: pid (comm) state ...
+    // Fields 14 and 15 are utime and stime (in clock ticks)
+    unsigned long utime = 0, stime = 0;
+    if (fscanf(f, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu",
+               &utime, &stime) == 2) {
+      fclose(f);
+      // Convert clock ticks to milliseconds
+      // sysconf(_SC_CLK_TCK) is typically 100 ticks per second
+      long ticksPerSecond = sysconf(_SC_CLK_TCK);
+      uint64_t totalTicks = utime + stime;
+      return (totalTicks * 1000) / ticksPerSecond;
+    }
+    fclose(f);
+    return 0;
   }
 };
 
@@ -450,16 +489,8 @@ Napi::Value SpawnProcess(const Napi::CallbackInfo &info) {
     close(sockOut);
     close(sockErr);
 
-    // Set resource limits
-    if (timeoutMs > 0) {
-      struct rlimit cpuLimit;
-      rlim_t seconds = (timeoutMs + 999) / 1000;
-      if (seconds == 0)
-        seconds = 1;
-      cpuLimit.rlim_cur = seconds;
-      cpuLimit.rlim_max = seconds;
-      prlimit(0, RLIMIT_CPU, &cpuLimit, nullptr);
-    }
+    // Resource limits are now handled in the monitoring loop
+    // (removed prlimit for CPU time as it only works with second precision)
 
     // Change directory
     if (!cwd.empty()) {
