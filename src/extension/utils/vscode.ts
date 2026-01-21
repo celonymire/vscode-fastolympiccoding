@@ -242,7 +242,7 @@ export async function openOrCreateFile(file: string): Promise<void> {
     const document = await vscode.workspace.openTextDocument(file);
     await vscode.window.showTextDocument(document);
   } else {
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await vscode.window.showErrorMessage(
       `${file} does not exist`,
       "Create File",
       "Cancel"
@@ -581,16 +581,7 @@ export function getFileRunSettings(
   extraVariables?: Record<string, string>
 ): FileRunSettings | null {
   if (!fs.existsSync(file)) {
-    vscode.window
-      .showErrorMessage(`${file} does not exist`, "Create File", "Close")
-      .then((choice) => {
-        if (choice === "Create File") {
-          fs.writeFileSync(file, "");
-          vscode.workspace.openTextDocument(file).then((doc) => {
-            vscode.window.showTextDocument(doc);
-          });
-        }
-      });
+    void openOrCreateFile(file);
     return null;
   }
 
