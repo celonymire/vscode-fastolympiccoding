@@ -14,7 +14,7 @@
 
 ### Changed
 
-- Use native addons to run solutions and enforce limits instead of using child_process. This bypasses the event loop and allows for more accurate limits as well as accurate metrics. Using native addons also means we effectively restrict this extension to only run on Windows, Linux, and macOS. The web platform is excluded.
+- Use native addons to run solutions and enforce limits instead of using child_process. This bypasses the event loop and allows for more accurate limits as well as accurate metrics. Using native addons also means we effectively restrict this extension to only run on Windows, Linux, and macOS.
 - Use total CPU time to enforce time limit and a 2x multipler to enforce the wall time
 - Changes are debounced on judge prevent rapid IO bottlenecks
 - Trim off trailing whitespaces when requesting full data
@@ -41,6 +41,7 @@
 
 ### Removed
 
+- Web platform support explicitly (it would've never worked before)
 - Walkthrough. It never showed up by itself and was only accessible through the command palette. The README already covers majority of the information and the built-in error messages help fill in the necessary information.
 - Removed unused save all functionality
 - Removed custom caret placing from the textarea because it acts inconsistently with the custom truncated display of IO texts
