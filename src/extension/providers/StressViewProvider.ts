@@ -708,6 +708,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         interactorSecret: "",
       });
     }
+
+    vscode.window.showTextDocument(vscode.Uri.file(resolvedFile));
   }
 
   clear() {

@@ -24,6 +24,7 @@
 - Made the bubble texts in the UI more compact
 - Combined IO from solution and interactor to display the order of interactions
 - Optimized the toolbar of the judge and stress tester to avoid unnecessary updates
+- Stress tester now opens the file for added testcase
 
 ### Fixed
 
