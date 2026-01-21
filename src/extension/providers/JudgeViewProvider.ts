@@ -107,24 +107,21 @@ function updateTestcaseFromTermination(state: State, termination: RunTermination
   }
 }
 
-function updateInteractiveTestcaseFromTermination(
-  state: State,
-  termination: RunTermination,
-  interactorTermination: RunTermination
-) {
+function updateInteractiveTestcaseFromTermination(state: State) {
   state.elapsed = state.process.elapsed;
   state.memoryBytes = state.process.maxMemoryBytes;
   state.status = severityNumberToInteractiveStatus(
     Math.max(
-      terminationSeverityNumber(termination) as number,
-      terminationSeverityNumber(interactorTermination) as number
+      terminationSeverityNumber(state.process.termination) as number,
+      terminationSeverityNumber(state.interactorProcess.termination) as number
     ) as Severity
   );
   if (state.status === "WA") {
     // Either judge or interactor returned non-zero error code, so we have 2 cases:
-    // 1. Judge returned non-zero, meaning it crashed
+    // 1. Judge returned non-zero, meaning it had a failure
     // 2. Interactor returned non-zero, which indicates wrong answer
-    if (termination === "error") {
+    // 3. Interactor return null error code, which indicates failure
+    if (state.process.termination === "error" || state.interactorProcess.exitCode === null) {
       state.status = "RE";
     }
   }
@@ -478,11 +475,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     testcase.stderr.write("", "final");
     testcase.stdout.write("", "final");
 
-    updateInteractiveTestcaseFromTermination(
-      testcase,
-      testcase.process.termination,
-      testcase.interactorProcess.termination
-    );
+    updateInteractiveTestcaseFromTermination(testcase);
     super._postMessage(
       {
         type: "SET",
@@ -1480,11 +1473,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     if (testcase.mode === "interactive") {
-      updateInteractiveTestcaseFromTermination(
-        testcase,
-        testcase.process.termination,
-        testcase.interactorProcess.termination
-      );
+      updateInteractiveTestcaseFromTermination(testcase);
     } else {
       updateTestcaseFromTermination(testcase, testcase.process.termination);
     }
