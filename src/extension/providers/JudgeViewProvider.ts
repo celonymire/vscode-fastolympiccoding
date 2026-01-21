@@ -181,12 +181,26 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const compilePromises = [];
     const currentFileCompilePromise = compile(this._currentFile!, this._context);
     if (!currentFileCompilePromise) {
+      testcase.status = "NA";
+      super._postMessage({
+        type: "SET",
+        uuid,
+        property: "status",
+        value: "NA",
+      });
       return null;
     }
     compilePromises.push(currentFileCompilePromise);
     if (testcase.mode === "interactive") {
       const interactorCompilePromise = compile(settings.interactorFile!, this._context);
       if (!interactorCompilePromise) {
+        testcase.status = "NA";
+        super._postMessage({
+          type: "SET",
+          uuid,
+          property: "status",
+          value: "NA",
+        });
         return null;
       }
       compilePromises.push(interactorCompilePromise);

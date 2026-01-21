@@ -36,6 +36,7 @@
 - Stress Tester would hang in some situations when some files returned with non-zero exit code
 - Interactive testcase status being overridden when saving new interactor secret during the run
 - Testcase runtime errors weren't detected when the interactor had failure causing it to not return an exit code
+- Testcase stuck in running state when settings for the file were invalid or not found
 
 ### Removed
 
