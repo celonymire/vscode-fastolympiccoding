@@ -13,6 +13,7 @@ export const ActionValues = [
   "COMPARE",
   "DEBUG",
   "REQUEST_DATA",
+  "OPEN_INTERACTOR",
 ] as const;
 
 export type ActionValue = (typeof ActionValues)[number];

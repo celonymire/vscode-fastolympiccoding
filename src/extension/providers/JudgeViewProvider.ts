@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 import * as crypto from "crypto";
+import * as fs from "fs";
 
 import {
   TestcaseSchema,
@@ -925,6 +926,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "COMPARE":
         this._compare(uuid);
         break;
+      case "OPEN_INTERACTOR":
+        this._openInteractor(uuid);
+        break;
     }
     this.requestSave();
   }
@@ -1424,6 +1428,24 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "INTERACTOR_SECRET":
         void openInNewEditor(testcase.interactorSecret.data);
         break;
+    }
+  }
+
+  private _openInteractor(uuid: string) {
+    if (!this._currentFile) {
+      return;
+    }
+    const settings = getFileRunSettings(this._currentFile);
+    if (!settings) {
+      return;
+    }
+
+    if (settings.interactorFile && fs.existsSync(settings.interactorFile)) {
+      void vscode.window.showTextDocument(vscode.Uri.file(settings.interactorFile));
+    } else {
+      void vscode.window.showWarningMessage(
+        `${settings.interactorFile ?? "Interactor file"} does not exist`
+      );
     }
   }
 

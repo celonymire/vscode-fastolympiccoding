@@ -153,6 +153,17 @@
       >
         <div class="codicon codicon-trash"></div>
       </button>
+      {#if testcase.mode === "interactive"}
+        <div class="spacer"></div>
+        <button
+          class="toolbar-icon"
+          data-tooltip="Open Interactor"
+          aria-label="Open Interactor"
+          onclick={() => handleAction("OPEN_INTERACTOR")}
+        >
+          <div class="codicon codicon-go-to-file"></div>
+        </button>
+      {/if}
     </div>
   </div>
 {:else if status === "COMPILING"}
@@ -254,6 +265,10 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+    flex-grow: 1;
+  }
+
+  .spacer {
     flex-grow: 1;
   }
 
