@@ -53,7 +53,7 @@
 {:else if status === "RUNNING"}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
-      <div class="state-badge state-status state-toolbar-dropdown-container" data-status="NA">
+      <div class="state-badge state-toolbar-dropdown-container">
         <button
           class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
@@ -88,7 +88,7 @@
 {:else if status === "CE"}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
-      <div class="state-badge state-status state-toolbar-dropdown-container" data-status={status}>
+      <div class="state-badge state-toolbar-dropdown-container">
         <button
           class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
@@ -126,10 +126,7 @@
 {:else}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
-      <div
-        class="state-badge state-status state-toolbar-dropdown-container"
-        data-status={status !== "NA" ? status : "NA"}
-      >
+      <div class="state-badge state-toolbar-dropdown-container">
         <button
           class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
