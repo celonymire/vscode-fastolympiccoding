@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import * as v from "valibot";
 import * as crypto from "crypto";
-import * as fs from "fs";
 
 import {
   TestcaseSchema,
@@ -23,6 +22,7 @@ import {
   getFileRunSettings,
   openInNewEditor,
   openInTerminalTab,
+  openOrCreateFile,
   ReadonlyStringProvider,
   resolveVariables,
   showOpenRunSettingsErrorWindow,
@@ -1442,12 +1442,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
-    if (settings.interactorFile && fs.existsSync(settings.interactorFile)) {
-      void vscode.window.showTextDocument(vscode.Uri.file(settings.interactorFile));
+    if (settings.interactorFile) {
+      void openOrCreateFile(settings.interactorFile);
     } else {
-      void vscode.window.showWarningMessage(
-        `${settings.interactorFile ?? "Interactor file"} does not exist`
-      );
+      void vscode.window.showWarningMessage("Interactor file not specified");
     }
   }
 

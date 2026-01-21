@@ -234,6 +234,33 @@ export function openInTerminalTab(content: string, title: string = "Output") {
   terminal.show();
 }
 
+/**
+ * Opens a file if it exists, otherwise prompts the user to create it.
+ */
+export async function openOrCreateFile(file: string): Promise<void> {
+  if (fs.existsSync(file)) {
+    const document = await vscode.workspace.openTextDocument(file);
+    await vscode.window.showTextDocument(document);
+  } else {
+    const choice = await vscode.window.showWarningMessage(
+      `${file} does not exist`,
+      "Create File",
+      "Cancel"
+    );
+    if (choice === "Create File") {
+      try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, "");
+        const document = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        getLogger("vscode").error(`Failed to create file ${file}: ${error}`);
+        vscode.window.showErrorMessage(`Failed to create file ${file}: ${error}`);
+      }
+    }
+  }
+}
+
 function getRelativeFileDirname(relativeFilePath: string | undefined): string {
   if (!relativeFilePath) return "";
   const dir = path.dirname(relativeFilePath);
