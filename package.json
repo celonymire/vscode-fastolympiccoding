@@ -68,11 +68,6 @@
           "command": "fastolympiccoding.toggleStressSettings",
           "group": "navigation@4",
           "when": "view == fastolympiccoding.stress"
-        },
-        {
-          "command": "fastolympiccoding.changePort",
-          "group": "navigation@5",
-          "when": "view == fastolympiccoding.judge || view == fastolympiccoding.stress"
         }
       ],
       "commandPalette": [
