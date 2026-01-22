@@ -1,3 +1,4 @@
+import path from "node:path";
 import * as vscode from "vscode";
 
 const LAST_VERSION_KEY = "lastVersion";
@@ -56,7 +57,7 @@ export async function showChangelog(
   }
 
   // Open the CHANGELOG.md file
-  const changelogPath = vscode.Uri.file(context.asAbsolutePath("CHANGELOG.md"));
+  const changelogPath = path.join(__dirname, "..", "changelog.md"); // VSIX packaging lowercases the filename
   try {
     await vscode.commands.executeCommand("markdown.showPreview", changelogPath);
   } catch (error) {
