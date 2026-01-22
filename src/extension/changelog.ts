@@ -57,14 +57,14 @@ export async function showChangelog(
   }
 
   // Open the CHANGELOG.md file
-  const changelogPath = path.join(__dirname, "..", "changelog.md"); // VSIX packaging lowercases the filename
+  const changelogFile = vscode.Uri.file(context.asAbsolutePath("changelog.md")); // VSIX packaging lowercases the filename
   try {
-    await vscode.commands.executeCommand("markdown.showPreview", changelogPath);
+    await vscode.commands.executeCommand("markdown.showPreview", changelogFile);
   } catch (error) {
     console.error(`Failed to show changelog as markdown preview: ${error}`);
 
     // Fallback to opening as a regular text document if preview fails
-    const doc = await vscode.workspace.openTextDocument(changelogPath);
+    const doc = await vscode.workspace.openTextDocument(changelogFile);
     await vscode.window.showTextDocument(doc);
   }
 }
