@@ -202,18 +202,16 @@ function registerCommands(context: vscode.ExtensionContext): void {
         const config = vscode.workspace.getConfiguration("fastolympiccoding");
         const dependencies = config.get<Dependencies>("fileTemplatesDependencies");
         const baseDirectory = resolveVariables(config.get("fileTemplatesBaseDirectory")!);
-        const files = (
-          await fs.readdir(baseDirectory, {
-            recursive: true,
-            withFileTypes: true,
-          })
-        ).filter((value) => value.isFile());
+        const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
+        const relativeBaseDirectory = path.relative(workspaceRoot, baseDirectory);
+        const files = await vscode.workspace.findFiles(`${relativeBaseDirectory}/**`);
         const items = files.map((file) => ({
-          label: file.name,
-          description: file.path,
+          label: path.parse(file.fsPath).base,
+          description: path.relative(workspaceRoot, file.fsPath),
         }));
         const pickedFile = await vscode.window.showQuickPick(items, {
           title: "Insert File Template",
+          matchOnDescription: true,
         });
         if (!pickedFile) {
           return;

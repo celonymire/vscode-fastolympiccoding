@@ -144,7 +144,9 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
 
   if (needsPrompt) {
     // Gather files before prompting to include newly created files from previous problems
-    const updatedFiles = await gatherWorkspaceFiles();
+    const include = config.get<string>("includePattern")!;
+    const exclude = config.get<string>("excludePattern")!;
+    const updatedFiles = await vscode.workspace.findFiles(include, exclude);
     relativePath = await promptForTargetFile(
       problem,
       workspaceRoot,
@@ -192,16 +194,6 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
     await vscode.window.showTextDocument(document);
   }
-}
-
-/**
- * Gather files using VSCode's API with include and exclude patterns from settings.
- */
-async function gatherWorkspaceFiles(): Promise<vscode.Uri[]> {
-  const config = vscode.workspace.getConfiguration("fastolympiccoding");
-  const includePattern = config.get<string>("includePattern")!;
-  const excludePattern = config.get<string>("excludePattern")!;
-  return vscode.workspace.findFiles(includePattern, excludePattern);
 }
 
 /**
