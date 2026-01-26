@@ -11,9 +11,19 @@
     onAdd: (id: StateId) => void;
     onOpen: (id: StateId) => void;
     onToggleVisibility: (id: StateId) => void;
+    onToggleInteractive: () => void;
   }
 
-  let { id, status, interactiveMode, shown, onAdd, onOpen, onToggleVisibility }: Props = $props();
+  let {
+    id,
+    status,
+    interactiveMode,
+    shown,
+    onAdd,
+    onOpen,
+    onToggleVisibility,
+    onToggleInteractive,
+  }: Props = $props();
 
   function handleAdd() {
     onAdd(id);
@@ -25,6 +35,10 @@
 
   function handleToggleVisibility() {
     onToggleVisibility(id);
+  }
+
+  function handleToggleInteractive() {
+    onToggleInteractive();
   }
 
   // Derived value for whether details should be shown
@@ -40,13 +54,16 @@
         </div>
         <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
-      {#if interactiveMode}
-        <div class="state-badge state-status" data-status="CE">
-          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div class="state-badge state-status" data-status={interactiveMode ? "CE" : "NA"}>
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
       <div class="state-badge state-status" data-status={status}>
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
@@ -78,13 +95,16 @@
         </div>
         <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
-      {#if interactiveMode}
-        <div class="state-badge state-status" data-status="CE">
-          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div class="state-badge state-status" data-status={interactiveMode ? "CE" : "NA"}>
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
       <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>
@@ -113,13 +133,16 @@
         </div>
         <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
-      {#if interactiveMode}
-        <div class="state-badge state-status" data-status="CE">
-          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div class="state-badge state-status" data-status={interactiveMode ? "CE" : "NA"}>
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
       <div class="state-badge state-status" data-status={status}>
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-terminal-bash"></div>
@@ -169,13 +192,16 @@
           <p class="state-badge-text">{status}</p>
         </div>
       {/if}
-      {#if interactiveMode}
-        <div class="state-badge state-status" data-status="CE">
-          <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div class="state-badge state-status" data-status={interactiveMode ? "CE" : "NA"}>
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
     </div>
     <div class="state-toolbar-right">
       <button

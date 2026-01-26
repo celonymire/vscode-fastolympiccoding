@@ -141,6 +141,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "TOGGLE_VISIBILITY":
         this._toggleVisibility(msg);
+        break;
+      case "TOGGLE_INTERACTIVE":
+        this._toggleInteractive();
+        break;
     }
   }
 
@@ -798,6 +802,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "shown",
       value: state.shown,
     });
+
+    if (this._currentFile) {
+      void this._saveState(this._currentFile);
+    }
+  }
+
+  private _toggleInteractive() {
+    const ctx = this._currentContext;
+    if (!ctx) {
+      return;
+    }
+
+    // Toggle interactive mode
+    ctx.interactiveMode = !ctx.interactiveMode;
+
+    // Notify webview
+    super._postMessage({ type: "INIT", interactiveMode: ctx.interactiveMode });
 
     if (this._currentFile) {
       void this._saveState(this._currentFile);

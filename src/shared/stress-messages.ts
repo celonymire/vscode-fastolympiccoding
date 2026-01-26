@@ -79,6 +79,7 @@ export const ProviderMessageTypeValues = [
   "CLEAR",
   "SAVE",
   "TOGGLE_VISIBILITY",
+  "TOGGLE_INTERACTIVE",
 ] as const;
 
 export type ProviderMessageTypeValue = (typeof ProviderMessageTypeValues)[number];
@@ -127,6 +128,10 @@ export const ToggleVisibilityMessageSchema = v.object({
   id: v.picklist(StateIdValue),
 });
 
+export const ToggleInteractiveMessageSchema = v.object({
+  type: v.literal("TOGGLE_INTERACTIVE"),
+});
+
 export const ProviderMessageSchema = v.union([
   LoadedMessageSchema,
   RunMessageSchema,
@@ -137,6 +142,7 @@ export const ProviderMessageSchema = v.union([
   ResetMessageSchema,
   SaveMessageSchema,
   ToggleVisibilityMessageSchema,
+  ToggleInteractiveMessageSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;

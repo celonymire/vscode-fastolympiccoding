@@ -126,6 +126,10 @@
     postProviderMessage({ type: "TOGGLE_VISIBILITY", id });
   }
 
+  function handleToggleInteractive() {
+    postProviderMessage({ type: "TOGGLE_INTERACTIVE" });
+  }
+
   function handleInteractiveModeChange(e: Event) {
     const target = e.target as HTMLInputElement;
     interactiveMode = target.checked;
@@ -207,6 +211,7 @@
             onAdd={handleAdd}
             onOpen={handleOpen}
             onToggleVisibility={handleToggleVisibility}
+            onToggleInteractive={handleToggleInteractive}
           />
           <State
             id={item.id}
