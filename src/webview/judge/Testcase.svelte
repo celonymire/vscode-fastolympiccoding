@@ -125,7 +125,7 @@
         <AutoresizeTextarea
           value={testcase.stdout}
           readonly
-          hiddenOnEmpty
+          placeholder="Output..."
           onexpand={() => handleExpandStdio("STDOUT")}
         >
           {#snippet actions()}
