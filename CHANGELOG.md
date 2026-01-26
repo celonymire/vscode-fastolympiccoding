@@ -1,3 +1,9 @@
+# 4.1.0
+
+### Added
+
+- Default configurations for TypeScript
+
 # 4.0.0
 
 ### Added

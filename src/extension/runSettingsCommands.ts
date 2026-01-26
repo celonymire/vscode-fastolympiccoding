@@ -104,6 +104,18 @@ const languageTemplates: Record<string, object> = {
       debugAttachConfig: "JavaScript: Attach",
     },
   },
+  TypeScript: {
+    ".ts": {
+      runCommand: ["node", "--experimental-transform-types", "${file}"],
+      debugCommand: [
+        "node",
+        "--experimental-transform-types",
+        "--inspect-brk=localhost:${debugPort}",
+        "${file}",
+      ],
+      debugAttachConfig: "JavaScript: Attach",
+    },
+  },
   Haskell: {
     ".hs": {
       compileCommand: [
@@ -174,6 +186,14 @@ const javaAttachConfig = {
   hostName: "localhost",
   port: "${debugPort}",
 };
+const javascriptAttachConfig = {
+  name: "JavaScript: Attach",
+  type: "node",
+  request: "attach",
+  port: "${debugPort}",
+  address: "localhost",
+  continueOnAttach: true,
+};
 
 const launchTemplates: Record<string, vscode.DebugConfiguration> = {
   "C++ (GCC)": gdbAttachConfig,
@@ -197,14 +217,8 @@ const launchTemplates: Record<string, vscode.DebugConfiguration> = {
     host: "localhost",
   },
   Rust: gdbAttachConfig,
-  JavaScript: {
-    name: "JavaScript: Attach",
-    type: "node",
-    request: "attach",
-    port: "${debugPort}",
-    address: "localhost",
-    continueOnAttach: true,
-  },
+  JavaScript: javascriptAttachConfig,
+  TypeScript: javascriptAttachConfig,
   "C#": {
     name: "C#: Attach",
     type: "mono",

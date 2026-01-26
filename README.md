@@ -55,7 +55,7 @@ Provide run settings for the languages you use in `runSettings.json` at the root
 }
 ```
 
-**🔥 There are built-in default settings for C++, Python, Java, Go, Rust, JavaScript, Haskell, Ruby, Kotlin, and C#!** Access them with `Create runSettings.json` command.
+**🔥 There are built-in default settings for C++, Python, Java, Go, Rust, JavaScript, TypeScript, Haskell, Ruby, Kotlin, and C#!** Access them with `Create runSettings.json` command.
 
 We can use [VSCode's built-in variables](https://code.visualstudio.com/docs/editor/variables-reference) which has the syntax of `${...}` and will get resolved by the extension. **`${defaultBuildTask}` is not supported because it requires resolving the entire build configuration which is super slow!**
 
