@@ -14,6 +14,7 @@ export const ActionValues = [
   "DEBUG",
   "REQUEST_DATA",
   "OPEN_INTERACTOR",
+  "TOGGLE_INTERACTIVE",
 ] as const;
 
 export type ActionValue = (typeof ActionValues)[number];

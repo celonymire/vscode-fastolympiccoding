@@ -45,6 +45,10 @@
     handleAction("STOP");
   }
 
+  function handleToggleInteractive() {
+    handleAction("TOGGLE_INTERACTIVE");
+  }
+
   // Derived values
   const status = $derived(testcase.status);
   const visible = $derived(testcase.shown);
@@ -117,13 +121,21 @@
           </p>
         </div>
       {/if}
-      {#if testcase.mode === "interactive"}
-        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
-          <div class="toolbar-icon toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div
+        class="toolbar-badge-container toolbar-badge"
+        data-status={testcase.mode === "interactive" ? "CE" : "NA"}
+      >
+        <button
+          class="toolbar-icon toolbar-icon-exclude-highlight"
+          data-tooltip={testcase.mode === "interactive"
+            ? "Make Non-Interactive"
+            : "Make Interactive"}
+          aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
     </div>
     <div class="testcase-buttons">
       <button class="toolbar-icon" data-tooltip="Run Testcase" aria-label="Run" onclick={handleRun}>
@@ -175,13 +187,21 @@
         </div>
         <p class="toolbar-badge-text">COMPILING</p>
       </div>
-      {#if testcase.mode === "interactive"}
-        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
-          <div class="toolbar-icon toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div
+        class="toolbar-badge-container toolbar-badge"
+        data-status={testcase.mode === "interactive" ? "CE" : "NA"}
+      >
+        <button
+          class="toolbar-icon toolbar-icon-exclude-highlight"
+          data-tooltip={testcase.mode === "interactive"
+            ? "Make Non-Interactive"
+            : "Make Interactive"}
+          aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
     </div>
   </div>
 {:else if status === "RUNNING"}
@@ -204,13 +224,21 @@
           ></div>
         </button>
       </div>
-      {#if testcase.mode === "interactive"}
-        <div class="toolbar-badge-container toolbar-badge" data-status="CE">
-          <div class="toolbar-icon toolbar-icon-exclude-highlight">
-            <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
-          </div>
-        </div>
-      {/if}
+      <div
+        class="toolbar-badge-container toolbar-badge"
+        data-status={testcase.mode === "interactive" ? "CE" : "NA"}
+      >
+        <button
+          class="toolbar-icon toolbar-icon-exclude-highlight"
+          data-tooltip={testcase.mode === "interactive"
+            ? "Make Non-Interactive"
+            : "Make Interactive"}
+          aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
+          onclick={handleToggleInteractive}
+        >
+          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+        </button>
+      </div>
       <div class="toolbar-icon toolbar-icon-exclude-highlight">
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>

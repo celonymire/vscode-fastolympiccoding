@@ -931,6 +931,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "OPEN_INTERACTOR":
         this._openInteractor();
         break;
+      case "TOGGLE_INTERACTIVE":
+        this._toggleInteractive(uuid);
+        break;
     }
     this.requestSave();
   }
@@ -1384,6 +1387,21 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       uuid,
       property: "skipped",
       value: testcase.skipped,
+    });
+  }
+
+  private _toggleInteractive(uuid: string) {
+    const testcase = this._findTestcase(uuid);
+    if (!testcase) {
+      return;
+    }
+
+    testcase.mode = testcase.mode === "interactive" ? "standard" : "interactive";
+    super._postMessage({
+      type: "SET",
+      uuid,
+      property: "mode",
+      value: testcase.mode,
     });
   }
 
