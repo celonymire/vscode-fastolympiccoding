@@ -4,6 +4,11 @@
 
 - Default configurations for TypeScript
 
+### Changed
+
+- Show empty stdout for testcase with a placeholder instead of hiding it
+- Added file name to the file template picker item's description to improve matching
+
 # 4.0.0
 
 ### Added
