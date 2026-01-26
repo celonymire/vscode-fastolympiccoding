@@ -485,7 +485,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._onDidChangeBackgroundTasks.fire();
 
     await Promise.all([testcase.process.done, testcase.interactorProcess.done]);
-    console.log("done");
 
     testcase.stdin.write("", "final");
     testcase.stderr.write("", "final");
