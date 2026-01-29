@@ -446,7 +446,6 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run prod",
     "build:addon": "node-gyp build",
     "lint": "eslint .",
     "format": "prettier --write src",
