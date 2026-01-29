@@ -101,6 +101,10 @@ jobs:
         if: matrix.name != 'Alpine Linux ARM64'
         run: npm test
 
+      - name: Clean npm cache (avoid ECOMPROMISED)
+        if: matrix.name != 'Alpine Linux ARM64'
+        run: npm cache clean --force
+
       - name: Package VSIX
         if: matrix.name != 'Alpine Linux ARM64'
         env:
