@@ -1104,7 +1104,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private async _run(uuid: string, bypassLimits: boolean): Promise<void> {
     const testcase = this._findTestcase(uuid);
-    if (!testcase) {
+    if (!testcase || testcase.skipped) {
       return;
     }
 
@@ -1137,7 +1137,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private async _debug(uuid: string): Promise<void> {
     const testcase = this._findTestcase(uuid);
-    if (!testcase) {
+    if (!testcase || testcase.skipped) {
       return;
     }
 

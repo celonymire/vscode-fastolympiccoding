@@ -8,7 +8,10 @@
 
 - Show empty stdout for testcase with a placeholder instead of hiding it
 - Added file name to the file template picker item's description to improve matching
-- Always show interactive icon and make it clickable to toggle testcase interactivity
+
+### Fixed
+
+- (Regression) skipped testcases are still being ran
 
 # 4.0.0
 
