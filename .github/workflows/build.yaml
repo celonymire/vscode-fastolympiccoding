@@ -19,7 +19,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci --ignore-scripts
 
       - name: Check and lint formatting
         run: npm run check
@@ -82,9 +82,9 @@ jobs:
           node-version: "24.13.0"
           cache: npm
 
-      # - name: Install dependencies
-      #   if: matrix.name != 'Alpine Linux ARM64'
-      #   run: npm install
+      - name: Install dependencies
+        if: matrix.name != 'Alpine Linux ARM64'
+        run: npm ci
 
       - name: Build and Package (Alpine ARM64)
         if: matrix.name == 'Alpine Linux ARM64'
@@ -97,9 +97,9 @@ jobs:
             chown $(id -u):$(id -g) *.vsix
           "
 
-      # - name: Test native addon
-      #   if: matrix.name != 'Alpine Linux ARM64'
-      #   run: npm test
+      - name: Test native addon
+        if: matrix.name != 'Alpine Linux ARM64'
+        run: npm test
 
       - name: Package VSIX
         if: matrix.name != 'Alpine Linux ARM64'
