@@ -8,8 +8,6 @@ jobs:
   check:
     name: Sanity Checks
     runs-on: ubuntu-latest
-    env:
-      npm_config_cache: ${{ github.workspace }}/.npm-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -66,8 +64,6 @@ jobs:
             vsceTarget: "alpine-arm64"
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
-    env:
-      npm_config_cache: ${{ github.workspace }}/.npm-cache
     steps:
       - name: Install dependencies (Alpine)
         if: matrix.container == 'node:lts-alpine'
