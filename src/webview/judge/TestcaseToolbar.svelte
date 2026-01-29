@@ -55,10 +55,13 @@
   const skipped = $derived(testcase.skipped);
   const toggled = $derived(testcase.toggled);
   const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
+  const statusIcon = $derived(
+    testcase.mode === "interactive" ? "codicon-comment-discussion-sparkle" : "codicon-output"
+  );
 </script>
 
 {#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE"}
-  <div class="toolbar" class:toolbar--hidden={skipped}>
+  <div class="toolbar" class:toolbar--hidden={skipped} class:toolbar--skipped={skipped}>
     <div class="toolbar-badges">
       <div
         class="toolbar-badge-container toolbar-dropdown-container toolbar-badge"
@@ -69,6 +72,7 @@
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
           aria-label={showDetails ? "Hide" : "Show"}
           onclick={handleToggleVisibility}
+          disabled={skipped}
         >
           <div
             class="codicon codicon-bolded {showDetails
@@ -133,12 +137,18 @@
           aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
     </div>
     <div class="testcase-buttons">
-      <button class="toolbar-icon" data-tooltip="Run Testcase" aria-label="Run" onclick={handleRun}>
+      <button
+        class="toolbar-icon"
+        data-tooltip="Run Testcase"
+        aria-label="Run"
+        onclick={handleRun}
+        disabled={skipped}
+      >
         <div class="codicon codicon-run-below"></div>
       </button>
       <button
@@ -146,6 +156,7 @@
         data-tooltip="Debug Testcase"
         aria-label="Debug"
         onclick={handleDebug}
+        disabled={skipped}
       >
         <div class="codicon codicon-debug-alt"></div>
       </button>
@@ -199,7 +210,7 @@
           aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
     </div>
@@ -216,6 +227,7 @@
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
           aria-label={showDetails ? "Hide" : "Show"}
           onclick={handleToggleVisibility}
+          disabled={skipped}
         >
           <div
             class="codicon codicon-bolded {showDetails
@@ -236,7 +248,7 @@
           aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
       <div class="toolbar-icon toolbar-icon-exclude-highlight">
@@ -263,14 +275,6 @@
     margin-bottom: 6px;
     flex-wrap: wrap;
     gap: 6px;
-  }
-
-  .toolbar--hidden > .toolbar-badges {
-    opacity: 0.5;
-  }
-
-  .toolbar--hidden > .testcase-buttons > *:not(.toolbar-icon-exclude-fade) {
-    opacity: 0.5;
   }
 
   .toolbar-left {
@@ -317,6 +321,11 @@
     background: var(--vscode-button-secondaryBackground);
   }
 
+  .toolbar-icon:disabled:not(.toolbar-icon-exclude-highlight) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .toolbar-badge-container {
     display: flex;
     align-items: center;
@@ -327,6 +336,10 @@
     line-height: 1;
     background: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
+  }
+
+  .toolbar--skipped .toolbar-badge-container {
+    opacity: 0.5;
   }
 
   .toolbar-dropdown-container {

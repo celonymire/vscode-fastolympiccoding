@@ -43,6 +43,9 @@
 
   // Derived value for whether details should be shown
   const showDetails = $derived(shown);
+  const statusIcon = $derived(
+    interactiveMode ? "codicon-comment-discussion-sparkle" : "codicon-output"
+  );
 </script>
 
 {#if status === "COMPILING"}
@@ -61,7 +64,7 @@
           aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
       <div class="state-badge state-status" data-status={status}>
@@ -102,7 +105,7 @@
           aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
       <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
@@ -140,7 +143,7 @@
           aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
       <div class="state-badge state-status" data-status={status}>
@@ -199,7 +202,7 @@
           aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
-          <div class="codicon codicon-bolded codicon-chat-sparkle"></div>
+          <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
     </div>

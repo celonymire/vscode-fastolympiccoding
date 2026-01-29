@@ -8,10 +8,13 @@
 
 - Show empty stdout for testcase with a placeholder instead of hiding it
 - Added file name to the file template picker item's description to improve matching
+- Always show the icon to indicate the type of current testcase and make it clickable to toggle testcase interactivity
 
 ### Fixed
 
 - (Regression) skipped testcases are still being ran
+- Don't half the opacity of clickable elements
+- Dropdown still modifies visibility of testcases behind the scenes on skipped testcases
 
 # 4.0.0
 
