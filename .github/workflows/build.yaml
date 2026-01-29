@@ -15,7 +15,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: "24.13.0"
           cache: npm
 
       - name: Install dependencies
@@ -79,7 +79,7 @@ jobs:
         if: matrix.container != 'node:lts-alpine'
         uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: "24.13.0"
           cache: npm
 
       - name: Install dependencies
