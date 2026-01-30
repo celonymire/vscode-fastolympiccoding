@@ -232,7 +232,13 @@
       {#each testcases as testcase, index (testcase.uuid)}
         <div class="testcase-item">
           <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
-          <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+          {#if testcase.status === "COMPILING" || testcase.skipped}
+            <div class="half-opacity">
+              <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+            </div>
+          {:else}
+            <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+          {/if}
         </div>
       {/each}
       <div class="new-button-wrapper">
@@ -441,5 +447,10 @@
   .testcase-container {
     margin-top: 4px;
     margin-bottom: 24px;
+  }
+
+  .half-opacity {
+    opacity: 0.5;
+    pointer-events: none;
   }
 </style>

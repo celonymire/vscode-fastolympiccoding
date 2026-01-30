@@ -48,9 +48,8 @@
 
   const status = $derived(testcase.status);
   const visible = $derived(testcase.shown);
-  const skipped = $derived(testcase.skipped);
   const toggled = $derived(testcase.toggled);
-  const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
+  const showDetails = $derived(visible && !(status === "AC" && !toggled));
 
   export function reset() {
     newStdin = "";
@@ -65,7 +64,7 @@
 </script>
 
 {#if showDetails}
-  {#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE"}
+  {#if status === "NA" || status === "AC" || status === "WA" || status === "RE" || status === "TL" || status === "ML" || status === "CE" || status === "COMPILING"}
     {#if status !== "CE"}
       {#if testcase.mode === "interactive"}
         <AutoresizeTextarea

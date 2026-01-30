@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Status } from "../../shared/enums";
-  import type { StateId } from "../../shared/stress-messages";
+  import type { StateId } from "../../shared/schemas";
   import Tooltip from "../Tooltip.svelte";
 
   interface Props {
@@ -56,7 +56,7 @@
           class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
           aria-label={showDetails ? "Hide" : "Show"}
-          disabled
+          onclick={handleToggleVisibility}
         >
           <div
             class="codicon codicon-bolded {showDetails

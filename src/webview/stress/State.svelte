@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Status, Stdio } from "../../shared/enums";
-  import type { StateId } from "../../shared/stress-messages";
+  import type { StateId } from "../../shared/schemas";
   import AutoresizeTextarea from "../AutoresizeTextarea.svelte";
 
   interface IState {
@@ -56,7 +56,7 @@
       variant="stderr"
     />
     <AutoresizeTextarea value={state.stdout} readonly hiddenOnEmpty onexpand={handleViewStdout} />
-  {:else if status !== "COMPILING"}
+  {:else}
     <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
     <AutoresizeTextarea
       value={state.stderr}

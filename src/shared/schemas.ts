@@ -4,6 +4,9 @@ import { StatusSchema } from "./enums";
 export const MODES = ["standard", "interactive"] as const;
 export type Mode = (typeof MODES)[number];
 
+export const StateIdValue = ["Generator", "Solution", "Judge"] as const;
+export type StateId = (typeof StateIdValue)[number];
+
 export const LanguageSettingsSchema = v.object({
   compileCommand: v.optional(v.array(v.string())),
   runCommand: v.optional(v.array(v.string())),
@@ -59,6 +62,15 @@ export const TestcaseSchema = v.object({
   skipped: v.fallback(v.boolean(), false),
   mode: v.fallback(v.picklist(MODES), "standard"),
   interactorSecret: v.fallback(v.string(), ""),
+});
+
+export const StressDataSchema = v.object({
+  stdin: v.fallback(v.string(), ""),
+  stdout: v.fallback(v.string(), ""),
+  stderr: v.fallback(v.string(), ""),
+  status: v.fallback(StatusSchema, "NA"),
+  state: v.picklist(StateIdValue),
+  shown: v.fallback(v.boolean(), true),
 });
 
 export type Testcase = v.InferOutput<typeof TestcaseSchema>;

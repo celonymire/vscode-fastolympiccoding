@@ -11,6 +11,9 @@
 - Always show the icon to indicate the type of current testcase and make it clickable to toggle testcase interactivity
 - Also show the dropdown button (that does nothing) for compiling status to keep the toolbars consistent
 - Shorten the compiling error to just "CE" in stress tester for consistency
+- Allow dropdown when compiling
+- Allow showing details even in faded with same effect
+- Don't clear previous data from stress testers when compiling
 
 ### Fixed
 

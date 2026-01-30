@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { StatusSchema, StdioValues } from "./enums";
+import { StateIdValue } from "./schemas";
 
 export const WebviewMessageTypeValues = [
   "INIT",
@@ -11,11 +12,7 @@ export const WebviewMessageTypeValues = [
   "SETTINGS_TOGGLE",
 ] as const;
 
-export const StateIdValue = ["Generator", "Solution", "Judge"] as const;
-
 export type WebviewMessageTypeValue = (typeof WebviewMessageTypeValues)[number];
-
-export type StateId = (typeof StateIdValue)[number];
 
 export const WebviewMessageTypeSchema = v.picklist(WebviewMessageTypeValues);
 
@@ -39,6 +36,7 @@ export const StdioMessageSchema = v.object({
 
 export const ClearMessageSchema = v.object({
   type: v.literal("CLEAR"),
+  id: v.picklist(StateIdValue),
 });
 
 export const ShowMessageSchema = v.object({

@@ -3,13 +3,13 @@
   import type * as v from "valibot";
 
   import type { Status, Stdio } from "../../shared/enums";
+  import { type StateId, StateIdValue } from "../../shared/schemas";
   import {
-    StateIdValue,
+    type ClearMessageSchema,
     type ShowMessageSchema,
     type StatusMessageSchema,
     type StdioMessageSchema,
     type WebviewMessage,
-    type StateId,
     InitMessageSchema,
   } from "../../shared/stress-messages";
   import { postProviderMessage } from "./message";
@@ -99,11 +99,13 @@
     }
   }
 
-  function handleClear() {
+  function handleClear({ id }: v.InferOutput<typeof ClearMessageSchema>) {
     for (const state of states) {
-      state.stdin = "";
-      state.stdout = "";
-      state.stderr = "";
+      if (state.id === id) {
+        state.stdin = "";
+        state.stdout = "";
+        state.stderr = "";
+      }
     }
   }
 
@@ -153,7 +155,7 @@
           handleStdio(event.data);
           break;
         case "CLEAR":
-          handleClear();
+          handleClear(event.data);
           break;
         case "SHOW":
           handleShow(event.data);
@@ -213,14 +215,27 @@
             onToggleVisibility={handleToggleVisibility}
             onToggleInteractive={handleToggleInteractive}
           />
-          <State
-            id={item.id}
-            state={item}
-            placeholder={item.placeholder}
-            {interactiveMode}
-            shown={item.shown}
-            onView={handleView}
-          />
+          {#if item.status === "COMPILING"}
+            <div class="half-opacity">
+              <State
+                id={item.id}
+                state={item}
+                placeholder={item.placeholder}
+                {interactiveMode}
+                shown={item.shown}
+                onView={handleView}
+              />
+            </div>
+          {:else}
+            <State
+              id={item.id}
+              state={item}
+              placeholder={item.placeholder}
+              {interactiveMode}
+              shown={item.shown}
+              onView={handleView}
+            />
+          {/if}
         </div>
       {/each}
     {/if}
@@ -342,5 +357,10 @@
 
   .text-button :global(.codicon) {
     margin-right: 4px;
+  }
+
+  .half-opacity {
+    opacity: 0.5;
+    pointer-events: none;
   }
 </style>

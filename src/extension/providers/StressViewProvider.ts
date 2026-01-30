@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as v from "valibot";
 import * as crypto from "crypto";
 
-import { StatusSchema, type Status } from "../../shared/enums";
+import type { Status } from "../../shared/enums";
 import BaseViewProvider from "./BaseViewProvider";
 import {
   compile,
@@ -29,21 +29,11 @@ import {
   OpenMessageSchema,
   ProviderMessageSchema,
   SaveMessageSchema,
-  StateIdValue,
   ToggleVisibilityMessageSchema,
   ViewMessageSchema,
-  type StateId,
   type WebviewMessage,
 } from "../../shared/stress-messages";
-
-const StressDataSchema = v.object({
-  stdin: v.fallback(v.string(), ""),
-  stdout: v.fallback(v.string(), ""),
-  stderr: v.fallback(v.string(), ""),
-  status: v.fallback(StatusSchema, "NA"),
-  state: v.picklist(StateIdValue),
-  shown: v.fallback(v.boolean(), true),
-});
+import { StressDataSchema, type StateId } from "../../shared/schemas";
 
 const FileDataSchema = v.object({
   interactiveMode: v.fallback(v.boolean(), false),
@@ -277,7 +267,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!ctx) return;
 
     super._postMessage({ type: "INIT", interactiveMode: ctx.interactiveMode });
-    super._postMessage({ type: "CLEAR" });
 
     const resendTruncatedData = (handler: TextHandler) => {
       const data = handler.data;
@@ -286,6 +275,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     };
 
     for (const state of ctx.state) {
+      super._postMessage({ type: "CLEAR", id: state.state });
       super._postMessage({
         type: "STATUS",
         id: state.state,
@@ -414,12 +404,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         },
         file
       );
-      state.stdout.reset();
-      state.stderr.reset();
       return compilePromise
         .then((res) => {
           if (res.code !== 0) {
             state.status = "CE";
+            super._postMessage({ type: "CLEAR", id: state.state }, file);
+            state.stdout.reset();
+            state.stderr.reset();
             state.stdout.write(res.stdout, "final");
             state.stderr.write(res.stderr, "final");
             super._postMessage({ type: "STATUS", id: state.state, status: "CE" }, file);
@@ -435,12 +426,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         });
     };
 
-    super._postMessage(
-      {
-        type: "CLEAR",
-      },
-      file
-    );
     const results = await Promise.all([
       addCompileTask(generatorState, solutionSettings.generatorFile!),
       addCompileTask(solutionState, file),
@@ -491,8 +476,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const start = Date.now();
     while (!ctx.stopFlag && (timeLimit === 0 || Date.now() - start <= timeLimit)) {
-      super._postMessage({ type: "CLEAR" }, file);
       for (const state of ctx.state) {
+        super._postMessage({ type: "CLEAR", id: state.state }, file);
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
@@ -585,13 +570,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (ctx.clearFlag) {
       for (const state of ctx.state) {
+        super._postMessage({ type: "CLEAR", id: state.state }, file);
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
         state.status = "NA";
       }
-
-      super._postMessage({ type: "CLEAR" }, file);
     }
     ctx.clearFlag = false;
 
@@ -750,6 +734,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       this.stop();
     } else {
       for (const state of ctx.state) {
+        super._postMessage({ type: "CLEAR", id: state.state });
         state.stdin.reset();
         state.stdout.reset();
         state.stderr.reset();
@@ -761,7 +746,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
           status: "NA",
         });
       }
-      super._postMessage({ type: "CLEAR" });
 
       if (this._currentFile) {
         void this._saveState(this._currentFile);

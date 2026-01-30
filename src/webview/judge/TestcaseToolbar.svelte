@@ -72,7 +72,6 @@
           data-tooltip={showDetails ? "Hide Details" : "Show Details"}
           aria-label={showDetails ? "Hide" : "Show"}
           onclick={handleToggleVisibility}
-          disabled={skipped}
         >
           <div
             class="codicon codicon-bolded {showDetails
@@ -200,7 +199,7 @@
           class="toolbar-icon toolbar-icon-exclude-highlight"
           data-tooltip={visible ? "Hide Details" : "Show Details"}
           aria-label={visible ? "Hide" : "Show"}
-          disabled
+          onclick={handleToggleVisibility}
         >
           <div
             class="codicon codicon-bolded {visible
