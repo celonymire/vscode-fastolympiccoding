@@ -1,5 +1,5 @@
 /** @type {import('svelte/compiler').CompileOptions} */
-export default {
+module.exports = {
   compilerOptions: {
     runes: true,
   },
