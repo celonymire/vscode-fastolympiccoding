@@ -7,7 +7,7 @@ on:
 jobs:
   check:
     name: Sanity Checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -86,19 +86,14 @@ jobs:
         if: matrix.name != 'Alpine Linux ARM64'
         run: npm ci
       
-      - name: Install VSCE
-        if: matrix.name != 'Alpine Linux ARM64'
-        run: npm install -g @vscode/vsce
-
       - name: Build and Package (Alpine ARM64)
         if: matrix.name == 'Alpine Linux ARM64'
         run: |
           docker run --rm -v ${{ github.workspace }}:/ws -w /ws node:lts-alpine /bin/sh -c "
             apk add --no-cache python3 make g++ linux-headers git bash &&
             npm install &&
-            npm install -g @vscode/vsce &&
             npm test &&
-            vsce package --target alpine-arm64 &&
+            npm run package -- --target alpine-arm64 &&
             chown $(id -u):$(id -g) *.vsix
           "
 
@@ -110,7 +105,8 @@ jobs:
         if: matrix.name != 'Alpine Linux ARM64'
         env:
           VSCE_STORE: file
-        run: vsce package --target ${{ matrix.vsceTarget }}
+        shell: bash
+        run: npm run package -- --target ${{ matrix.vsceTarget }}
 
       - name: Detect VSIX filename
         id: vsix-file
