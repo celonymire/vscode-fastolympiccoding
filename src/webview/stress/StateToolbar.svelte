@@ -51,6 +51,20 @@
 {#if status === "COMPILING"}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
+      <div class="state-badge state-toolbar-dropdown-container">
+        <button
+          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
+          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
+          aria-label={showDetails ? "Hide" : "Show"}
+          disabled
+        >
+          <div
+            class="codicon codicon-bolded {showDetails
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="state-badge state-status" data-status="NA">
         <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
           <div class="codicon codicon-bolded codicon-file-code"></div>

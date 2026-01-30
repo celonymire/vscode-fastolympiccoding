@@ -9,6 +9,7 @@
 - Show empty stdout for testcase with a placeholder instead of hiding it
 - Added file name to the file template picker item's description to improve matching
 - Always show the icon to indicate the type of current testcase and make it clickable to toggle testcase interactivity
+- Also show the dropdown button (that does nothing) for compiling status to keep the toolbars consistent
 
 ### Fixed
 

@@ -192,6 +192,23 @@
 {:else if status === "COMPILING"}
   <div class="toolbar">
     <div class="toolbar-left">
+      <div
+        class="toolbar-badge-container toolbar-dropdown-container toolbar-badge"
+        data-status={status}
+      >
+        <button
+          class="toolbar-icon toolbar-icon-exclude-highlight"
+          data-tooltip={visible ? "Hide Details" : "Show Details"}
+          aria-label={visible ? "Hide" : "Show"}
+          disabled
+        >
+          <div
+            class="codicon codicon-bolded {visible
+              ? 'codicon-chevron-down'
+              : 'codicon-chevron-right'}"
+          ></div>
+        </button>
+      </div>
       <div class="toolbar-badge-container toolbar-badge" data-status={status}>
         <div class="toolbar-icon toolbar-icon-exclude-highlight">
           <div class="codicon codicon-loading codicon-modifier-spin"></div>
