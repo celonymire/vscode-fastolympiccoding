@@ -127,47 +127,6 @@
       </div>
     </div>
   </div>
-{:else if status === "CE"}
-  <div class="state-toolbar">
-    <div class="state-toolbar-left">
-      <div class="state-badge state-toolbar-dropdown-container">
-        <button
-          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
-          data-tooltip={showDetails ? "Hide Details" : "Show Details"}
-          aria-label={showDetails ? "Hide" : "Show"}
-          onclick={handleToggleVisibility}
-        >
-          <div
-            class="codicon codicon-bolded {showDetails
-              ? 'codicon-chevron-down'
-              : 'codicon-chevron-right'}"
-          ></div>
-        </button>
-      </div>
-      <div class="state-badge state-status" data-status="NA">
-        <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-bolded codicon-file-code"></div>
-        </div>
-        <p class="state-badge-text state-badge-text-id">{id}</p>
-      </div>
-      <div class="state-badge state-status" data-status={interactiveMode ? "CE" : "NA"}>
-        <button
-          class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
-          data-tooltip={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
-          aria-label={interactiveMode ? "Make Non-Interactive" : "Make Interactive"}
-          onclick={handleToggleInteractive}
-        >
-          <div class="codicon codicon-bolded {statusIcon}"></div>
-        </button>
-      </div>
-      <div class="state-badge state-status" data-status={status}>
-        <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-bolded codicon-terminal-bash"></div>
-        </div>
-        <p class="state-badge-text">Compile Error</p>
-      </div>
-    </div>
-  </div>
 {:else}
   <div class="state-toolbar">
     <div class="state-toolbar-left">
@@ -204,6 +163,8 @@
               <div class="codicon codicon-bolded codicon-chip"></div>
             {:else if status === "AC"}
               <div class="codicon codicon-bolded codicon-check"></div>
+            {:else if status === "CE"}
+              <div class="codicon codicon-bolded codicon-terminal-bash"></div>
             {/if}
           </div>
           <p class="state-badge-text">{status}</p>
