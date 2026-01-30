@@ -190,7 +190,7 @@
       >
         <div class="codicon codicon-go-to-file"></div>
       </button>
-      {#if status !== "NA" && status !== "AC"}
+      {#if status !== "NA" && status !== "AC" && status !== "CE"}
         <button
           class="state-toolbar-icon"
           data-tooltip="Add to File"
