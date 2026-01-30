@@ -1387,6 +1387,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       property: "skipped",
       value: testcase.skipped,
     });
+    if (testcase.skipped && !testcase.toggled) {
+      testcase.shown = false;
+      super._postMessage({
+        type: "SET",
+        uuid,
+        property: "shown",
+        value: false,
+      });
+    } else if (!testcase.skipped && !testcase.toggled) {
+      testcase.shown = testcase.status !== "AC";
+      super._postMessage({
+        type: "SET",
+        uuid,
+        property: "shown",
+        value: testcase.shown,
+      });
+    }
   }
 
   private _toggleInteractive(uuid: string) {
