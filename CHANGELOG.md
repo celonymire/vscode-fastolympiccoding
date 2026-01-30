@@ -2,7 +2,7 @@
 
 ### Added
 
-- Default configurations for TypeScript
+- Default configuration for TypeScript
 
 ### Changed
 
@@ -19,7 +19,6 @@
 
 - (Regression) skipped testcases are still being ran
 - Don't half the opacity of clickable elements
-- Dropdown still modifies visibility of testcases behind the scenes on skipped testcases
 
 # 4.0.0
 
