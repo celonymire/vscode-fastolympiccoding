@@ -54,7 +54,7 @@
   const visible = $derived(testcase.shown);
   const skipped = $derived(testcase.skipped);
   const toggled = $derived(testcase.toggled);
-  const showDetails = $derived(!skipped && visible && !(status === "AC" && !toggled));
+  const showDetails = $derived(visible && !(status === "AC" && !toggled));
   const statusIcon = $derived(
     testcase.mode === "interactive" ? "codicon-comment-discussion-sparkle" : "codicon-output"
   );
