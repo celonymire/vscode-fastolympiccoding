@@ -250,6 +250,7 @@ const recommendedExtensions: Record<string, string> = {
   PyPy: "ms-python.python",
   Java: "redhat.java",
   Go: "golang.go",
+  Haskell: "haskell.haskell",
 };
 
 // extensions recommended specifically for debugging support
@@ -270,7 +271,7 @@ const languageDebugNotes: Record<string, string> = {
   "C++ (Clang)": getGdbPrettyPrintersNote("C++"),
   Rust: getGdbPrettyPrintersNote("Rust"),
   Kotlin:
-    "Breakpoints are ignored with attachment for some reason, which is why there is no debug configuration. This should be temporary... Sorry!",
+    "Kotlin breakpoints are ignored with attachment for some reason, which is why there is temporarily no debug configuration. Sorry!",
 };
 
 function getDefaultTemplatesPreview(): Record<string, object> {
