@@ -132,13 +132,13 @@ The extension typically attaches the debugger to an existing process, which allo
 <details>
   <summary>©️ Example C++ configuration</summary>
 
-I recommend either Microsoft's official [**C/C++**](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) or [**Native Debug**](https://marketplace.visualstudio.com/items?itemName=webfreak.debug). CodeLLDB does not work because `lldb-server` cannot send real-time inputs.
+I recommend Microsoft's official [**C/C++**](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools). CodeLLDB does not work because `lldb-server` cannot send real-time inputs.
 
 **‼️C++ (and other compiled languages) requires debug symbols to be compiled in!** Easiest way is to add `-g` flag to your compile command.
 
 🔔 Since both of them work with `gdbserver`, ensure that is installed, which is also what I tested with.
 
-Here are the steps for **Native Debug**, which should be very similar with **Microsoft C/C++**:
+Here are the steps for **Microsoft C/C++**:
 
 1. Add these settings for `.cpp`:
 
@@ -159,13 +159,19 @@ Here are the steps for **Native Debug**, which should be very similar with **Mic
   "configurations": [
     {
       "name": "GDB: Attach",
-      "type": "gdb",
-      "request": "attach",
-      "executable": "${fileDirname}/${fileBasenameNoExtension}",
-      "target": ":${debugPort}",
-      "remote": true,
-      "cwd": "${workspaceRoot}",
-      "valuesFormatting": "prettyPrinters"
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${fileDirname}/${fileBasenameNoExtension}",
+      "MIMode": "gdb",
+      "miDebuggerServerAddress": "localhost:${debugPort}",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

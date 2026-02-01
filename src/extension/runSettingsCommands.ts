@@ -171,13 +171,19 @@ const languageTemplates: Record<string, object> = {
 
 const gdbAttachConfig = {
   name: "GDB: Attach",
-  type: "gdb",
-  request: "attach",
-  executable: "${fileDirname}/${fileBasenameNoExtension}",
-  target: ":${debugPort}",
-  remote: true,
+  type: "cppdbg",
+  request: "launch",
+  program: "${fileDirname}/${fileBasenameNoExtension}",
+  MIMode: "gdb",
+  miDebuggerServerAddress: "localhost:${debugPort}",
+  setupCommands: [
+    {
+      description: "Enable pretty-printing for gdb",
+      text: "-enable-pretty-printing",
+      ignoreFailures: true,
+    },
+  ],
   cwd: "${workspaceFolder}",
-  valuesFormatting: "prettyPrinters",
 };
 const javaAttachConfig = {
   name: "Java: Attach",
@@ -236,9 +242,8 @@ const launchTemplates: Record<string, vscode.DebugConfiguration> = {
   Haskell: gdbAttachConfig,
 };
 
-const recommendedDebugExtensions: Record<string, string> = {
-  "C++ (GCC)": "webfreak.debug",
-  "C++ (Clang)": "webfreak.debug",
+  "C++ (GCC)": "ms-vscode.cpptools",
+  "C++ (Clang)": "ms-vscode.cpptools",
   Python: "ms-python.python",
   PyPy: "ms-python.python",
   Java: "redhat.java",

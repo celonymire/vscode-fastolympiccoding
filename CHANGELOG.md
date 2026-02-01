@@ -4,6 +4,7 @@
 
 - File template no longer shows the base directory for its prefix
 - Display "COMPILING" before testcase icon for stress tester to align with judge
+- Changed recommended debugging extension for C, C++, and other compiled languages to Microsoft's official C/C++ extension
 
 ### Fixed
 
