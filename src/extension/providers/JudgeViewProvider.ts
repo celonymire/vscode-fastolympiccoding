@@ -1303,6 +1303,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       state.process.dispose();
       state.interactorProcess.dispose();
       this._runtime.state.splice(idx, 1);
+
+      this._onDidChangeBackgroundTasks.fire();
     }
   }
 

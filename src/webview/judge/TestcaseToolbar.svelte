@@ -278,6 +278,14 @@
       >
         <div class="codicon codicon-stop-circle"></div>
       </button>
+      <button
+        class="toolbar-icon"
+        data-tooltip="Delete Testcase"
+        aria-label="Delete"
+        onclick={handleDelete}
+      >
+        <div class="codicon codicon-trash"></div>
+      </button>
     </div>
   </div>
 {/if}
