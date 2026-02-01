@@ -17,6 +17,7 @@
 
 - (Regression) File template insertion stopped working since 4.0.0
 - Rejection errors in file template insertion were not handled
+- Correctly reject changing testcase type during running and compiling
 
 # 4.0.1
 
