@@ -226,10 +226,13 @@ function registerCommands(context: vscode.ExtensionContext): void {
       void (async () => {
         const config = vscode.workspace.getConfiguration("fastolympiccoding");
         const dependencies = config.get<Dependencies>("fileTemplatesDependencies");
-        const baseDirectory = resolveVariables(config.get("fileTemplatesBaseDirectory")!);
+        const baseDirectory = resolveVariables(
+          config.get("fileTemplatesBaseDirectory") ?? "${workspaceFolder}"
+        );
         const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
         const relativeBaseDirectory = path.relative(workspaceRoot, baseDirectory);
-        const files = await vscode.workspace.findFiles(`${relativeBaseDirectory}/**`);
+        const include = relativeBaseDirectory === "" ? "**" : `${relativeBaseDirectory}/**`;
+        const files = await vscode.workspace.findFiles(include);
         const items = files.map((file) => ({
           label: path.parse(file.fsPath).base,
           description: path.relative(baseDirectory, file.fsPath),

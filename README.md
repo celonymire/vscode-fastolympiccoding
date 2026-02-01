@@ -380,7 +380,7 @@ Interactive testcases have a special badge to make them distinguishable. If ther
 <details>
   <summary>Possible settings</summary>
 
-- `fileTemplatesBaseDirectory`: Full path to the base directory of all prewritten files (supports `${...}`)
+- `fileTemplatesBaseDirectory`: Path to the base directory of all prewritten files (supports `${...}`). Defaults to workspace folder if not specified
 - `fileTemplatesDependencies` (optional): Maps a template path relative to base directory to a list of other relative template paths that this one depends on
 - `foldFileTemplate` (default: `false`): Whether to fold the newly inserted prewritten code
 </details>
