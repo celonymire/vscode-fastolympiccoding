@@ -1,5 +1,10 @@
 # 4.0.2
 
+### Added
+
+- Recommended extensions for general use of languages to enhance the motive of recommending them
+- Notes for various languages to convey potentially important information
+
 ### Changed
 
 - File template no longer shows the base directory for its prefix

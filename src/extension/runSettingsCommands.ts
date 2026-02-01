@@ -201,7 +201,7 @@ const javascriptAttachConfig = {
   continueOnAttach: true,
 };
 
-const launchTemplates: Record<string, vscode.DebugConfiguration> = {
+const debugTemplates: Record<string, vscode.DebugConfiguration> = {
   "C++ (GCC)": gdbAttachConfig,
   "C++ (Clang)": gdbAttachConfig,
   Python: {
@@ -242,17 +242,35 @@ const launchTemplates: Record<string, vscode.DebugConfiguration> = {
   Haskell: gdbAttachConfig,
 };
 
+// extensions recommended for general use with each language
+const recommendedExtensions: Record<string, string> = {
   "C++ (GCC)": "ms-vscode.cpptools",
   "C++ (Clang)": "ms-vscode.cpptools",
   Python: "ms-python.python",
   PyPy: "ms-python.python",
   Java: "redhat.java",
   Go: "golang.go",
-  Rust: "webfreak.debug",
+};
+
+// extensions recommended specifically for debugging support
+const recommendedDebugExtensions: Record<string, string> = {
+  Rust: "ms-vscode.cpptools",
   JavaScript: "ms-vscode.js-debug",
-  Haskell: "webfreak.debug",
+  Haskell: "ms-vscode.cpptools",
   Ruby: "KoichiSasada.vscode-rdbg",
   "C#": "ms-vscode.mono-debug",
+};
+
+function getGdbPrettyPrintersNote(language: string): string {
+  return `${language} pretty printers are enabled but not loaded explicitly with gdbserver. Modify setupCommands in launch.json to explicitly load them`;
+}
+
+const languageDebugNotes: Record<string, string> = {
+  "C++ (GCC)": getGdbPrettyPrintersNote("C++"),
+  "C++ (Clang)": getGdbPrettyPrintersNote("C++"),
+  Rust: getGdbPrettyPrintersNote("Rust"),
+  Kotlin:
+    "Breakpoints are ignored with attachment for some reason, which is why there is no debug configuration. This should be temporary... Sorry!",
 };
 
 function getDefaultTemplatesPreview(): Record<string, object> {
@@ -277,7 +295,7 @@ function createGenericTemplate(extension: string): object {
 
 function getLanguageTemplateForExtension(extension: string): {
   runSettings: object;
-  launchConfig?: vscode.DebugConfiguration;
+  debugConfig?: vscode.DebugConfiguration;
   language: string;
 } | null {
   for (const [language, languageTemplate] of Object.entries(languageTemplates)) {
@@ -286,7 +304,7 @@ function getLanguageTemplateForExtension(extension: string): {
         runSettings: {
           [extension]: languageTemplate[extension as keyof typeof languageTemplate],
         },
-        launchConfig: launchTemplates[language],
+        debugConfig: debugTemplates[language],
         language,
       };
     }
@@ -310,7 +328,7 @@ async function mergeSettingsIntoFile(runSettingsPath: string, newSettings: objec
   await fs.writeFile(runSettingsPath, JSON.stringify(mergedSettings, null, 2));
 }
 
-async function mergeLaunchConfigIntoFile(
+async function mergeDebugConfigIntoFile(
   launchJsonPath: string,
   newConfig: vscode.DebugConfiguration
 ): Promise<void> {
@@ -393,21 +411,46 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
           .then(() => true)
           .catch(() => false);
 
-        // Check if the user installed the recommended extension for the file extension
-        const checkRecommendedExtensions = async (fileExtension: string) => {
-          if (fileExtension in recommendedDebugExtensions) {
-            const extensionId = recommendedDebugExtensions[fileExtension];
+        // Check if the user installed the recommended extension for the language
+        const checkRecommendedExtensions = async (language: string) => {
+          if (language in recommendedExtensions) {
+            const extensionId = recommendedExtensions[language];
             const extension = vscode.extensions.getExtension(extensionId);
             if (!extension) {
-              const choice = await vscode.window.showInformationMessage(
-                `The '${extensionId}' extension is recommended for debugging support.`,
-                "View Extension",
-                "Close"
-              );
-              if (choice === "View Extension") {
-                void vscode.commands.executeCommand("extension.open", extensionId);
-              }
+              vscode.window
+                .showInformationMessage(
+                  `The '${extensionId}' extension is recommended for general ${language} development.`,
+                  "View Extension",
+                  "Close"
+                )
+                .then((choice) => {
+                  if (choice === "View Extension") {
+                    void vscode.commands.executeCommand("extension.open", extensionId);
+                  }
+                });
             }
+          }
+
+          if (language in recommendedDebugExtensions && language in debugTemplates) {
+            const extensionId = recommendedDebugExtensions[language];
+            const extension = vscode.extensions.getExtension(extensionId);
+            if (!extension) {
+              vscode.window
+                .showInformationMessage(
+                  `The '${extensionId}' extension is recommended for debugging ${language}.`,
+                  "View Extension",
+                  "Close"
+                )
+                .then((choice) => {
+                  if (choice === "View Extension") {
+                    void vscode.commands.executeCommand("extension.open", extensionId);
+                  }
+                });
+            }
+          }
+
+          if (language in languageDebugNotes && language in debugTemplates) {
+            void vscode.window.showInformationMessage(languageDebugNotes[language]);
           }
         };
 
@@ -415,7 +458,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
         const applyTemplate = async (
           template: object,
           language: string,
-          launchConfig?: vscode.DebugConfiguration
+          debugConfig?: vscode.DebugConfiguration
         ) => {
           // Ensure .vscode directory exists for launch.json
           await fs.mkdir(dotVscodeDir, { recursive: true });
@@ -424,8 +467,8 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
           await mergeSettingsIntoFile(runSettingsPath, template);
 
           // Merge launch.json if we have a template for this language
-          if (launchConfig) {
-            await mergeLaunchConfigIntoFile(launchJsonPath, launchConfig);
+          if (debugConfig) {
+            await mergeDebugConfigIntoFile(launchJsonPath, debugConfig);
           }
 
           // Check for recommended extension in the applied template
@@ -437,7 +480,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
           const result = getLanguageTemplateForExtension(options.extension);
           const template = result?.runSettings ?? createGenericTemplate(options.extension);
 
-          await applyTemplate(template, result?.language ?? "", result?.launchConfig);
+          await applyTemplate(template, result?.language ?? "", result?.debugConfig);
 
           const doc = await vscode.workspace.openTextDocument(runSettingsPath);
           await vscode.window.showTextDocument(doc);
@@ -472,7 +515,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
           const result = getLanguageTemplateForExtension(activeExtension);
           const template = result?.runSettings ?? createGenericTemplate(activeExtension);
 
-          await applyTemplate(template, result?.language ?? "", result?.launchConfig);
+          await applyTemplate(template, result?.language ?? "", result?.debugConfig);
 
           const doc = await vscode.workspace.openTextDocument(runSettingsPath);
           await vscode.window.showTextDocument(doc);
@@ -491,8 +534,8 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
 
         for (const language of languageChoices) {
           const template = languageTemplates[language];
-          const launchConfig = launchTemplates[language];
-          await applyTemplate(template, language, launchConfig);
+          const debugConfig = debugTemplates[language];
+          await applyTemplate(template, language, debugConfig);
         }
 
         const doc = await vscode.workspace.openTextDocument(runSettingsPath);
