@@ -251,13 +251,14 @@ const recommendedExtensions: Record<string, string> = {
   Java: "redhat.java",
   Go: "golang.go",
   Haskell: "haskell.haskell",
+  Kotlin: "JetBrains.kotlin",
 };
 
 // extensions recommended specifically for debugging support
 const recommendedDebugExtensions: Record<string, string> = {
   Rust: "ms-vscode.cpptools",
   JavaScript: "ms-vscode.js-debug",
-  Haskell: "ms-vscode.cpptools",
+  Haskell: "ms-vscode.cpptools", // FIXME: Use "Well-Typed.haskell-debugger-extension" in the future
   Ruby: "KoichiSasada.vscode-rdbg",
   "C#": "ms-vscode.mono-debug",
 };
@@ -270,6 +271,7 @@ const languageDebugNotes: Record<string, string> = {
   "C++ (GCC)": getGdbPrettyPrintersNote("C++"),
   "C++ (Clang)": getGdbPrettyPrintersNote("C++"),
   Rust: getGdbPrettyPrintersNote("Rust"),
+  Haskell: "Native Haskell debugging coming soon when remote attach is better supported",
   Kotlin:
     "Kotlin breakpoints are ignored with attachment for some reason, which is why there is temporarily no debug configuration. Sorry!",
 };
