@@ -130,10 +130,8 @@
       >
         <button
           class="toolbar-icon toolbar-icon-exclude-highlight"
-          data-tooltip={testcase.mode === "interactive"
-            ? "Make Non-Interactive"
-            : "Make Interactive"}
-          aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
+          data-tooltip={testcase.mode === "interactive" ? "Make Standard" : "Make Interactive"}
+          aria-label={testcase.mode === "interactive" ? "Make Standard" : "Make Interactive"}
           onclick={handleToggleInteractive}
         >
           <div class="codicon codicon-bolded {statusIcon}"></div>
@@ -220,11 +218,9 @@
       >
         <button
           class="toolbar-icon toolbar-icon-exclude-highlight"
-          data-tooltip={testcase.mode === "interactive"
-            ? "Make Non-Interactive"
-            : "Make Interactive"}
-          aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
-          onclick={handleToggleInteractive}
+          data-tooltip={testcase.mode === "interactive" ? "Interactive" : "Standard"}
+          aria-label={testcase.mode === "interactive" ? "Interactive" : "Standard"}
+          disabled
         >
           <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
@@ -258,11 +254,9 @@
       >
         <button
           class="toolbar-icon toolbar-icon-exclude-highlight"
-          data-tooltip={testcase.mode === "interactive"
-            ? "Make Non-Interactive"
-            : "Make Interactive"}
-          aria-label={testcase.mode === "interactive" ? "Make Non-Interactive" : "Make Interactive"}
-          onclick={handleToggleInteractive}
+          data-tooltip={testcase.mode === "interactive" ? "Interactive" : "Standard"}
+          aria-label={testcase.mode === "interactive" ? "Interactive" : "Standard"}
+          disabled
         >
           <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
