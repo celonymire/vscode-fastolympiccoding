@@ -282,6 +282,11 @@ function getDefaultTemplatesPreview(): Record<string, object> {
   return previewSettings;
 }
 
+function getDefaultDebugConfigsPreview(): vscode.DebugConfiguration[] {
+  const uniqueConfigs = new Set(Object.values(debugTemplates));
+  return Array.from(uniqueConfigs);
+}
+
 function createGenericTemplate(extension: string): object {
   return {
     [extension]: {
@@ -493,16 +498,32 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
           const choice = await vscode.window.showWarningMessage(
             "runSettings.json already exists. What would you like to do?",
             "Add Language",
-            "Preview Examples",
+            "View Examples",
             "Cancel"
           );
-          if (choice === "Preview Examples") {
-            const preview = await vscode.workspace.openTextDocument({
-              language: "json",
-              content: JSON.stringify(getDefaultTemplatesPreview(), undefined, 2),
-            });
-            void vscode.window.showTextDocument(preview);
-            return;
+          if (choice === "View Examples") {
+            const choice = await vscode.window.showInformationMessage(
+              "Which examples would you like to view?",
+              "Language Settings",
+              "Debug Configurations",
+              "Cancel"
+            );
+            if (choice === "Language Settings") {
+              const preview = await vscode.workspace.openTextDocument({
+                language: "json",
+                content: JSON.stringify(getDefaultTemplatesPreview(), undefined, 4),
+              });
+              void vscode.window.showTextDocument(preview);
+              return;
+            }
+            if (choice === "Debug Configurations") {
+              const preview = await vscode.workspace.openTextDocument({
+                language: "json",
+                content: JSON.stringify(getDefaultDebugConfigsPreview(), undefined, 4),
+              });
+              void vscode.window.showTextDocument(preview);
+              return;
+            }
           }
           if (choice !== "Add Language") {
             return;

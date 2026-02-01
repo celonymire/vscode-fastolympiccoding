@@ -3,6 +3,7 @@
 ### Added
 
 - Recommended extensions for general use of languages to enhance the motive of recommending them
+- Option to view example debug configurations
 - Notes for various languages to convey potentially important information
 
 ### Changed
