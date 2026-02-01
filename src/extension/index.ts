@@ -23,7 +23,11 @@ let panelViewProvider: PanelViewProvider;
 
 type Dependencies = Record<string, string[]>;
 
-async function getFileContent(file: string, baseDirectory: string, dependencies: Dependencies) {
+async function getTemplateContent(
+  relativeFile: string,
+  baseDirectory: string,
+  dependencies: Dependencies
+): Promise<string | undefined> {
   const visiting: Set<string> = new Set();
   const visited: Set<string> = new Set();
   const order: string[] = [];
@@ -46,7 +50,7 @@ async function getFileContent(file: string, baseDirectory: string, dependencies:
     visited.add(currentFile);
     order.push(currentFile);
     return cycle;
-  })(file);
+  })(relativeFile);
   if (hasCycle) {
     const choice = await vscode.window.showWarningMessage(
       "Cyclic dependency found! Do you still want to insert the template?",
@@ -58,10 +62,31 @@ async function getFileContent(file: string, baseDirectory: string, dependencies:
     }
   }
 
-  const contents = await Promise.all(
-    order.map((file) => fs.readFile(path.join(baseDirectory, file), "utf-8"))
+  const results = await Promise.allSettled(
+    order.map((file) => {
+      return fs.readFile(path.join(baseDirectory, file));
+    })
   );
-  const combined = contents.join("\n");
+  const errors = results
+    .map((result, index) => {
+      return {
+        file: order[index],
+        status: result.status,
+        reason: result.status === "rejected" ? result.reason : undefined,
+      };
+    })
+    .filter((item) => item.status === "rejected");
+  if (errors.length > 0) {
+    for (const error of errors) {
+      vscode.window.showErrorMessage(`Error reading ${error.file}: ${error.reason}`);
+    }
+    return undefined;
+  }
+
+  // at this point every file is guaranteed to be fulfilled
+  const combined = results
+    .map((result) => (result as PromiseFulfilledResult<Buffer>).value.toString())
+    .join("\n");
   return combined;
 }
 
@@ -207,7 +232,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
         const files = await vscode.workspace.findFiles(`${relativeBaseDirectory}/**`);
         const items = files.map((file) => ({
           label: path.parse(file.fsPath).base,
-          description: path.relative(workspaceRoot, file.fsPath),
+          description: path.relative(baseDirectory, file.fsPath),
         }));
         const pickedFile = await vscode.window.showQuickPick(items, {
           title: "Insert File Template",
@@ -217,8 +242,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
           return;
         }
 
-        const content = await getFileContent(
-          path.relative(baseDirectory, path.join(pickedFile.description, pickedFile.label)),
+        const content = await getTemplateContent(
+          pickedFile.description,
           baseDirectory,
           dependencies ?? {}
         );

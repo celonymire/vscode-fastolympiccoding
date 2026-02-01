@@ -1,3 +1,14 @@
+# 4.0.2
+
+### Changed
+
+- File template no longer shows the base directory for its prefix
+
+### Fixed
+
+- (Regression) File template insertion stopped working since 4.0.0
+- Rejection errors in file template insertion were not handled
+
 # 4.0.1
 
 ### Added
