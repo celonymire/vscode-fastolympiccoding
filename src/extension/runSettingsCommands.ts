@@ -454,7 +454,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
             }
           }
 
-          if (language in languageDebugNotes && language in debugTemplates) {
+          if (language in languageDebugNotes) {
             void vscode.window.showInformationMessage(languageDebugNotes[language]);
           }
         };
