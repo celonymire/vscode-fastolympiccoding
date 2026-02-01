@@ -71,6 +71,12 @@
         </div>
         <p class="state-badge-text state-badge-text-id">{id}</p>
       </div>
+      <div class="state-badge state-status" data-status={status}>
+        <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
+          <div class="codicon codicon-loading codicon-modifier-spin"></div>
+        </div>
+        <p class="state-badge-text">COMPILING</p>
+      </div>
       <div class="state-badge state-status" data-status={interactiveMode ? "CE" : "NA"}>
         <button
           class="state-toolbar-icon state-toolbar-icon-exclude-highlight"
@@ -80,12 +86,6 @@
         >
           <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
-      </div>
-      <div class="state-badge state-status" data-status={status}>
-        <div class="state-toolbar-icon state-toolbar-icon-exclude-highlight">
-          <div class="codicon codicon-loading codicon-modifier-spin"></div>
-        </div>
-        <p class="state-badge-text">COMPILING</p>
       </div>
     </div>
   </div>

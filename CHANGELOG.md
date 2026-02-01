@@ -3,6 +3,7 @@
 ### Changed
 
 - File template no longer shows the base directory for its prefix
+- Display "COMPILING" before testcase icon for stress tester to align with judge
 
 ### Fixed
 
