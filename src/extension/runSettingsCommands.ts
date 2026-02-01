@@ -4,9 +4,6 @@ import * as vscode from "vscode";
 
 import { deepMerge } from "./utils/vscode";
 
-// FIXME: Kotlin debugging doesn't work well with single files.
-// Remove all debugging configurations for Kotlin for now
-
 const gdbAttachDebugConfig = {
   debugCommand: [
     "gdbserver",
