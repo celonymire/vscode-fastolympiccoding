@@ -1,3 +1,9 @@
+# 4.0.3
+
+### Fixed
+
+- New Testcase button text cuts off if shrinked down
+
 # 4.0.2
 
 ### Added

@@ -15,6 +15,7 @@
   import { postProviderMessage } from "./message";
   import State from "./State.svelte";
   import StateToolbar from "./StateToolbar.svelte";
+  import Button from "../Button.svelte";
 
   type IShowMessage = v.InferOutput<typeof ShowMessageSchema>;
   type IStdioMessage = v.InferOutput<typeof StdioMessageSchema>;
@@ -198,10 +199,7 @@
           Enable interactive mode for stress testing with interactive problems.
         </p>
       </div>
-      <button type="button" class="text-button" onclick={handleSaveSettings}>
-        <div class="codicon codicon-save"></div>
-        Save
-      </button>
+      <Button text="Save" codicon="codicon-save" onclick={handleSaveSettings} />
     {:else}
       {#each states as item (item.id)}
         <div class="state-item">
@@ -332,31 +330,6 @@
     font-size: 12px;
     margin-top: 2px;
     margin-bottom: 16px;
-  }
-
-  /* Standard VSCode button styling */
-  .text-button {
-    box-sizing: border-box;
-    display: flex;
-    width: 100%;
-    padding: 4px;
-    border-radius: 2px;
-    text-align: center;
-    cursor: pointer;
-    justify-content: center;
-    align-items: center;
-    border: 1px solid var(--vscode-button-border, transparent);
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    line-height: 18px;
-  }
-
-  .text-button:hover {
-    background: var(--vscode-button-hoverBackground);
-  }
-
-  .text-button :global(.codicon) {
-    margin-right: 4px;
   }
 
   .half-opacity {
