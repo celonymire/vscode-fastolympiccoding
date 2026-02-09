@@ -247,8 +247,11 @@ const recommendedExtensions: Record<string, string> = {
   PyPy: "ms-python.python",
   Java: "redhat.java",
   Go: "golang.go",
+  Rust: "rust-lang.rust-analyzer",
   Haskell: "haskell.haskell",
   Kotlin: "JetBrains.kotlin",
+  Ruby: "castwide.solargraph",
+  "C#": "ms-dotnettools.csharp",
 };
 
 // extensions recommended specifically for debugging support
