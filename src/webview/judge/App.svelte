@@ -278,7 +278,7 @@
     box-sizing: border-box;
     padding: 4px;
     border: 1px solid var(--vscode-input-border);
-    border-radius: 2px;
+    border-radius: 4px;
     background: var(--vscode-input-background);
     color: var(--vscode-input-foreground);
   }

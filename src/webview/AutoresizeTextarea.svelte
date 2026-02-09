@@ -322,7 +322,7 @@
     white-space: pre;
     padding: 4px;
     border: 1px solid var(--vscode-editorWidget-border);
-    border-radius: 2px;
+    border-radius: 4px;
     box-sizing: border-box;
     background: var(--vscode-editor-background);
     width: 100%;

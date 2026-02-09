@@ -236,7 +236,7 @@
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    border-radius: 2px;
+    border-radius: 4px;
     padding: 3px;
     border: none;
     background: transparent;

@@ -289,7 +289,7 @@
     cursor: pointer;
     border: 1px solid var(--vscode-checkbox-border, var(--vscode-input-border));
     background: var(--vscode-checkbox-background, var(--vscode-input-background));
-    border-radius: 2px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
