@@ -370,8 +370,6 @@ Interactive testcases have a special badge to make them distinguishable. If ther
 ### 👜 Inserting Prewritten Code
 
 - Add the root directory of the templates to the settings
-- **NOTE**: Remove trailing newlines for fold to work (folding is optional via settings)
-  - Folding depends on VSCode support, which may require other extensions depending on the language.
 
 | ![Insert File Template Gif](media/insert_file_template.gif) |
 | :---------------------------------------------------------: |

@@ -11,6 +11,7 @@ import {
   resolveVariables,
 } from "./utils/vscode";
 import { initLogging } from "./utils/logging";
+import { TemplateFoldingProvider, type TemplateRange } from "./utils/folding";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
 import PanelViewProvider from "./providers/PanelViewProvider";
@@ -20,8 +21,12 @@ import { createStatusBarItem } from "./statusBar";
 let judgeViewProvider: JudgeViewProvider;
 let stressViewProvider: StressViewProvider;
 let panelViewProvider: PanelViewProvider;
+let templateFoldingProvider: TemplateFoldingProvider;
 
 type Dependencies = Record<string, string[]>;
+
+// Track inserted template ranges by document URI for folding
+const templateRangesByUri = new Map<string, TemplateRange>();
 
 async function getTemplateContent(
   relativeFile: string,
@@ -123,8 +128,25 @@ function registerDocumentContentProviders(context: vscode.ExtensionContext): voi
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument((document) => {
       ReadonlyStringProvider.cleanup(document.uri);
+      // Also clean up template ranges for closed documents
+      templateRangesByUri.delete(document.uri.toString());
     })
   );
+}
+
+function registerFoldingProvider(context: vscode.ExtensionContext): void {
+  // Create the folding provider with a callback to get template ranges
+  templateFoldingProvider = new TemplateFoldingProvider((documentUri) => {
+    return templateRangesByUri.get(documentUri);
+  });
+
+  // Register for all file scheme documents
+  context.subscriptions.push(
+    vscode.languages.registerFoldingRangeProvider({ scheme: "file" }, templateFoldingProvider)
+  );
+
+  // Dispose the provider when extension deactivates
+  context.subscriptions.push(templateFoldingProvider);
 }
 
 function registerCommands(context: vscode.ExtensionContext): void {
@@ -254,14 +276,37 @@ function registerCommands(context: vscode.ExtensionContext): void {
           return;
         }
 
-        const inserted = vscode.window.activeTextEditor?.edit((edit: vscode.TextEditorEdit) => {
-          if (vscode.window.activeTextEditor) {
-            edit.insert(vscode.window.activeTextEditor.selection.active, content);
-          }
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          return;
+        }
+
+        const startLine = editor.selection.active.line;
+        const templateLineCount = content.split("\n").length - 1;
+
+        const inserted = await editor.edit((edit: vscode.TextEditorEdit) => {
+          edit.insert(editor.selection.active, content);
         });
+
+        if (!inserted) {
+          return;
+        }
+
         const foldTemplate = config.get<boolean>("foldFileTemplate")!;
-        if (inserted && foldTemplate) {
-          vscode.commands.executeCommand("editor.fold");
+        if (foldTemplate) {
+          // Track the template range for folding
+          const endLine = startLine + templateLineCount;
+          const documentUri = editor.document.uri.toString();
+          templateRangesByUri.set(documentUri, { startLine, endLine });
+
+          // Notify the folding provider that ranges have changed
+          templateFoldingProvider.notifyFoldingRangesChanged();
+
+          // Wait for VS Code's internal folding debounce (~200ms), then fold
+          setTimeout(async () => {
+            await vscode.commands.executeCommand("editor.fold", { levels: 1, direction: "down" });
+            templateRangesByUri.delete(documentUri);
+          }, 200);
         }
       })();
     })
@@ -361,6 +406,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerViewProviders(context);
   registerCommands(context);
   registerDocumentContentProviders(context);
+  registerFoldingProvider(context);
 
   createStatusBarItem(context);
 

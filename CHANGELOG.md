@@ -3,6 +3,7 @@
 ### Changed
 
 - Let the stress tester run indefinitely by default
+- Folding now doesn't depend on extensions and correctly folds the entire inserted content
 
 ### Fixed
 
