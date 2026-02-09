@@ -1,5 +1,9 @@
 # 4.0.3
 
+### Changed
+
+- Let the stress tester run indefinitely by default
+
 ### Fixed
 
 - New Testcase button text cuts off if shrinked down

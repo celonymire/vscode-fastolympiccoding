@@ -204,7 +204,7 @@
           },
           "fastolympiccoding.stressTimeLimit": {
             "type": "integer",
-            "default": 60000,
+            "default": 0,
             "description": "Maximum time (in milliseconds) to let the stress tester run. Use 0 to let it run infinitely.",
             "minimum": 0
           }
