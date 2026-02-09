@@ -11,7 +11,7 @@ import {
   resolveVariables,
 } from "./utils/vscode";
 import { initLogging } from "./utils/logging";
-import { TemplateFoldingProvider, type TemplateRange } from "./utils/folding";
+import { TemplateFoldingProvider } from "./utils/folding";
 import JudgeViewProvider from "./providers/JudgeViewProvider";
 import StressViewProvider from "./providers/StressViewProvider";
 import PanelViewProvider from "./providers/PanelViewProvider";
@@ -26,7 +26,7 @@ let templateFoldingProvider: TemplateFoldingProvider;
 type Dependencies = Record<string, string[]>;
 
 // Track inserted template ranges by document URI for folding
-const templateRangesByUri = new Map<string, TemplateRange>();
+const templateRangesByUri = new Map<string, vscode.FoldingRange>();
 
 async function getTemplateContent(
   relativeFile: string,
@@ -281,8 +281,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
           return;
         }
 
-        const startLine = editor.selection.active.line;
-        const templateLineCount = content.split("\n").length - 1;
+        const start = editor.selection.active.line;
+        const newlineCount = (content.match(/\n/g) || []).length;
+        const originalSelection = editor.selection;
 
         const inserted = await editor.edit((edit: vscode.TextEditorEdit) => {
           edit.insert(editor.selection.active, content);
@@ -295,16 +296,25 @@ function registerCommands(context: vscode.ExtensionContext): void {
         const foldTemplate = config.get<boolean>("foldFileTemplate")!;
         if (foldTemplate) {
           // Track the template range for folding
-          const endLine = startLine + templateLineCount;
+          // newlineCount is the number of newline characters; the range spans from start to start + newlineCount
+          const end = start + newlineCount;
           const documentUri = editor.document.uri.toString();
-          templateRangesByUri.set(documentUri, { startLine, endLine });
+          templateRangesByUri.set(documentUri, new vscode.FoldingRange(start, end));
 
           // Notify the folding provider that ranges have changed
           templateFoldingProvider.notifyFoldingRangesChanged();
 
           // Wait for VS Code's internal folding debounce (~200ms), then fold
           setTimeout(async () => {
+            // Move cursor to the start of the template so fold operates on the template region
+            const startPos = new vscode.Position(start, 0);
+            editor.selection = new vscode.Selection(startPos, startPos);
+
+            // Fold at the cursor position
             await vscode.commands.executeCommand("editor.fold", { levels: 1, direction: "down" });
+
+            // Restore the original selection
+            editor.selection = originalSelection;
             templateRangesByUri.delete(documentUri);
           }, 200);
         }

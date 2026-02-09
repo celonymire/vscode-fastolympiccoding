@@ -1,12 +1,6 @@
 import * as vscode from "vscode";
-import { getLogger } from "./logging";
 
-export interface TemplateRange {
-  startLine: number;
-  endLine: number;
-}
-
-type GetTemplateRangesCallback = (documentUri: string) => TemplateRange | undefined;
+type GetTemplateRangesCallback = (documentUri: string) => vscode.FoldingRange | undefined;
 
 /**
  * Custom folding provider that folds inserted template regions.
@@ -21,18 +15,8 @@ export class TemplateFoldingProvider implements vscode.FoldingRangeProvider {
   provideFoldingRanges(
     document: vscode.TextDocument
   ): vscode.ProviderResult<vscode.FoldingRange[]> {
-    const templateRange = this.getTemplateRanges(document.uri.toString());
-    if (!templateRange) {
-      return [];
-    }
-
-    const logger = getLogger("folding");
-    logger.debug(
-      `Providing folding range for ${document.uri.fsPath}: ${templateRange.startLine}-${templateRange.endLine}`
-    );
-
-    // Simply fold the entire inserted template region
-    return [new vscode.FoldingRange(templateRange.startLine, templateRange.endLine)];
+    const range = this.getTemplateRanges(document.uri.toString());
+    return range ? [range] : [];
   }
 
   /**
