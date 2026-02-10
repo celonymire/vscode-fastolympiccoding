@@ -79,7 +79,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
     }
 
     if (parts.length === 0) {
-      statusBarItem.text = "$(zap)";
+      statusBarItem.text = "$(zap) Fast Olympic Coding";
       statusBarItem.tooltip = "Open Fast Olympic Coding Panel";
       statusBarItem.backgroundColor = undefined;
     } else {
@@ -91,7 +91,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
         tooltip = "Open Fast Olympic Coding Panel";
         statusBarItem.backgroundColor = undefined;
       }
-      statusBarItem.text = `$(zap) ${parts.join("  ")}`;
+      statusBarItem.text = `$(zap) Fast Olympic Coding: ${parts.join("  ")}`;
       statusBarItem.tooltip = tooltip;
     }
   }
