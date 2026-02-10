@@ -260,6 +260,7 @@ export function createListener(judgeViewProvider: JudgeViewProvider): void {
     vscode.window.showErrorMessage(`Competitive Companion listener error: ${error}`);
     server?.close();
     server = undefined;
+    _onDidChangeListening.fire(true);
   });
   server.once("close", () => {
     server = undefined;
