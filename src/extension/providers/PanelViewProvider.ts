@@ -60,7 +60,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
 
     // Companion status
     if (listening) {
-      parts.push(`$(broadcast) ${port}`);
+      parts.push(`$(radio-tower) ${port}`);
     }
 
     // Judge status
@@ -70,31 +70,28 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
       totalRunningTests += uuids.length;
     }
 
-    if (totalRunningTests > 0) {
-      parts.push(`$(run) ${totalRunningTests}`);
-    }
-
     // Stress status
     const stressSessions = this._stressViewProvider.getRunningStressSessions();
-    if (stressSessions.length > 0) {
-      parts.push(`$(debug-alt) ${stressSessions.length}`);
+    totalRunningTests += stressSessions.length;
+
+    if (totalRunningTests > 0) {
+      parts.push(`$(loading~spin) ${totalRunningTests}`);
     }
 
     if (parts.length === 0) {
-      statusBarItem.text = "$(zap) Fast Olympic Coding";
+      statusBarItem.text = "$(zap)";
+      statusBarItem.tooltip = "Open Fast Olympic Coding Panel";
       statusBarItem.backgroundColor = undefined;
     } else {
-      let icon;
       let tooltip;
-      if (totalRunningTests > 0 || stressSessions.length > 0) {
-        icon = "$(loading~spin)";
+      if (totalRunningTests > 0) {
         tooltip = "View currently running sessions";
         statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
       } else {
-        icon = "$(zap)";
+        tooltip = "Open Fast Olympic Coding Panel";
         statusBarItem.backgroundColor = undefined;
       }
-      statusBarItem.text = `${icon} Fast Olympic Coding: ${parts.join("  ")}`;
+      statusBarItem.text = `$(zap) ${parts.join("  ")}`;
       statusBarItem.tooltip = tooltip;
     }
   }
@@ -117,7 +114,7 @@ export default class PopupViewProvider implements vscode.TreeDataProvider<Status
         "Competitive Companion",
         vscode.TreeItemCollapsibleState.None,
         description,
-        new vscode.ThemeIcon(listening ? "broadcast" : "circle-slash"),
+        new vscode.ThemeIcon(listening ? "radio-tower" : "circle-slash"),
         undefined,
         undefined,
         "companion"

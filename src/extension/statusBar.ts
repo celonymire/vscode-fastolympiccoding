@@ -11,7 +11,6 @@ export function createStatusBarItem(context: vscode.ExtensionContext): vscode.St
     vscode.StatusBarAlignment.Left
   );
   statusBarItem.name = "Fast Olympic Coding";
-  statusBarItem.text = "$(zap) Fast Olympic Coding";
   statusBarItem.command = "fastolympiccoding.showPanel";
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
