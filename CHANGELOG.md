@@ -8,6 +8,7 @@
 ### Fixed
 
 - New Testcase button text cuts off if shrinked down
+- Truncated data would be saved as actual data when running or debugging
 
 # 4.0.2
 

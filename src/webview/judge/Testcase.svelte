@@ -54,12 +54,18 @@
   export function reset() {
     newStdin = "";
     newInteractorSecret = "";
-    stdinEditing = false;
-    acceptedStdoutEditing = false;
-    interactorSecretEditing = false;
-    handleSaveStdin();
-    handleSaveAcceptedStdout();
-    handleSaveInteractorSecret();
+    if (stdinEditing) {
+      stdinEditing = false;
+      handleSaveStdin();
+    }
+    if (acceptedStdoutEditing) {
+      acceptedStdoutEditing = false;
+      handleSaveAcceptedStdout();
+    }
+    if (interactorSecretEditing) {
+      interactorSecretEditing = false;
+      handleSaveInteractorSecret();
+    }
   }
 </script>
 
