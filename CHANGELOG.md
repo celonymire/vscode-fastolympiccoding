@@ -3,12 +3,13 @@
 ### Changed
 
 - Let the stress tester run indefinitely by default
-- Folding now doesn't depend on extensions and correctly folds the entire inserted content
+- Folding now doesn't depend on extensions
 
 ### Fixed
 
 - New Testcase button text cuts off if shrinked down
 - Truncated data would be saved as actual data when running or debugging
+- Folding now folds the entire file content not just the last code block of the file
 
 # 4.0.2
 
