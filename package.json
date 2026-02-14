@@ -451,7 +451,7 @@
     "lint": "eslint .",
     "format": "prettier --write src",
     "check": "prettier --check src",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.app.json",
+    "svelte:check": "svelte-check --tsconfig ./tsconfig.app.json",
     "build": "rspack build --mode development",
     "prod": "rspack build --mode production",
     "watch": "rspack build --watch --mode development",
