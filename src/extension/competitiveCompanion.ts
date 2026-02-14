@@ -8,6 +8,7 @@ import * as v from "valibot";
 import { ProblemSchema, type Testcase } from "../shared/schemas";
 import type JudgeViewProvider from "./providers/JudgeViewProvider";
 import { getLogger } from "./utils/logging";
+import { getFileWorkspace } from "./utils/vscode";
 
 type Problem = v.InferOutput<typeof ProblemSchema>;
 
@@ -49,13 +50,13 @@ let prevBatchId: string | undefined;
  */
 async function promptForTargetFile(
   problem: Problem,
-  workspaceRoot: string,
-  files: vscode.Uri[],
+  files: string[],
+  workspace?: string,
   currentFileRelativePath?: string
 ): Promise<string> {
   const options: vscode.QuickPickItem[] = files.map((file) => ({
-    label: path.parse(file.fsPath).base,
-    description: path.relative(workspaceRoot, file.fsPath),
+    label: path.parse(file).base,
+    description: path.relative(workspace ?? "", file),
   }));
 
   const pick = vscode.window.createQuickPick();
@@ -126,7 +127,7 @@ async function promptForTargetFile(
  */
 async function processProblem(problem: Problem, judge: JudgeViewProvider): Promise<void> {
   const activeFile = vscode.window.activeTextEditor?.document.fileName;
-  const workspaceRoot = vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? "";
+  const workspace = await getFileWorkspace(activeFile);
   const config = vscode.workspace.getConfiguration("fastolympiccoding");
   const openSelectedFiles = config.get<boolean>("openSelectedFiles")!;
   const askForWhichFile = config.get<boolean>("askForWhichFile")!;
@@ -138,7 +139,8 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
   if (prevBatchId === problem.batch.id) {
     currentFileRelativePath = prevSelection;
   } else {
-    currentFileRelativePath = activeFile ? path.relative(workspaceRoot, activeFile) : undefined;
+    currentFileRelativePath =
+      workspace && activeFile ? path.relative(workspace, activeFile) : undefined;
   }
   let relativePath = isSingleProblem && currentFileRelativePath ? currentFileRelativePath : "";
 
@@ -146,13 +148,34 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
     // Gather files before prompting to include newly created files from previous problems
     const include = config.get<string>("includePattern")!;
     const exclude = config.get<string>("excludePattern")!;
-    const updatedFiles = await vscode.workspace.findFiles(include, exclude);
-    relativePath = await promptForTargetFile(
-      problem,
-      workspaceRoot,
-      updatedFiles,
-      currentFileRelativePath
-    );
+
+    let files: string[];
+    if (vscode.workspace.workspaceFolders) {
+      files = await vscode.workspace
+        .findFiles(include, exclude)
+        .then((uris) => uris.map((uri) => uri.fsPath));
+    } else if (activeFile) {
+      files = [activeFile];
+    } else {
+      const choice = await vscode.window.showWarningMessage(
+        `No active workspace nor file opened to infer files to put testcases for "${problem.name}".`,
+        "Select A File",
+        "Dismiss"
+      );
+      if (choice === "Dismiss") {
+        return;
+      }
+
+      const result = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        title: `Select a file to put testcases for "${problem.name}"`,
+      });
+      files = result ? [result[0].fsPath] : [];
+    }
+
+    relativePath = await promptForTargetFile(problem, files, workspace, currentFileRelativePath);
   }
 
   if (relativePath === "") {
@@ -160,7 +183,7 @@ async function processProblem(problem: Problem, judge: JudgeViewProvider): Promi
     return;
   }
 
-  const absolutePath = path.join(workspaceRoot, relativePath);
+  const absolutePath = path.resolve(path.join(workspace ?? "", relativePath));
   try {
     await fs.writeFile(absolutePath, "", { flag: "a" }); // Create file if it doesn't exist
   } catch (error) {

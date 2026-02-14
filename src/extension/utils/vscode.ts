@@ -570,6 +570,29 @@ function loadRunSettingsFromDirectory(directory: string): Record<string, unknown
 }
 
 /**
+ * Returns VSCode workspace folder if it exists otherwise returns the directory of the file
+ */
+export async function getFileWorkspace(file?: string): Promise<string | undefined> {
+  let runSettingsFolder: string | undefined = undefined;
+  if (vscode.workspace.workspaceFolders?.length === 1) {
+    runSettingsFolder = vscode.workspace.workspaceFolders[0].uri.fsPath;
+  } else if (file) {
+    runSettingsFolder = path.dirname(file);
+  } else if (vscode.window.activeTextEditor) {
+    runSettingsFolder = path.dirname(vscode.window.activeTextEditor.document.fileName);
+  } else {
+    const picked = await vscode.window.showWorkspaceFolderPick({
+      placeHolder: "Select workspace folder for run settings",
+    });
+    if (!picked) {
+      return;
+    }
+    runSettingsFolder = picked.uri.fsPath;
+  }
+  return runSettingsFolder;
+}
+
+/**
  * Traverses from the file directory up to the workspace root,
  * loading and merging runSettings.json files along the way.
  * Also enforces the settings has the corresponding extension entry.
@@ -585,24 +608,18 @@ export function getFileRunSettings(
     return null;
   }
 
-  const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
-  if (!workspaceFolder) {
-    logger.error(`No workspace folder found for file ${file}`);
-    vscode.window.showErrorMessage(`No workspace folder found for file ${file}`);
-    return null;
-  }
-
-  const workspaceRoot = workspaceFolder.uri.fsPath;
   let currentDir = path.dirname(file);
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
+  const rootDir = workspaceFolder?.uri.fsPath ?? currentDir;
 
   // Iterate from file folder back down to workspace root
   const settingsStack: Record<string, unknown>[] = [];
-  while (currentDir.startsWith(workspaceRoot)) {
+  while (currentDir.startsWith(rootDir)) {
     const dirSettings = loadRunSettingsFromDirectory(currentDir);
     if (dirSettings) {
       settingsStack.push(dirSettings);
     }
-    if (currentDir === workspaceRoot) {
+    if (currentDir === rootDir) {
       break;
     }
     const parentDir = path.dirname(currentDir);

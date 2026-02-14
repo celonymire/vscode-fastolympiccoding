@@ -1,3 +1,9 @@
+# 4.0.4
+
+### Added
+
+- Support for opened files without active workspaces
+
 # 4.0.3
 
 ### Changed

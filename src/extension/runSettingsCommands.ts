@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { deepMerge } from "./utils/vscode";
+import { deepMerge, getFileWorkspace } from "./utils/vscode";
 
 const gdbAttachDebugConfig = {
   debugCommand: [
@@ -388,30 +388,14 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "fastolympiccoding.createRunSettings",
-      async (options?: { extension?: string; workspaceFolder?: vscode.WorkspaceFolder }) => {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          void vscode.window.showErrorMessage("No workspace folder is open");
+      async (options?: { extension?: string; workspaceFolder?: string }) => {
+        const runSettingsFolder = options?.workspaceFolder ?? (await getFileWorkspace());
+        if (!runSettingsFolder) {
           return;
         }
 
-        let workspaceFolder: vscode.WorkspaceFolder;
-        if (options?.workspaceFolder) {
-          workspaceFolder = options.workspaceFolder;
-        } else if (workspaceFolders.length === 1) {
-          workspaceFolder = workspaceFolders[0];
-        } else {
-          const picked = await vscode.window.showWorkspaceFolderPick({
-            placeHolder: "Select workspace folder for run settings",
-          });
-          if (!picked) {
-            return;
-          }
-          workspaceFolder = picked;
-        }
-
-        const runSettingsPath = path.join(workspaceFolder.uri.fsPath, "runSettings.json");
-        const dotVscodeDir = path.join(workspaceFolder.uri.fsPath, ".vscode");
+        const runSettingsPath = path.join(runSettingsFolder, "runSettings.json");
+        const dotVscodeDir = path.join(runSettingsFolder, ".vscode");
         const launchJsonPath = path.join(dotVscodeDir, "launch.json");
 
         const fileExists = await fs
@@ -574,28 +558,14 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("fastolympiccoding.openRunSettings", () => {
+    vscode.commands.registerCommand("fastolympiccoding.openRunSettings", async () => {
       void (async () => {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          void vscode.window.showErrorMessage("No workspace folder is open");
+        const runSettingsFolder = await getFileWorkspace();
+        if (!runSettingsFolder) {
           return;
         }
 
-        let workspaceFolder: vscode.WorkspaceFolder;
-        if (workspaceFolders.length === 1) {
-          workspaceFolder = workspaceFolders[0];
-        } else {
-          const picked = await vscode.window.showWorkspaceFolderPick({
-            placeHolder: "Select workspace folder",
-          });
-          if (!picked) {
-            return;
-          }
-          workspaceFolder = picked;
-        }
-
-        const runSettingsPath = path.join(workspaceFolder.uri.fsPath, "runSettings.json");
+        const runSettingsPath = path.join(runSettingsFolder, "runSettings.json");
         try {
           await fs.access(runSettingsPath);
           const doc = await vscode.workspace.openTextDocument(runSettingsPath);
