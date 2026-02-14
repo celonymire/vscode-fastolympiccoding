@@ -27,7 +27,7 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Type check
+      - name: Svelte Check
         run: npm run svelte:check
 
   package:
