@@ -2,16 +2,11 @@
   "compilerOptions": {
     "composite": true,
     "moduleResolution": "node",
-    "target": "ES2020",
-    "lib": ["ES2020"],
+    "target": "es2024",
+    "lib": ["ES2024"],
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
   "extends": "./tsconfig.json",
-  "include": [
-    "src/extension/**/*.ts",
-    "src/shared/**/*.ts",
-    "rspack.config.ts",
-    "postcss.config.ts"
-  ]
+  "include": ["src/extension/**/*.ts", "src/shared/**/*.ts"]
 }
