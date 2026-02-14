@@ -17,7 +17,8 @@ function getNonce(): string {
 export default abstract class BaseViewProvider<
   Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>,
   WebviewMessageType,
-> implements vscode.WebviewViewProvider
+>
+  implements vscode.WebviewViewProvider
 {
   private _webview?: vscode.Webview = undefined;
   private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
