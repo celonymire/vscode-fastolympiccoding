@@ -4,6 +4,10 @@
 
 - Support for opened files without active workspaces
 
+### Fixed
+
+- Sometimes leading newlines would be inserted when switching back to a file with running sessions
+
 # 4.0.3
 
 ### Changed

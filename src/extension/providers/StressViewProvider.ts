@@ -271,7 +271,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const resendTruncatedData = (handler: TextHandler) => {
       const data = handler.data;
       handler.reset();
-      handler.write(data, "final");
+      handler.write(data, "force");
     };
 
     for (const state of ctx.state) {

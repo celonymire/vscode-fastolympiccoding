@@ -27,6 +27,7 @@ import {
   resolveVariables,
   showOpenRunSettingsErrorWindow,
   TextHandler,
+  type WriteMode,
 } from "../utils/vscode";
 import { getLogger } from "../utils/logging";
 import {
@@ -654,19 +655,20 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     const resendTruncatedData = (
       property: "stdin" | "stderr" | "stdout" | "acceptedStdout" | "interactorSecret",
+      mode: WriteMode,
       handler: TextHandler
     ) => {
       const data = handler.data;
       super._postMessage({ type: "SET", uuid, property, value: "" }); // clear out old data
       handler.reset();
-      handler.write(data, "final");
+      handler.write(data, mode);
     };
 
-    resendTruncatedData("stdin", testcase.stdin);
-    resendTruncatedData("stderr", testcase.stderr);
-    resendTruncatedData("stdout", testcase.stdout);
-    resendTruncatedData("acceptedStdout", testcase.acceptedStdout);
-    resendTruncatedData("interactorSecret", testcase.interactorSecret);
+    resendTruncatedData("stdin", "force", testcase.stdin);
+    resendTruncatedData("stderr", "force", testcase.stderr);
+    resendTruncatedData("stdout", "force", testcase.stdout);
+    resendTruncatedData("acceptedStdout", "final", testcase.acceptedStdout);
+    resendTruncatedData("interactorSecret", "force", testcase.interactorSecret);
   }
 
   protected override _switchToFile(file: string) {
@@ -1076,16 +1078,14 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         file
       );
 
-    newTestcase.stdin.write(testcase?.stdin ?? "", testcase ? "final" : "batch");
-    newTestcase.stderr.write(testcase?.stderr ?? "", testcase ? "final" : "batch");
-    newTestcase.stdout.write(testcase?.stdout ?? "", testcase ? "final" : "batch");
+    newTestcase.stdin.write(testcase?.stdin ?? "", testcase ? "force" : "batch");
+    newTestcase.stderr.write(testcase?.stderr ?? "", testcase ? "force" : "batch");
+    newTestcase.stdout.write(testcase?.stdout ?? "", testcase ? "force" : "batch");
     newTestcase.acceptedStdout.write(testcase?.acceptedStdout ?? "", "final"); // force endline for empty answer comparison
     // We treat interactor secrets as final because there are problems where
     // the solution queries the interactor without reading any input first. The
     // best assumption is to send the complete secret at the start.
     newTestcase.interactorSecret.write(testcase?.interactorSecret ?? "", "final");
-
-    this._syncTestcaseState(newTestcase);
 
     return newTestcase;
   }
