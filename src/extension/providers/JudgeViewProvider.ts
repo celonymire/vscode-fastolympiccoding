@@ -1428,9 +1428,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     if (!testcase) {
       return;
     }
-    const stdout = ReadonlyStringProvider.createUri(`OUTPUT:\n\n${testcase.stdout.data}`);
+    const stdout = ReadonlyStringProvider.createUri(
+      `OUTPUT:\n\n${testcase.stdout.data}`,
+      `Output`,
+      testcase.uuid
+    );
     const acStdout = ReadonlyStringProvider.createUri(
-      `ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`
+      `ACCEPTED OUTPUT:\n\n${testcase.acceptedStdout.data}`,
+      `Accepted Output`,
+      testcase.uuid
     );
 
     vscode.commands.executeCommand("vscode.diff", stdout, acStdout, `Diff: Testcase ${uuid}`);
@@ -1442,29 +1448,38 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       return;
     }
 
+    const titleByStdio: Record<Stdio, string> = {
+      STDIN: "Input",
+      STDERR: "Error",
+      STDOUT: "Output",
+      ACCEPTED_STDOUT: "Accepted Output",
+      INTERACTOR_SECRET: "Interactor Secret",
+    };
+    const title = `${titleByStdio[stdio]}: ${testcase.uuid}`;
+
     switch (stdio) {
       case "STDIN":
-        void openInNewEditor(testcase.stdin.data);
+        void openInNewEditor(testcase.stdin.data, title, testcase.uuid);
         break;
       case "STDERR":
         if (testcase.status === "CE") {
-          void openInTerminalTab(testcase.stderr.data, "Compilation Error");
+          void openInTerminalTab(testcase.stderr.data, title);
         } else {
-          void openInNewEditor(testcase.stderr.data);
+          void openInNewEditor(testcase.stderr.data, title, testcase.uuid);
         }
         break;
       case "STDOUT":
         if (testcase.status === "CE") {
-          void openInTerminalTab(testcase.stdout.data, "Compilation Output");
+          void openInTerminalTab(testcase.stdout.data, title);
         } else {
-          void openInNewEditor(testcase.stdout.data);
+          void openInNewEditor(testcase.stdout.data, title, testcase.uuid);
         }
         break;
       case "ACCEPTED_STDOUT":
-        void openInNewEditor(testcase.acceptedStdout.data);
+        void openInNewEditor(testcase.acceptedStdout.data, title, testcase.uuid);
         break;
       case "INTERACTOR_SECRET":
-        void openInNewEditor(testcase.interactorSecret.data);
+        void openInNewEditor(testcase.interactorSecret.data, title, testcase.uuid);
         break;
     }
   }

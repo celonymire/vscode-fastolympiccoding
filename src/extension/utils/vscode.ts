@@ -190,32 +190,45 @@ export async function getDefaultBuildTaskName() {
 export class ReadonlyStringProvider implements vscode.TextDocumentContentProvider {
   static SCHEME = "fastolympiccoding";
   private static _contents = new Map<string, string>();
-  private static _nextId = 0;
 
-  static createUri(content: string): vscode.Uri {
-    const id = (this._nextId++).toString();
+  private static _buildId(uuid: string, title: string): string {
+    return `${uuid}:${title}`;
+  }
+
+  static createUri(content: string, title: string, uuid: string): vscode.Uri {
+    const id = this._buildId(uuid, title);
     this._contents.set(id, content);
-    return vscode.Uri.parse(`${this.SCHEME}:/data-${id}`);
+    return vscode.Uri.from({
+      scheme: this.SCHEME,
+      path: `${title}`,
+      query: `id=${encodeURIComponent(id)}`,
+    });
   }
 
   static cleanup(uri: vscode.Uri): void {
     if (uri.scheme === this.SCHEME) {
-      const id = uri.path.replace(/^\/data-/, "");
-      this._contents.delete(id);
+      const id = new URLSearchParams(uri.query).get("id");
+      if (id) {
+        this._contents.delete(id);
+      }
     }
   }
 
   provideTextDocumentContent(uri: vscode.Uri): vscode.ProviderResult<string> {
-    const id = uri.path.replace(/^\/data-/, "");
-    return ReadonlyStringProvider._contents.get(id);
+    const id = new URLSearchParams(uri.query).get("id");
+    return id ? ReadonlyStringProvider._contents.get(id) : undefined;
   }
 }
 
 /**
  * Opens content in a read-only text document.
  */
-export async function openInNewEditor(content: string): Promise<void> {
-  const uri = ReadonlyStringProvider.createUri(content);
+export async function openInNewEditor(
+  content: string,
+  textType: string,
+  uuid: string
+): Promise<void> {
+  const uri = ReadonlyStringProvider.createUri(content, textType, uuid);
   const document = await vscode.workspace.openTextDocument(uri);
   vscode.window.showTextDocument(document);
 }
@@ -224,10 +237,10 @@ export async function openInNewEditor(content: string): Promise<void> {
  * Opens content in a read-only terminal tab (using VS Code's native terminal).
  * This supports ANSI colors and native clickable file links.
  */
-export function openInTerminalTab(content: string, title: string = "Output") {
+export function openInTerminalTab(content: string, name: string) {
   const pty = new ReadonlyTerminal(content);
   const terminal = vscode.window.createTerminal({
-    name: title,
+    name,
     pty,
     location: vscode.TerminalLocation.Editor,
   });

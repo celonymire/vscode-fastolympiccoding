@@ -587,22 +587,23 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const ctx = this._currentContext;
     if (!ctx) return;
     const state = ctx.state.find((s) => s.state === id);
-
     if (!state) {
       return;
     }
+
+    const title = `${this._currentFile}: ${id}`;
     switch (stdio) {
       case "STDIN":
-        void openInNewEditor(state.stdin.data);
+        void openInNewEditor(state.stdin.data, title, id);
         break;
       case "STDOUT":
-        void openInNewEditor(state.stdout.data);
+        void openInNewEditor(state.stdout.data, title, id);
         break;
       case "STDERR":
         if (state.status === "CE") {
-          void openInTerminalTab(state.stderr.data, "Compilation Error");
+          void openInTerminalTab(state.stderr.data, title);
         } else {
-          void openInNewEditor(state.stderr.data);
+          void openInNewEditor(state.stderr.data, title, id);
         }
         break;
     }

@@ -4,6 +4,9 @@
 
 - Support for opened files without active workspaces
 
+### Changed
+- Made text expansion editor's title human-friendly
+
 ### Fixed
 
 - Sometimes leading newlines would be inserted when switching back to a file with running sessions
