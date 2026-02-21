@@ -446,8 +446,54 @@ export function resolveVariables(
 
 const _runSettingsCache = new Map<string, Record<string, unknown>>();
 let _runSettingsWatcher: vscode.FileSystemWatcher | undefined = undefined;
+let _runSettingsWatcherKey: string | undefined = undefined;
+let _runSettingsWatcherLifecycle: vscode.Disposable | undefined = undefined;
 let _schemaDefaults: Record<string, string> | undefined = undefined;
 let _extensionContext: vscode.ExtensionContext | undefined = undefined;
+
+function disposeRunSettingsWatcher() {
+  _runSettingsWatcher?.dispose();
+  _runSettingsWatcher = undefined;
+  _runSettingsWatcherKey = undefined;
+}
+
+function updateRunSettingsWatcher() {
+  let pattern: vscode.GlobPattern | undefined = undefined;
+  let watcherKey: string | undefined = undefined;
+
+  if ((vscode.workspace.workspaceFolders?.length ?? 0) > 0) {
+    pattern = "**/runSettings.json";
+    watcherKey = "workspace";
+  } else {
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    if (activeUri && activeUri.scheme === "file") {
+      const directory = path.dirname(activeUri.fsPath);
+      pattern = new vscode.RelativePattern(vscode.Uri.file(directory), "runSettings.json");
+      watcherKey = `no-workspace:${directory}`;
+    }
+  }
+
+  if (!pattern || !watcherKey) {
+    disposeRunSettingsWatcher();
+    return;
+  }
+
+  if (_runSettingsWatcher && _runSettingsWatcherKey === watcherKey) {
+    return;
+  }
+
+  disposeRunSettingsWatcher();
+
+  _runSettingsWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+  _runSettingsWatcherKey = watcherKey;
+
+  const clearCache = () => {
+    _runSettingsCache.clear();
+  };
+  _runSettingsWatcher.onDidCreate(clearCache);
+  _runSettingsWatcher.onDidChange(clearCache);
+  _runSettingsWatcher.onDidDelete(clearCache);
+}
 
 /**
  * Loads default values from the runSettings.json schema file.
@@ -501,21 +547,25 @@ export function initializeRunSettingsWatcher(context: vscode.ExtensionContext): 
   logger = getLogger("vscode");
   _extensionContext = context;
 
-  if (_runSettingsWatcher) {
+  if (_runSettingsWatcherLifecycle) {
     return;
   }
 
-  // Watch for runSettings.json files in all workspace folders
-  _runSettingsWatcher = vscode.workspace.createFileSystemWatcher("**/runSettings.json");
+  const activeEditorWatcher = vscode.window.onDidChangeActiveTextEditor(updateRunSettingsWatcher);
+  const workspaceFoldersWatcher =
+    vscode.workspace.onDidChangeWorkspaceFolders(updateRunSettingsWatcher);
+  _runSettingsWatcherLifecycle = vscode.Disposable.from(
+    activeEditorWatcher,
+    workspaceFoldersWatcher,
+    new vscode.Disposable(() => {
+      disposeRunSettingsWatcher();
+      _runSettingsWatcherLifecycle = undefined;
+    })
+  );
 
-  const clearCache = () => {
-    _runSettingsCache.clear();
-  };
-  _runSettingsWatcher.onDidCreate(clearCache);
-  _runSettingsWatcher.onDidChange(clearCache);
-  _runSettingsWatcher.onDidDelete(clearCache);
+  updateRunSettingsWatcher();
 
-  context.subscriptions.push(_runSettingsWatcher);
+  context.subscriptions.push(_runSettingsWatcherLifecycle);
 }
 
 export function deepMerge(
