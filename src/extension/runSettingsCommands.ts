@@ -548,11 +548,6 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
 
         const doc = await vscode.workspace.openTextDocument(runSettingsPath);
         await vscode.window.showTextDocument(doc);
-
-        const languageList = languageChoices.join(", ");
-        void vscode.window.showInformationMessage(
-          `Merged ${languageList} template${languageChoices.length > 1 ? "s" : ""} to run settings`
-        );
       }
     )
   );

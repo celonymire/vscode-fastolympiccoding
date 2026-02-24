@@ -234,8 +234,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
           await vscode.window.showWarningMessage("No testcases found in the selected JSON file");
           return;
         }
-
-        await vscode.window.showInformationMessage(`Imported ${importedCount} testcase(s)`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await vscode.window.showErrorMessage(`Failed to import testcases: ${message}`);
@@ -267,9 +265,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
       try {
         const testcases = judgeViewProvider.exportTestcasesForFile(file);
         await fs.writeFile(exportUri.fsPath, JSON.stringify(testcases, null, 2), "utf8");
-        await vscode.window.showInformationMessage(
-          `Exported ${testcases.length} testcase(s) to ${path.basename(exportUri.fsPath)}`
-        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await vscode.window.showErrorMessage(`Failed to export testcases: ${message}`);

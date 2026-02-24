@@ -253,7 +253,6 @@ function createRequestHandler(judge: JudgeViewProvider): http.RequestListener {
       res.statusCode = 200;
       res.end(() => req.socket.unref());
 
-      vscode.window.showInformationMessage(`Received data for "${problem.name}"`);
       problemQueue.enqueue(problem);
     });
   };
