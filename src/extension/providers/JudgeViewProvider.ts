@@ -597,7 +597,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         this._activeDebugTestcaseUuid = uuid;
       }),
       vscode.debug.onDidTerminateDebugSession((session) => {
-        const uuid = session.configuration?.fastolympiccodingTestcaseId;
+        const uuid = session.configuration?.fastolympiccodingTestcaseUuid;
         if (typeof uuid === "string" && this._activeDebugTestcaseUuid === uuid) {
           this._stop(uuid);
           this._activeDebugTestcaseUuid = undefined;
