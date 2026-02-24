@@ -50,6 +50,9 @@ import type { Stdio } from "../../shared/enums";
 
 type Testcase = v.InferOutput<typeof TestcaseSchema>;
 type FileData = v.InferOutput<typeof FileDataSchema>;
+type ExportTestcase = Omit<Testcase, "uuid">;
+
+const TestcaseArraySchema = v.array(TestcaseSchema);
 
 const FileDataSchema = v.fallback(
   v.object({
@@ -135,6 +138,145 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   private _onDidChangeBackgroundTasks = new vscode.EventEmitter<void>();
   readonly onDidChangeBackgroundTasks = this._onDidChangeBackgroundTasks.event;
+
+  private _serializeState(state: State[]): Testcase[] {
+    return state.map((testcase) => ({
+      uuid: testcase.uuid,
+      stdin: testcase.stdin.data,
+      stderr: testcase.stderr.data,
+      stdout: testcase.stdout.data,
+      acceptedStdout: testcase.acceptedStdout.data,
+      elapsed: testcase.elapsed,
+      memoryBytes: testcase.memoryBytes,
+      status: testcase.status,
+      shown: testcase.shown,
+      toggled: testcase.toggled,
+      skipped: testcase.skipped,
+      mode: testcase.mode,
+      interactorSecret: testcase.interactorSecret.data,
+    }));
+  }
+
+  private _serializeStateForExport(state: State[]): ExportTestcase[] {
+    return this._serializeState(state).map((testcase) => ({
+      stdin: testcase.stdin,
+      stderr: testcase.stderr,
+      stdout: testcase.stdout,
+      acceptedStdout: testcase.acceptedStdout,
+      elapsed: testcase.elapsed,
+      memoryBytes: testcase.memoryBytes,
+      status: testcase.status,
+      shown: testcase.shown,
+      toggled: testcase.toggled,
+      skipped: testcase.skipped,
+      mode: testcase.mode,
+      interactorSecret: testcase.interactorSecret,
+    }));
+  }
+
+  private _parseFileDataFromStorage(file: string): FileData {
+    const storageData = super.readStorage()[file];
+    return v.parse(FileDataSchema, storageData ?? {});
+  }
+
+  private _getOrCreateContext(file: string): RuntimeContext {
+    const existing = this._contexts.get(file);
+    if (existing) {
+      return existing;
+    }
+
+    const fileData = this._parseFileDataFromStorage(file);
+    const state: State[] = [];
+    for (const rawTestcase of fileData.testcases) {
+      const testcase = v.parse(TestcaseSchema, rawTestcase);
+      state.push(this._createTestcaseState(testcase.mode, testcase, file));
+    }
+
+    const context = {
+      state,
+      timeLimit: fileData.timeLimit,
+      memoryLimit: fileData.memoryLimit,
+    };
+    this._contexts.set(file, context);
+    return context;
+  }
+
+  public getActiveFilePath(): string | undefined {
+    return this._currentFile;
+  }
+
+  public exportTestcasesForFile(file: string): ExportTestcase[] {
+    if (file === this._currentFile) {
+      return this._serializeStateForExport(
+        this._runtime.state.filter((testcase) => testcase.donePromise === null)
+      );
+    }
+
+    if (this._contexts.has(file)) {
+      return this._serializeStateForExport(
+        this._contexts.get(file)!.state.filter((testcase) => testcase.donePromise === null)
+      );
+    }
+
+    const fileData = this._parseFileDataFromStorage(file);
+    return fileData.testcases.map((testcase) => ({
+      stdin: testcase.stdin,
+      stderr: testcase.stderr,
+      stdout: testcase.stdout,
+      acceptedStdout: testcase.acceptedStdout,
+      elapsed: testcase.elapsed,
+      memoryBytes: testcase.memoryBytes,
+      status: testcase.status,
+      shown: testcase.shown,
+      toggled: testcase.toggled,
+      skipped: testcase.skipped,
+      mode: testcase.mode,
+      interactorSecret: testcase.interactorSecret,
+    }));
+  }
+
+  public appendImportedTestcasesForFile(file: string, rawData: unknown): number {
+    const result = v.safeParse(TestcaseArraySchema, rawData);
+    if (!result.success) {
+      const issue = result.issues[0];
+      const path = issue.path?.map((part) => String(part.key)).join(".");
+      throw new Error(path ? `${issue.message} at ${path}` : issue.message);
+    }
+
+    const importedTestcases: Testcase[] = result.output.map((testcase) => ({
+      ...testcase,
+      uuid: crypto.randomUUID(),
+    }));
+    if (importedTestcases.length === 0) {
+      return 0;
+    }
+
+    if (file === this._currentFile) {
+      for (const testcase of importedTestcases) {
+        const uuid = this._addTestcase(testcase.mode, testcase);
+        const state = this._findTestcase(uuid);
+        if (state) {
+          this._syncTestcaseState(state);
+        }
+      }
+      this.requestSave();
+      return importedTestcases.length;
+    }
+
+    if (this._contexts.has(file)) {
+      const context = this._contexts.get(file)!;
+      for (const testcase of importedTestcases) {
+        context.state.push(this._createTestcaseState(testcase.mode, testcase, file));
+      }
+      this.requestSave();
+      return importedTestcases.length;
+    }
+
+    const fileData = this._parseFileDataFromStorage(file);
+    fileData.testcases.push(...importedTestcases);
+    void super.writeStorage(file, fileData);
+    return importedTestcases.length;
+  }
 
   // Accessor for the current file's context
   private get _runtime(): RuntimeContext {
@@ -678,32 +820,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   protected override _switchToFile(file: string) {
     this._moveCurrentStateToBackground();
-
-    // Ensure target context exists
-    if (!this._contexts.has(file)) {
-      // LOAD FROM DISK (simplified for brevity of replacement, assuming unmodified lines follow)
-      const storageData = super.readStorage()[file];
-      const fileData = v.parse(FileDataSchema, storageData ?? {});
-      const timeLimit = fileData.timeLimit;
-      const memoryLimit = fileData.memoryLimit;
-      const state: State[] = [];
-
-      // Parse testcases
-      for (const rawTestcase of fileData.testcases) {
-        try {
-          const testcase = v.parse(TestcaseSchema, rawTestcase);
-          state.push(this._createTestcaseState(testcase.mode, testcase, file));
-        } catch (e) {
-          console.error("Failed to parse testcase", e);
-        }
-      }
-
-      this._contexts.set(file, {
-        state,
-        timeLimit,
-        memoryLimit,
-      });
-    }
+    this._getOrCreateContext(file);
 
     // Switch file
     this._currentFile = file;
@@ -774,11 +891,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       ctx.state.push(this._createTestcaseState(testcase.mode, testcase, file));
       this.requestSave();
     } else {
-      const storageData = super.readStorage()[file];
-      const parseResult = v.safeParse(FileDataSchema, storageData);
-      const fileData = parseResult.success
-        ? parseResult.output
-        : { timeLimit: 0, memoryLimit: 0, testcases: [] };
+      const fileData = this._parseFileDataFromStorage(file);
 
       if (timeLimit !== undefined) {
         fileData.timeLimit = timeLimit;
@@ -967,32 +1080,13 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   private _saveAllState() {
     const allData = this.readStorage();
 
-    const serialize = (state: State[], timeLimit: number, memoryLimit: number): FileData => {
-      const testcases: Testcase[] = state.map((testcase) => ({
-        uuid: testcase.uuid,
-        stdin: testcase.stdin.data,
-        stderr: testcase.stderr.data,
-        stdout: testcase.stdout.data,
-        acceptedStdout: testcase.acceptedStdout.data,
-        elapsed: testcase.elapsed,
-        memoryBytes: testcase.memoryBytes,
-        status: testcase.status,
-        shown: testcase.shown,
-        toggled: testcase.toggled,
-        skipped: testcase.skipped,
-        mode: testcase.mode,
-        interactorSecret: testcase.interactorSecret.data,
-      }));
-      return {
-        timeLimit,
-        memoryLimit,
-        testcases,
-      };
-    };
-
     // Save all contexts
     for (const [file, context] of this._contexts) {
-      allData[file] = serialize(context.state, context.timeLimit, context.memoryLimit);
+      allData[file] = {
+        timeLimit: context.timeLimit,
+        memoryLimit: context.memoryLimit,
+        testcases: this._serializeState(context.state),
+      };
     }
 
     // Bulk write to storage

@@ -45,8 +45,18 @@
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.toggleJudgeSettings",
+          "command": "fastolympiccoding.importTestcases",
+          "group": "navigation@5",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.exportTestcases",
           "group": "navigation@6",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "group": "navigation@7",
           "when": "view == fastolympiccoding.judge"
         },
         {
@@ -314,6 +324,18 @@
         "title": "Delete All Testcases",
         "category": "Fast Olympic Coding",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "fastolympiccoding.importTestcases",
+        "title": "Import Testcases",
+        "category": "Fast Olympic Coding",
+        "icon": "$(download)"
+      },
+      {
+        "command": "fastolympiccoding.exportTestcases",
+        "title": "Export Testcases",
+        "category": "Fast Olympic Coding",
+        "icon": "$(export)"
       },
       {
         "command": "fastolympiccoding.startStressTest",

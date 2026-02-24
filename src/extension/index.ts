@@ -204,6 +204,80 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.importTestcases", async () => {
+      const file = judgeViewProvider.getActiveFilePath();
+      if (!file) {
+        await vscode.window.showWarningMessage("Open a file in Judge before importing testcases");
+        return;
+      }
+
+      const selected = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        openLabel: "Import Testcases",
+        filters: {
+          JSON: ["json"],
+        },
+      });
+      const importUri = selected?.[0];
+      if (!importUri) {
+        return;
+      }
+
+      try {
+        const content = await fs.readFile(importUri.fsPath, "utf8");
+        const rawData = JSON.parse(content) as unknown;
+        const importedCount = judgeViewProvider.appendImportedTestcasesForFile(file, rawData);
+
+        if (importedCount === 0) {
+          await vscode.window.showWarningMessage("No testcases found in the selected JSON file");
+          return;
+        }
+
+        await vscode.window.showInformationMessage(`Imported ${importedCount} testcase(s)`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await vscode.window.showErrorMessage(`Failed to import testcases: ${message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fastolympiccoding.exportTestcases", async () => {
+      const file = judgeViewProvider.getActiveFilePath();
+      if (!file) {
+        await vscode.window.showWarningMessage("Open a file in Judge before exporting testcases");
+        return;
+      }
+
+      const defaultUri = vscode.Uri.file(`${file}.testcases.json`);
+      const exportUri = await vscode.window.showSaveDialog({
+        saveLabel: "Export Testcases",
+        defaultUri,
+        filters: {
+          JSON: ["json"],
+        },
+      });
+
+      if (!exportUri) {
+        return;
+      }
+
+      try {
+        const testcases = judgeViewProvider.exportTestcasesForFile(file);
+        await fs.writeFile(exportUri.fsPath, JSON.stringify(testcases, null, 2), "utf8");
+        await vscode.window.showInformationMessage(
+          `Exported ${testcases.length} testcase(s) to ${path.basename(exportUri.fsPath)}`
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await vscode.window.showErrorMessage(`Failed to export testcases: ${message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerTextEditorCommand("fastolympiccoding.toggleJudgeSettings", () =>
       judgeViewProvider.toggleWebviewSettings()
     )
