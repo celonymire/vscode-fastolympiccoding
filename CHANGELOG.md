@@ -8,6 +8,7 @@
 ### Changed
 
 - Made text expansion editor's title human-friendly
+- Removed non-essential information pop-ups
 
 ### Fixed
 
