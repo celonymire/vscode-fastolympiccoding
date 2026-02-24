@@ -25,27 +25,37 @@ Receive messages in `App.svelte` via `window.addEventListener("message", ...)` i
 
 - **App.svelte**: Entry point, message handling, testcase list rendering
 - **TestcaseToolbar.svelte**: Status badges, action buttons (run, stop, debug, delete)
-- **Testcase.svelte**: Stdio textareas (stdin, stdout, stderr, acceptedStdout)
+- **Testcase.svelte**: Stdio textareas (stdin, stdout, stderr, acceptedStdout, interactorSecret)
 
 Rendering pattern:
 
 ```svelte
-{#each testcases as testcase (testcase.uuid)}
-  <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
-  <Testcase {testcase} bind:this={testcaseRefs[testcase.uuid]} />
+{#each testcases as testcase, index (testcase.uuid)}
+  <div class="testcase-item">
+    <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
+    {#if testcase.status === "COMPILING" || testcase.skipped}
+      <div class="half-opacity">
+        <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+      </div>
+    {:else}
+      <Testcase bind:testcase={testcases[index]} bind:this={testcaseRefs[testcase.uuid]} />
+    {/if}
+  </div>
 {/each}
 ```
 
 ### Stress View (`src/webview/stress/`)
 
 - **App.svelte**: Entry point, message handling, state list rendering
-- **StateToolbar.svelte**: Status badges, action buttons (add, open file)
+- **StateToolbar.svelte**: Status badges, action buttons (add, open file, toggle interactive mode)
 - **State.svelte**: Stdio textareas for Generator/Solution/Judge
 
 ### Shared Components (`src/webview/`)
 
 - **AutoresizeTextarea.svelte**: Resizable textarea with ANSI color support
 - **Tooltip.svelte**: Global tooltip singleton
+- **Button.svelte**: Standard button component
+- **ButtonDropdown.svelte**: Composite component providing a main button alongside a dropdown menu
 
 ## AutoresizeTextarea
 
@@ -56,14 +66,20 @@ Key props:
 - `editing`: Bindable, tracks edit mode
 - `hiddenOnEmpty`: Hide when empty
 - `variant`: `"default"` | `"stderr"` | `"accepted"` | `"active"` | `"interactor-secret"`
+- `placeholder`: Text to display when empty
+- `ctrlEnterNewline`: Boolean to toggle specific Ctrl+Enter newline behavior
+- `actions`: A Svelte `Snippet` prop for injecting custom action buttons into the textarea overlay
 
-Editing callbacks:
+Callbacks:
 
 - `onpreedit`: Called before entering edit mode (fetch full data from extension)
 - `onsave`: Called when saving changes
 - `oncancel`: Called when canceling edit
+- `onexpand`: Called when the user clicks the expand icon (to view full stdio)
+- `oncopy`: Called when the user clicks the copy icon
+- `onkeyup`: Keyboard event handler
 
-Pattern for fetching full data on edit:
+Pattern for fetching full data on edit and handling actions:
 
 ```svelte
 <AutoresizeTextarea
@@ -76,6 +92,8 @@ Pattern for fetching full data on edit:
   oncancel={() => {
     postProviderMessage({ type: "REQUEST_TRIMMED_DATA", uuid: testcase.uuid, stdio: "STDIN" });
   }}
+  onexpand={() => handleExpand("STDIN")}
+  oncopy={() => handleCopy("STDIN")}
 />
 ```
 

@@ -53,7 +53,22 @@ Status determination uses `severityNumberToInteractiveStatus()` to combine both 
 
 ## Action Handling
 
-The `handleMessage` method dispatches to action handlers based on `action` field:
+The `handleMessage` method dispatches based on `msg.type`. Top-level message types include:
+
+- `LOADED`: Loads the current file data
+- `NEXT`: Moves to the next testcase
+- `SAVE`: Saves testcase data
+- `VIEW`: Opens full stdio in a new editor
+- `COPY`: Copies stdio content to clipboard
+- `STDIN`: Updates stdin
+- `TL`: Updates time limit
+- `ML`: Updates memory limit
+- `REQUEST_TRIMMED_DATA`: Fetches truncated data for display
+- `REQUEST_FULL_DATA`: Fetches full data for editing
+- `NEW_INTERACTOR_SECRET`: Generates a new interactor secret
+- `ACTION`: Calls `this._action(msg)` which dispatches based on the `action` field
+
+Actions handled by `_action`:
 
 - `RUN`: Execute single testcase
 - `STOP`: Cancel running testcase
@@ -64,15 +79,17 @@ The `handleMessage` method dispatches to action handlers based on `action` field
 - `TOGGLE_SKIP`: Toggle skip flag
 - `COMPARE`: Open diff view
 - `DEBUG`: Run in debug mode
-- `REQUEST_DATA`: Fetch full data for editing
 - `OPEN_INTERACTOR`: Open interactor file
+- `TOGGLE_INTERACTIVE`: Toggle interactive mode
 
 ## Background Task Tracking
 
 `_contexts` map holds contexts for all files (not just active). Methods:
 
 - `getAllBackgroundTasks()`: Returns Map of file → running testcase UUIDs
+- `getBackgroundTasksForFile(file)`: Returns an array of running testcase UUIDs for a specific file
 - `stopBackgroundTasksForFile(file)`: Stop all running testcases for a file
+- `stopAllBackgroundTasks()`: Stops all background tasks across all files
 - `onDidChangeBackgroundTasks`: Event for PanelViewProvider to refresh
 
 ## Key Methods
@@ -82,3 +99,5 @@ The `handleMessage` method dispatches to action handlers based on `action` field
 - `_launchTestcase(ctx, bypassLimits, debugMode)`: Spawns process, wires stdio
 - `_launchInteractiveTestcase(ctx, bypassLimits, debugMode)`: Handles two-process interactive flow
 - `addTestcaseToFile(file, testcase, timeLimit?, memoryLimit?)`: Adds testcase from external source (Competitive Companion)
+- `exportTestcasesForFile(file)`: Serializes and exports testcases for a given file
+- `appendImportedTestcasesForFile(file, rawData)`: Parses, imports, and appends testcases to a file

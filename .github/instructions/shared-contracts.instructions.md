@@ -8,7 +8,7 @@ applyTo: "src/shared/**/*.ts"
 
 ## Enums (String Literal Tuples)
 
-Enums are `const` string literal tuples validated via `v.picklist()`:
+Enums are `const` string literal tuples validated via `v.picklist()`. All string literal tuples (including `ActionValues`, `InputTypeValues`, `ProviderMessageTypeValues`, `WebviewMessageTypeValues`, etc.) follow the same append-only rule.
 
 ### Status
 
@@ -74,9 +74,19 @@ StateIdValue = ["Generator", "Solution", "Judge"] as const;
 
 ## Schema Patterns
 
-Use Valibot for all schemas. Pattern:
+Use Valibot for all schemas.
+
+### Message Type Arrays
+
+When adding a new message schema, its `type` literal **must** also be appended to the corresponding `ProviderMessageTypeValues` or `WebviewMessageTypeValues` array. This prevents the arrays from falling out of sync with the union schemas.
 
 ```typescript
+export const ProviderMessageTypeValues = [
+  "EXAMPLE",
+  "OTHER",
+  // Append new types here
+] as const;
+
 export const ExampleMessageSchema = v.object({
   type: v.literal("EXAMPLE"),
   payload: v.string(),
@@ -88,6 +98,20 @@ Combine into union:
 ```typescript
 export const AllMessagesSchema = v.union([ExampleMessageSchema, OtherMessageSchema]);
 export type AllMessages = v.InferOutput<typeof AllMessagesSchema>;
+```
+
+### Advanced Valibot Patterns
+
+- **Default Values:** Use `v.fallback()` to provide default state values (e.g., `v.fallback(v.string(), "")` or `v.fallback(v.string(), () => crypto.randomUUID())`).
+- **Complex Validation:** Use `v.pipe()`, `v.looseObject()`, and `v.check()` for custom validation logic (e.g., in `RunSettingsSchema`).
+- **Optional & Record Types:** Use `v.optional()` and `v.record()` for flexible configurations.
+
+### Type Inference and Utility Types
+
+Derive property types from schemas using TypeScript utility types. For example:
+
+```typescript
+export type TestcaseProperty = Exclude<keyof Testcase, "uuid">;
 ```
 
 ## Append-Only Rule

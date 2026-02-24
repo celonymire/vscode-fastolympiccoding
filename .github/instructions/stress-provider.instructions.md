@@ -69,34 +69,38 @@ interface State {
 In interactive mode:
 
 - Generator produces a "secret" (like interactor in Judge)
-- Solution and Judge run with Generator mediating
+- The **Judge** acts as the interactor (running `interactorFile`), communicating back and forth with the **Solution** (the user's solution).
+- The **Generator** provides the initial secret to the Judge.
 - Uses `interactiveSecretPromise` to wait for webview to receive the secret
-- Solution runs as interactor between Generator and user solution
 
 ## State Persistence
 
-Persisted per-file data:
+Persisted per-file data via `StressDataSchema` in `_saveState`:
 
 - `interactiveMode`: boolean
-- `states`: Array of `{ state: StateId, shown: boolean }`
+- `states`: Array of `{ state: StateId, shown: boolean, stdin: string, stdout: string, stderr: string, status: Status }`
 
-The stdio content is NOT persisted (only visibility state).
+The stdio content, status, state, and visibility are all persisted for each component.
 
 ## Message Handling
 
+- `LOADED`: Loads the current file data
 - `RUN`: Start stress loop
 - `STOP`: Set stopFlag, stop current iteration
 - `VIEW`: Open full stdio in new editor
+- `COPY`: Copies specific stdio content to the clipboard
 - `ADD`: Copy Generator output to Judge testcases
 - `OPEN`: Open the corresponding file (generator/judge file)
 - `CLEAR`: Stop and clear all state
 - `SAVE`: Persist interactiveMode setting
 - `TOGGLE_VISIBILITY`: Toggle state details visibility
+- `TOGGLE_INTERACTIVE`: Toggles the interactive mode state
 
 ## Background Task Tracking
 
 - `getRunningStressSessions()`: Returns array of file paths with running stress
 - `stopStressSession(file)`: Stop stress for a specific file
+- `stopAll()`: Stops all stress sessions across all files in the workspace
 - `onDidChangeBackgroundTasks`: Event for PanelViewProvider
 
 ## Key Methods

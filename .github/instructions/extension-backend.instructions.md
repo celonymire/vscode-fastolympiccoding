@@ -19,24 +19,29 @@ Both Judge and Stress implement the same file-switching pattern:
 5. `_switchToNoFile()` handles cases where no valid file is open
 6. `_rehydrateWebviewFromState()` sends current in-memory state to the webview
 
-When switching files, stop any running processes for the previous file before switching to the new one.
+When switching files, processes are **not** stopped. Instead, they are moved to the background (e.g., via `_moveCurrentStateToBackground`) and trigger `_onDidChangeBackgroundTasks`. The `PanelViewProvider` monitors and displays these running background tasks.
 
-## TextHandler
+## Run Settings
 
-Use `TextHandler` from `src/extension/utils/vscode.ts` for all streamed output. It:
+- **`runSettingsCommands.ts`**: Registers commands (`editRunSettings`, `resetRunSettings`) and provides default `languageTemplates`.
+- **`vscode.ts`**: Provides `getFileRunSettings`, `initializeRunSettingsWatcher`, and `resolveVariables` to parse and resolve VS Code variables (like `${fileDirname}`) in commands.
 
-- Keeps full data internally for comparisons (answer checking)
-- Truncates display output (max characters/lines)
-- Normalizes CRLF to LF
-- Ensures trailing newline on final writes
+## Extended VS Code Utilities (`vscode.ts`)
 
-Write modes:
+- **`TextHandler`**: For all streamed output. Keeps full data internally, truncates display output, normalizes CRLF to LF, ensures trailing newline. Write modes: `"batch"`, `"force"`, `"final"`. Always call `.reset()` before a fresh run.
+- **`ReadonlyStringProvider`**: Manages the custom `fastolympiccoding` URI scheme for displaying read-only text documents.
+- **`openInNewEditor` / `openInTerminalTab`**: Helpers for displaying output. Terminal tabs support ANSI colors and native clickable file links.
+- **`openOrCreateFile`**: Helper for file management.
 
-- `"batch"`: Batched updates, throttled for performance
-- `"force"`: Immediate update, bypasses throttling
-- `"final"`: Final write, applies truncation rules and trailing newline
+## UI/UX Features
 
-Always call `.reset()` before a fresh run.
+- **Template Folding (`folding.ts`)**: `TemplateFoldingProvider` handles folding ranges for inserted template regions.
+- **Changelog (`changelog.ts`)**: `showChangelog` handles semver comparison and displays the changelog on extension updates.
+- **Status Bar (`statusBar.ts`)**: `createStatusBarItem` creates the main status bar entry point that triggers the `PanelViewProvider`.
+
+## Template Dependency Resolution
+
+`getTemplateContent` in `index.ts` handles reading template files and detecting cyclic dependencies via DFS before insertion.
 
 ## Runnable and runtime.ts
 
@@ -63,7 +68,7 @@ Debug support uses **attach mode**:
 3. Start debug-wrapped process via `Runnable`
 4. Call `vscode.debug.startDebugging()` with fully-resolved config
 
-Track debug sessions via `onDidStartDebugSession` / `onDidTerminateDebugSession`. Tag configs with `fastolympiccodingTestcaseId` to identify which testcase is being debugged.
+Track debug sessions via `onDidStartDebugSession` / `onDidTerminateDebugSession`. Tag configs with `fastolympiccodingTestcaseUuid` to identify which testcase is being debugged.
 
 ## Competitive Companion
 
@@ -71,7 +76,7 @@ Track debug sessions via `onDidStartDebugSession` / `onDidTerminateDebugSession`
 
 ## Logging
 
-Use `getLogger(component)` from `src/extension/utils/logging.ts`. Component names: `"runtime"`, `"judge"`, `"stress"`, `"competitive-companion"`.
+Use `getLogger(component)` from `src/extension/utils/logging.ts`. Component names: `"runtime"`, `"judge"`, `"stress"`, `"competitive-companion"`, `"compilation"`, `"vscode"`.
 
 Log levels (controlled via VS Code's "Developer: Set Log Level"):
 

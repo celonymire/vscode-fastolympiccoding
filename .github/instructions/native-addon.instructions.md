@@ -17,7 +17,8 @@ Platform-specific native addons for strict process execution with:
 - Uses `pidfd_open` (kernel 5.3+) to avoid PID reuse races
 - Polls `/proc/[pid]/status` for `VmHWM` (Peak Resident Set Size)
 - **Critical**: Capture `VmHWM` before reaping zombie; values disappear after `wait4`
-- Memory enforcement via polling (50ms interval), not `RLIMIT_AS`
+- Memory enforcement via polling (10ms interval), not `RLIMIT_AS`
+- Uses `eventfd` to signal and wake the worker thread for cancellation
 
 ### macOS (`darwin-process-monitor.cpp`)
 
@@ -29,15 +30,17 @@ Platform-specific native addons for strict process execution with:
 
 - Uses **Job Objects** for hard memory/CPU limits (OS-enforced)
 - Process created suspended, added to Job, then resumed
-- Uses completion ports for efficient wait
+- Uses `WaitForMultipleObjects` with a polling loop to handle process exit, cancellation events, and wall-clock timeouts
 - **All APIs use Wide Strings** (`CreateProcessW`, `std::wstring`)
 
 ## Spawn API
 
 ```typescript
+// Spawn function signature
+// spawn(command, args, cwd, timeoutMs, memoryLimitMB, pipeNameIn, pipeNameOut, pipeNameErr, onSpawn)
+
 interface NativeSpawnResult {
   pid: number;
-  stdio: [number, number, number]; // fd handles
   result: Promise<AddonResult>;
   cancel: () => void;
 }
@@ -54,7 +57,7 @@ interface AddonResult {
 
 ## IPC
 
-Stdio uses Named Pipes (Windows) or Unix Sockets (Linux/macOS) established before process spawn. The extension's `Runnable` class connects to these pipes.
+Stdio uses Named Pipes (Windows) or Unix Sockets (Linux/macOS). The extension creates the pipes/sockets and passes their paths to the addon's `spawn` function, which then connects to them internally before executing the child process.
 
 ## Cancellation
 
