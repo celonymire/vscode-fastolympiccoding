@@ -733,39 +733,40 @@ export function showCreateRunSettingsErrorWindow(message: string): void {
   });
 }
 
-export function showOpenRunSettingsErrorWindow(message: string, file?: string): void {
+export async function showOpenRunSettingsErrorWindow(
+  message: string,
+  file?: string
+): Promise<void> {
   const items: string[] = [];
   if (file) {
     items.push("Fix Settings");
   }
   items.push("Open Run Settings", "Close");
 
-  vscode.window.showErrorMessage(message, ...items).then((choice) => {
-    if (choice === "Open Run Settings") {
-      vscode.commands.executeCommand("fastolympiccoding.openRunSettings");
-    } else if (choice === "Fix Settings" && file) {
-      const extension = path.extname(file);
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
-      vscode.commands.executeCommand("fastolympiccoding.createRunSettings", {
-        extension,
-        workspaceFolder,
-      });
-    }
-  });
+  const choice = await vscode.window.showErrorMessage(message, ...items);
+  if (choice === "Open Run Settings") {
+    vscode.commands.executeCommand("fastolympiccoding.openRunSettings");
+  } else if (choice === "Fix Settings" && file) {
+    const extension = path.extname(file);
+    const workspaceFolder = await getFileWorkspace(file);
+    vscode.commands.executeCommand("fastolympiccoding.createRunSettings", {
+      extension,
+      workspaceFolder,
+    });
+  }
 }
 
-export function showAddLanguageSettingsError(
+export async function showAddLanguageSettingsError(
   message: string,
   extension: string,
   file: string
-): void {
-  vscode.window.showErrorMessage(message, "Add Language Settings", "Close").then((choice) => {
-    if (choice === "Add Language Settings") {
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file));
-      vscode.commands.executeCommand("fastolympiccoding.createRunSettings", {
-        extension,
-        workspaceFolder,
-      });
-    }
-  });
+): Promise<void> {
+  const choice = await vscode.window.showErrorMessage(message, "Add Language Settings", "Close");
+  if (choice === "Add Language Settings") {
+    const workspaceFolder = await getFileWorkspace(file);
+    vscode.commands.executeCommand("fastolympiccoding.createRunSettings", {
+      extension,
+      workspaceFolder,
+    });
+  }
 }
