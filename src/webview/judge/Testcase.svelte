@@ -19,6 +19,10 @@
     postProviderMessage({ type: "VIEW", uuid: testcase.uuid, stdio });
   }
 
+  function handleCopyStdio(stdio: Stdio) {
+    postProviderMessage({ type: "COPY", uuid: testcase.uuid, stdio });
+  }
+
   function handleSaveInteractorSecret() {
     postProviderMessage({
       type: "SAVE",
@@ -79,6 +83,7 @@
           placeholder="Interactor secret..."
           variant="interactor-secret"
           onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+          oncopy={() => handleCopyStdio("INTERACTOR_SECRET")}
           onpreedit={() => {
             postProviderMessage({
               type: "REQUEST_FULL_DATA",
@@ -103,6 +108,7 @@
         hiddenOnEmpty={testcase.mode === "interactive"}
         readonly={testcase.mode === "interactive"}
         onexpand={() => handleExpandStdio("STDIN")}
+        oncopy={() => handleCopyStdio("STDIN")}
         onpreedit={() => {
           postProviderMessage({
             type: "REQUEST_FULL_DATA",
@@ -125,6 +131,7 @@
         hiddenOnEmpty
         variant="stderr"
         onexpand={() => handleExpandStdio("STDERR")}
+        oncopy={() => handleCopyStdio("STDERR")}
       />
       {#if testcase.mode === "interactive" || testcase.status !== "AC"}
         <AutoresizeTextarea
@@ -132,6 +139,7 @@
           readonly
           placeholder="Output..."
           onexpand={() => handleExpandStdio("STDOUT")}
+          oncopy={() => handleCopyStdio("STDOUT")}
         >
           {#snippet actions()}
             {#if (status === "NA" || status === "WA") && testcase.mode !== "interactive"}
@@ -170,6 +178,7 @@
           placeholder="Accepted output..."
           variant="accepted"
           onexpand={() => handleExpandStdio("ACCEPTED_STDOUT")}
+          oncopy={() => handleCopyStdio("ACCEPTED_STDOUT")}
           onpreedit={() => {
             postProviderMessage({
               type: "REQUEST_FULL_DATA",
@@ -210,12 +219,14 @@
         hiddenOnEmpty
         variant="stderr"
         onexpand={() => handleExpandStdio("STDERR")}
+        oncopy={() => handleCopyStdio("STDERR")}
       />
       <AutoresizeTextarea
         value={testcase.stdout}
         readonly
         hiddenOnEmpty
         onexpand={() => handleExpandStdio("STDOUT")}
+        oncopy={() => handleCopyStdio("STDOUT")}
       />
     {/if}
   {:else if status === "RUNNING"}
@@ -240,6 +251,7 @@
           readonly
           placeholder="Interactor secret..."
           onexpand={() => handleExpandStdio("INTERACTOR_SECRET")}
+          oncopy={() => handleCopyStdio("INTERACTOR_SECRET")}
           variant="interactor-secret"
         />
       {/if}
@@ -250,6 +262,7 @@
         readonly
         hiddenOnEmpty
         onexpand={() => handleExpandStdio("STDIN")}
+        oncopy={() => handleCopyStdio("STDIN")}
       />
       <AutoresizeTextarea
         bind:value={newStdin}
@@ -270,9 +283,15 @@
       hiddenOnEmpty
       variant="stderr"
       onexpand={() => handleExpandStdio("STDERR")}
+      oncopy={() => handleCopyStdio("STDERR")}
     />
     {#if testcase.mode !== "interactive" || (testcase.interactorSecret !== "" && testcase.interactorSecret !== "\n")}
-      <AutoresizeTextarea value={testcase.stdout} readonly placeholder="Output..." />
+      <AutoresizeTextarea
+        value={testcase.stdout}
+        readonly
+        placeholder="Output..."
+        oncopy={() => handleCopyStdio("STDOUT")}
+      />
     {/if}
   {/if}
 {/if}

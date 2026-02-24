@@ -17,9 +17,10 @@
     placeholder: string;
     shown: boolean;
     onView: (id: StateId, stdio: Stdio) => void;
+    onCopy: (id: StateId, stdio: Stdio) => void;
   }
 
-  let { state, id, interactiveMode, placeholder, shown, onView }: Props = $props();
+  let { state, id, interactiveMode, placeholder, shown, onView, onCopy }: Props = $props();
 
   function handleViewStdin() {
     onView(id, "STDIN");
@@ -33,36 +34,36 @@
     onView(id, "STDERR");
   }
 
+  function handleCopyStdin() {
+    onCopy(id, "STDIN");
+  }
+
+  function handleCopyStdout() {
+    onCopy(id, "STDOUT");
+  }
+
+  function handleCopyStderr() {
+    onCopy(id, "STDERR");
+  }
+
   const status = $derived(state.status);
 </script>
 
 {#if shown}
   {#if status === "RUNNING"}
-    <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
     <AutoresizeTextarea
-      value={state.stderr}
+      value={state.stdin}
       readonly
       hiddenOnEmpty
-      onexpand={handleViewStderr}
-      variant="stderr"
+      onexpand={handleViewStdin}
+      oncopy={handleCopyStdin}
     />
-    <AutoresizeTextarea value={state.stdout} readonly {placeholder} onexpand={handleViewStdout} />
-  {:else if status === "CE"}
     <AutoresizeTextarea
       value={state.stderr}
       readonly
       hiddenOnEmpty
       onexpand={handleViewStderr}
-      variant="stderr"
-    />
-    <AutoresizeTextarea value={state.stdout} readonly hiddenOnEmpty onexpand={handleViewStdout} />
-  {:else}
-    <AutoresizeTextarea value={state.stdin} readonly hiddenOnEmpty onexpand={handleViewStdin} />
-    <AutoresizeTextarea
-      value={state.stderr}
-      readonly
-      hiddenOnEmpty
-      onexpand={handleViewStderr}
+      oncopy={handleCopyStderr}
       variant="stderr"
     />
     <AutoresizeTextarea
@@ -70,6 +71,46 @@
       readonly
       {placeholder}
       onexpand={handleViewStdout}
+      oncopy={handleCopyStdout}
+    />
+  {:else if status === "CE"}
+    <AutoresizeTextarea
+      value={state.stderr}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      oncopy={handleCopyStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea
+      value={state.stdout}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStdout}
+      oncopy={handleCopyStdout}
+    />
+  {:else}
+    <AutoresizeTextarea
+      value={state.stdin}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStdin}
+      oncopy={handleCopyStdin}
+    />
+    <AutoresizeTextarea
+      value={state.stderr}
+      readonly
+      hiddenOnEmpty
+      onexpand={handleViewStderr}
+      oncopy={handleCopyStderr}
+      variant="stderr"
+    />
+    <AutoresizeTextarea
+      value={state.stdout}
+      readonly
+      {placeholder}
+      onexpand={handleViewStdout}
+      oncopy={handleCopyStdout}
       variant={id === "Generator" && interactiveMode ? "interactor-secret" : "default"}
     />
   {/if}

@@ -3,8 +3,10 @@
 ### Added
 
 - Support for opened files without active workspaces
+- Icon to copy the text of the text boxes
 
 ### Changed
+
 - Made text expansion editor's title human-friendly
 
 ### Fixed

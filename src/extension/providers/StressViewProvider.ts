@@ -26,6 +26,7 @@ import { getLogger } from "../utils/logging";
 import type JudgeViewProvider from "./JudgeViewProvider";
 import {
   AddMessageSchema,
+  CopyMessageSchema,
   OpenMessageSchema,
   ProviderMessageSchema,
   SaveMessageSchema,
@@ -116,6 +117,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "VIEW":
         this._view(msg);
+        break;
+      case "COPY":
+        void this._copy(msg);
         break;
       case "ADD":
         this._add(msg);
@@ -607,6 +611,34 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         }
         break;
     }
+  }
+
+  private async _copy({ id, stdio }: v.InferOutput<typeof CopyMessageSchema>) {
+    const ctx = this._currentContext;
+    if (!ctx) return;
+    const state = ctx.state.find((s) => s.state === id);
+    if (!state) {
+      return;
+    }
+
+    let value: string;
+    switch (stdio) {
+      case "STDIN":
+        value = state.stdin.data;
+        break;
+      case "STDOUT":
+        value = state.stdout.data;
+        break;
+      case "STDERR":
+        value = state.stderr.data;
+        break;
+      case "ACCEPTED_STDOUT":
+      case "INTERACTOR_SECRET":
+        value = "";
+        break;
+    }
+
+    await vscode.env.clipboard.writeText(value);
   }
 
   private _add({ id }: v.InferOutput<typeof AddMessageSchema>) {

@@ -15,6 +15,7 @@
     onpreedit?: () => void;
     onsave?: () => void;
     oncancel?: () => void;
+    oncopy?: () => void;
     variant?: Variant;
     actions?: Snippet;
     ctrlEnterNewline?: boolean;
@@ -31,6 +32,7 @@
     onpreedit,
     onsave,
     oncancel,
+    oncopy,
     variant = "default",
     actions,
     ctrlEnterNewline = false,
@@ -39,9 +41,9 @@
   let textarea: HTMLTextAreaElement | undefined = $state();
   let containerElement: HTMLDivElement | undefined = $state();
   let actionButtonsElement: HTMLDivElement | undefined = $state();
-  let isHovered = $state();
+  let isHovered = $state(false);
   let cursorOverlapsActions = $state(false);
-  let showExpandButton = $state(false);
+  let showHoverButtons = $state(false);
   let showEditButtons = $state(false);
 
   let canvasContext: CanvasRenderingContext2D | null = null;
@@ -158,6 +160,36 @@
     onexpand?.();
   }
 
+  async function handleCopy() {
+    if (!editing && oncopy) {
+      oncopy();
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      if (!textarea) {
+        const fallbackTextarea = document.createElement("textarea");
+        fallbackTextarea.value = value;
+        fallbackTextarea.style.position = "fixed";
+        fallbackTextarea.style.opacity = "0";
+        document.body.appendChild(fallbackTextarea);
+        fallbackTextarea.focus();
+        fallbackTextarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(fallbackTextarea);
+        return;
+      }
+
+      const { selectionStart, selectionEnd } = textarea;
+      textarea.select();
+      document.execCommand("copy");
+      textarea.selectionStart = selectionStart;
+      textarea.selectionEnd = selectionEnd;
+    }
+  }
+
   function handleBlur(event: FocusEvent) {
     const relatedTarget = event.relatedTarget as HTMLElement;
     if (relatedTarget?.closest(".action-buttons")) {
@@ -191,12 +223,12 @@
     if (containerElement) {
       const handleMouseEnter = () => {
         isHovered = true;
-        showExpandButton = !editing && !!onexpand;
+        showHoverButtons = !editing;
       };
       const handleMouseLeave = () => {
         isHovered = false;
         setTimeout(() => {
-          if (!isHovered) showExpandButton = false;
+          if (!isHovered) showHoverButtons = false;
         }, 200);
       };
 
@@ -213,7 +245,7 @@
   $effect(() => {
     if (editing) {
       showEditButtons = true;
-      showExpandButton = false;
+      showHoverButtons = false;
     } else {
       setTimeout(() => {
         if (!editing) showEditButtons = false;
@@ -265,8 +297,17 @@
       ></textarea>
     {/if}
     {#if !editing}
-      <div class="action-buttons" class:has-buttons={showExpandButton || actions}>
-        {#if showExpandButton && onexpand}
+      <div class="action-buttons" class:has-buttons={showHoverButtons || actions}>
+        {#if showHoverButtons}
+          <button
+            type="button"
+            data-tooltip="Copy"
+            aria-label="Copy"
+            class="action-button codicon codicon-copy"
+            onclick={handleCopy}
+          ></button>
+        {/if}
+        {#if showHoverButtons && onexpand}
           <button
             type="button"
             data-tooltip="Expand"
@@ -280,10 +321,20 @@
     {/if}
     {#if showEditButtons}
       <div
-        class="action-buttons has-buttons"
+        class="action-buttons"
+        class:has-buttons={isHovered || !!oncancel || !!onsave}
         bind:this={actionButtonsElement}
         class:overlapped={cursorOverlapsActions}
       >
+        {#if isHovered}
+          <button
+            type="button"
+            data-tooltip="Copy"
+            aria-label="Copy"
+            class="action-button codicon codicon-copy"
+            onclick={handleCopy}
+          ></button>
+        {/if}
         {#if oncancel}
           <button
             type="button"

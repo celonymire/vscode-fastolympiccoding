@@ -30,6 +30,7 @@ export const ProviderMessageTypeValues = [
   "STDIN",
   "TL",
   "ML",
+  "COPY",
 ] as const;
 
 export type ProviderMessageTypeValue = (typeof ProviderMessageTypeValues)[number];
@@ -60,6 +61,12 @@ export const SaveMessageSchema = v.object({
 
 export const ViewMessageSchema = v.object({
   type: v.literal("VIEW"),
+  uuid: v.string(),
+  stdio: StdioSchema,
+});
+
+export const CopyMessageSchema = v.object({
+  type: v.literal("COPY"),
   uuid: v.string(),
   stdio: StdioSchema,
 });
@@ -104,6 +111,7 @@ export const ProviderMessageSchema = v.union([
   ActionMessageSchema,
   SaveMessageSchema,
   ViewMessageSchema,
+  CopyMessageSchema,
   StdinMessageSchema,
   SetTimeLimitSchema,
   SetMemoryLimitSchema,

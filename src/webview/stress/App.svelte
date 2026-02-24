@@ -64,6 +64,10 @@
     postProviderMessage({ type: "VIEW", id, stdio });
   }
 
+  function handleCopy(id: StateId, stdio: Stdio) {
+    postProviderMessage({ type: "COPY", id, stdio });
+  }
+
   function handleAdd(id: StateId) {
     postProviderMessage({ type: "ADD", id });
   }
@@ -222,6 +226,7 @@
                 {interactiveMode}
                 shown={item.shown}
                 onView={handleView}
+                onCopy={handleCopy}
               />
             </div>
           {:else}
@@ -232,6 +237,7 @@
               {interactiveMode}
               shown={item.shown}
               onView={handleView}
+              onCopy={handleCopy}
             />
           {/if}
         </div>

@@ -33,6 +33,7 @@ import {
 import { getLogger } from "../utils/logging";
 import {
   ActionMessageSchema,
+  CopyMessageSchema,
   NewInteractorSecretMessageSchema,
   NextMessageSchema,
   ProviderMessageSchema,
@@ -540,6 +541,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "VIEW":
         this._viewStdio(msg);
+        break;
+      case "COPY":
+        void this._copyStdio(msg);
         break;
       case "STDIN":
         this._stdin(msg);
@@ -1492,6 +1496,34 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         void openInNewEditor(testcase.interactorSecret.data, title, testcase.uuid);
         break;
     }
+  }
+
+  private async _copyStdio({ uuid, stdio }: v.InferOutput<typeof CopyMessageSchema>) {
+    const testcase = this._findTestcase(uuid);
+    if (!testcase) {
+      return;
+    }
+
+    let value: string;
+    switch (stdio) {
+      case "STDIN":
+        value = testcase.stdin.data;
+        break;
+      case "STDERR":
+        value = testcase.stderr.data;
+        break;
+      case "STDOUT":
+        value = testcase.stdout.data;
+        break;
+      case "ACCEPTED_STDOUT":
+        value = testcase.acceptedStdout.data;
+        break;
+      case "INTERACTOR_SECRET":
+        value = testcase.interactorSecret.data;
+        break;
+    }
+
+    await vscode.env.clipboard.writeText(value);
   }
 
   private _openInteractor() {

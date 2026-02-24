@@ -72,6 +72,7 @@ export const ProviderMessageTypeValues = [
   "RUN",
   "STOP",
   "VIEW",
+  "COPY",
   "ADD",
   "OPEN",
   "CLEAR",
@@ -98,6 +99,12 @@ export const StopMessageSchema = v.object({
 
 export const ViewMessageSchema = v.object({
   type: v.literal("VIEW"),
+  id: v.picklist(StateIdValue),
+  stdio: v.picklist(StdioValues),
+});
+
+export const CopyMessageSchema = v.object({
+  type: v.literal("COPY"),
   id: v.picklist(StateIdValue),
   stdio: v.picklist(StdioValues),
 });
@@ -135,6 +142,7 @@ export const ProviderMessageSchema = v.union([
   RunMessageSchema,
   StopMessageSchema,
   ViewMessageSchema,
+  CopyMessageSchema,
   AddMessageSchema,
   OpenMessageSchema,
   ResetMessageSchema,
