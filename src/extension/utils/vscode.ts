@@ -655,6 +655,42 @@ export async function getFileWorkspace(file?: string): Promise<string | undefine
   return runSettingsFolder;
 }
 
+export async function getAttachDebugConfiguration(
+  configName: string,
+  file: string
+): Promise<vscode.DebugConfiguration | undefined> {
+  const folder =
+    vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file)) ??
+    vscode.workspace.workspaceFolders?.at(0);
+
+  const workspaceConfig = vscode.workspace
+    .getConfiguration("launch", folder)
+    .get<vscode.DebugConfiguration[]>("configurations", [])
+    .find((config) => config.name === configName);
+  if (workspaceConfig) {
+    return workspaceConfig;
+  }
+
+  const fileWorkspacePath = await getFileWorkspace(file);
+  if (!fileWorkspacePath) {
+    return undefined;
+  }
+
+  const launchJsonPath = path.join(fileWorkspacePath, ".vscode", "launch.json");
+  try {
+    const launchJsonRaw = await vscode.workspace.fs.readFile(vscode.Uri.file(launchJsonPath));
+    const parsed = JSON.parse(Buffer.from(launchJsonRaw).toString("utf8")) as {
+      configurations?: vscode.DebugConfiguration[];
+    };
+    if (!Array.isArray(parsed.configurations)) {
+      return undefined;
+    }
+    return parsed.configurations.find((config) => config.name === configName);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Traverses from the file directory up to the workspace root,
  * loading and merging runSettings.json files along the way.

@@ -19,6 +19,7 @@ import {
 } from "../utils/runtime";
 import type { Severity } from "../utils/runtime";
 import {
+  getAttachDebugConfiguration,
   getFileRunSettings,
   openInNewEditor,
   openInTerminalTab,
@@ -1192,10 +1193,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         const folder =
           vscode.workspace.getWorkspaceFolder(vscode.Uri.file(this._currentFile)) ??
           vscode.workspace.workspaceFolders?.at(0);
-        const attachConfig = vscode.workspace
-          .getConfiguration("launch", folder)
-          .get<vscode.DebugConfiguration[]>("configurations", [])
-          .find((config) => config.name === ctx.languageSettings.debugAttachConfig);
+        const attachConfig = await getAttachDebugConfiguration(
+          ctx.languageSettings.debugAttachConfig,
+          this._currentFile
+        );
         if (!attachConfig) {
           const logger = getLogger("judge");
           logger.error(
