@@ -1206,6 +1206,15 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
             this._currentFile
           );
           resolve();
+
+          testcase.status = "NA";
+          super._postMessage({
+            type: "SET",
+            uuid,
+            property: "status",
+            value: "NA",
+          });
+
           return;
         }
 

@@ -10,6 +10,7 @@
 ### Fixed
 
 - Sometimes leading newlines would be inserted when switching back to a file with running sessions
+- Testcase stuck on compile error if debugging configuration not found
 
 # 4.0.3
 
