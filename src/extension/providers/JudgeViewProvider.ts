@@ -966,6 +966,22 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     super._postMessage({ type: "SETTINGS_TOGGLE" });
   }
 
+  openInteractorFile() {
+    if (!this._currentFile) {
+      return;
+    }
+    const settings = getFileRunSettings(this._currentFile);
+    if (!settings) {
+      return;
+    }
+
+    if (settings.interactorFile) {
+      void openOrCreateFile(settings.interactorFile);
+    } else {
+      void vscode.window.showWarningMessage("Interactor file not specified");
+    }
+  }
+
   // Background task management
   getBackgroundTasksForFile(file: string): string[] {
     const context = this._contexts.get(file);
@@ -1050,9 +1066,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         break;
       case "COMPARE":
         this._compare(uuid);
-        break;
-      case "OPEN_INTERACTOR":
-        this._openInteractor();
         break;
       case "TOGGLE_INTERACTIVE":
         this._toggleInteractive(uuid);
@@ -1643,22 +1656,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
 
     await vscode.env.clipboard.writeText(value);
-  }
-
-  private _openInteractor() {
-    if (!this._currentFile) {
-      return;
-    }
-    const settings = getFileRunSettings(this._currentFile);
-    if (!settings) {
-      return;
-    }
-
-    if (settings.interactorFile) {
-      void openOrCreateFile(settings.interactorFile);
-    } else {
-      void vscode.window.showWarningMessage("Interactor file not specified");
-    }
   }
 
   private _stdin({ uuid, data }: v.InferOutput<typeof StdinMessageSchema>) {

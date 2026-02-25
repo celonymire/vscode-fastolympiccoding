@@ -279,6 +279,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerTextEditorCommand("fastolympiccoding.openInteractorFile", () =>
+      judgeViewProvider.openInteractorFile()
+    )
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerTextEditorCommand(
       "fastolympiccoding.startStressTest",
       () => void stressViewProvider.run()

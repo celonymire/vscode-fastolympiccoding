@@ -10,6 +10,7 @@
 
 - Made text expansion editor's title human-friendly
 - Removed non-essential information pop-ups
+- Moved the "Open Interactor" button to the Judge's title section instead
 
 ### Fixed
 

@@ -13,7 +13,6 @@ export const ActionValues = [
   "COMPARE",
   "DEBUG",
   "REQUEST_DATA",
-  "OPEN_INTERACTOR",
   "TOGGLE_INTERACTIVE",
 ] as const;
 

@@ -55,8 +55,13 @@
           "when": "view == fastolympiccoding.judge"
         },
         {
-          "command": "fastolympiccoding.toggleJudgeSettings",
+          "command": "fastolympiccoding.openInteractorFile",
           "group": "navigation@7",
+          "when": "view == fastolympiccoding.judge"
+        },
+        {
+          "command": "fastolympiccoding.toggleJudgeSettings",
+          "group": "navigation@8",
           "when": "view == fastolympiccoding.judge"
         },
         {
@@ -382,6 +387,12 @@
         "title": "Toggle Judge Settings",
         "category": "Fast Olympic Coding",
         "icon": "$(gear)"
+      },
+      {
+        "command": "fastolympiccoding.openInteractorFile",
+        "title": "Open Interactor File",
+        "category": "Fast Olympic Coding",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "fastolympiccoding.toggleStressSettings",
