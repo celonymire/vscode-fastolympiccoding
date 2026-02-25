@@ -31,6 +31,10 @@ export const ProviderMessageTypeValues = [
   "TL",
   "ML",
   "COPY",
+  "REQUEST_TRIMMED_DATA",
+  "REQUEST_FULL_DATA",
+  "NEW_INTERACTOR_SECRET",
+  "REORDER",
 ] as const;
 
 export type ProviderMessageTypeValue = (typeof ProviderMessageTypeValues)[number];
@@ -105,6 +109,12 @@ export const NewInteractorSecretMessageSchema = v.object({
   data: v.string(),
 });
 
+export const ReorderMessageSchema = v.object({
+  type: v.literal("REORDER"),
+  sourceUuid: v.string(),
+  targetIndex: v.number(),
+});
+
 export const ProviderMessageSchema = v.union([
   LoadedMessageSchema,
   NextMessageSchema,
@@ -118,6 +128,7 @@ export const ProviderMessageSchema = v.union([
   RequestTrimmedDataMessageSchema,
   RequestFullDataMessageSchema,
   NewInteractorSecretMessageSchema,
+  ReorderMessageSchema,
 ]);
 
 export type ProviderMessage = v.InferOutput<typeof ProviderMessageSchema>;

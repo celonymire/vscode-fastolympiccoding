@@ -11,9 +11,12 @@
   interface Props {
     testcase: ITestcase;
     onprerun: () => void;
+    ondragstart?: (event: DragEvent) => void;
+    ondragend?: () => void;
+    ondragkeydown?: (event: KeyboardEvent) => void;
   }
 
-  let { testcase, onprerun }: Props = $props();
+  let { testcase, onprerun, ondragstart, ondragend, ondragkeydown }: Props = $props();
 
   function handleAction(action: ActionValue) {
     postProviderMessage({ type: "ACTION", uuid: testcase.uuid, action });
@@ -47,6 +50,18 @@
 
   function handleToggleInteractive() {
     handleAction("TOGGLE_INTERACTIVE");
+  }
+
+  function handleDragStart(event: DragEvent) {
+    ondragstart?.(event);
+  }
+
+  function handleDragEnd() {
+    ondragend?.();
+  }
+
+  function handleDragKeydown(event: KeyboardEvent) {
+    ondragkeydown?.(event);
   }
 
   // Derived values
@@ -140,6 +155,17 @@
     </div>
     <div class="testcase-buttons">
       <button
+        class="toolbar-icon toolbar-icon--drag"
+        data-tooltip="Drag to Reorder"
+        aria-label="Drag to Reorder"
+        draggable="true"
+        ondragstart={handleDragStart}
+        ondragend={handleDragEnd}
+        onkeydown={handleDragKeydown}
+      >
+        <div class="codicon codicon-gripper"></div>
+      </button>
+      <button
         class="toolbar-icon"
         data-tooltip="Run Testcase"
         aria-label="Run"
@@ -225,6 +251,17 @@
           <div class="codicon codicon-bolded {statusIcon}"></div>
         </button>
       </div>
+      <button
+        class="toolbar-icon toolbar-icon--drag"
+        data-tooltip="Drag to Reorder"
+        aria-label="Drag to Reorder"
+        draggable="true"
+        ondragstart={handleDragStart}
+        ondragend={handleDragEnd}
+        onkeydown={handleDragKeydown}
+      >
+        <div class="codicon codicon-gripper"></div>
+      </button>
     </div>
   </div>
 {:else if status === "RUNNING"}
@@ -264,6 +301,17 @@
       <div class="toolbar-icon toolbar-icon-exclude-highlight">
         <div class="codicon codicon-loading codicon-modifier-spin"></div>
       </div>
+      <button
+        class="toolbar-icon toolbar-icon--drag"
+        data-tooltip="Drag to Reorder"
+        aria-label="Drag to Reorder"
+        draggable="true"
+        ondragstart={handleDragStart}
+        ondragend={handleDragEnd}
+        onkeydown={handleDragKeydown}
+      >
+        <div class="codicon codicon-gripper"></div>
+      </button>
       <button
         class="toolbar-icon"
         data-tooltip="Stop Testcase"
@@ -337,6 +385,18 @@
   .toolbar-icon:not(.toolbar-icon-exclude-highlight):hover {
     cursor: pointer;
     background: var(--vscode-button-secondaryBackground);
+  }
+
+  .toolbar-icon--drag {
+    cursor: grab;
+  }
+
+  .toolbar-icon--drag:active {
+    cursor: grabbing;
+  }
+
+  .toolbar-icon--drag:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
   }
 
   .toolbar-icon:disabled:not(.toolbar-icon-exclude-highlight) {

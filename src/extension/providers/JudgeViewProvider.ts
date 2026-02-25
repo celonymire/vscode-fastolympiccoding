@@ -37,6 +37,7 @@ import {
   NewInteractorSecretMessageSchema,
   NextMessageSchema,
   ProviderMessageSchema,
+  ReorderMessageSchema,
   RequestFullDataMessageSchema,
   RequestTrimmedDataMessageSchema,
   SaveMessageSchema,
@@ -705,6 +706,9 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       case "NEW_INTERACTOR_SECRET":
         this._newInteractorSecret(msg);
         break;
+      case "REORDER":
+        this._reorder(msg);
+        break;
     }
   }
 
@@ -1098,6 +1102,27 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     this._runtime.state.push(newState);
 
     return newState.uuid;
+  }
+
+  private _reorder({ sourceUuid, targetIndex }: v.InferOutput<typeof ReorderMessageSchema>) {
+    const sourceIndex = this._runtime.state.findIndex((testcase) => testcase.uuid === sourceUuid);
+    if (sourceIndex === -1) {
+      return;
+    }
+
+    const maxIndex = this._runtime.state.length - 1;
+    const clampedTargetIndex = Math.max(0, Math.min(Math.trunc(targetIndex), maxIndex));
+    if (sourceIndex === clampedTargetIndex) {
+      return;
+    }
+
+    const [moved] = this._runtime.state.splice(sourceIndex, 1);
+    if (!moved) {
+      return;
+    }
+
+    this._runtime.state.splice(clampedTargetIndex, 0, moved);
+    this.requestSave();
   }
 
   private _createTestcaseState(mode: Mode, testcase: Partial<Testcase> | undefined, file: string) {
