@@ -79,13 +79,13 @@ jobs:
         if: matrix.container != 'node:lts-alpine'
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "lts/*"
           cache: npm
 
       - name: Install dependencies
         if: matrix.name != 'Alpine Linux ARM64'
         run: npm ci
-      
+
       - name: Build and Package (Alpine ARM64)
         if: matrix.name == 'Alpine Linux ARM64'
         run: |
