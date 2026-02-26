@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { deepMerge, getFileWorkspace } from "./utils/vscode";
+import { deepMerge, getFileRunSettings, getFileWorkspace } from "./utils/vscode";
 
 const gdbAttachDebugConfig = {
   debugCommand: [
@@ -384,6 +384,19 @@ function getActiveFileExtension(): string | null {
   return path.extname(activeEditor.document.fileName);
 }
 
+function getTargetFilePath(uri?: vscode.Uri): string | undefined {
+  if (uri?.scheme === "file") {
+    return uri.fsPath;
+  }
+
+  const activeEditor = vscode.window.activeTextEditor;
+  if (activeEditor?.document.uri.scheme === "file") {
+    return activeEditor.document.fileName;
+  }
+
+  return undefined;
+}
+
 export function registerRunSettingsCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -577,5 +590,60 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
         }
       })();
     })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "fastolympiccoding.showEvaluatedRunSettings",
+      async (uri?: vscode.Uri) => {
+        let file = getTargetFilePath(uri);
+        if (!file) {
+          const selectedFile = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            canSelectFolders: false,
+            canSelectFiles: true,
+            openLabel: "Select file",
+          });
+          file = selectedFile?.at(0)?.fsPath;
+        }
+
+        if (!file) {
+          return;
+        }
+
+        const runSettings = getFileRunSettings(file);
+        if (!runSettings) {
+          return;
+        }
+
+        const extension = path.extname(file);
+        const runSettingsRecord = runSettings as Record<string, unknown>;
+        const extensionRunSettings = runSettingsRecord[extension];
+        if (!extensionRunSettings) {
+          await vscode.window.showErrorMessage(
+            `No evaluated run settings found for extension \"${extension}\"`
+          );
+          return;
+        }
+
+        const filteredRunSettings = Object.fromEntries(
+          Object.entries(runSettingsRecord).filter(([key]) => {
+            if (key === "languageSettings") {
+              return false;
+            }
+            if (key === extension) {
+              return true;
+            }
+            return !key.startsWith(".");
+          })
+        );
+
+        const document = await vscode.workspace.openTextDocument({
+          language: "json",
+          content: JSON.stringify(filteredRunSettings, undefined, 2),
+        });
+        await vscode.window.showTextDocument(document);
+      }
+    )
   );
 }

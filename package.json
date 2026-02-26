@@ -297,6 +297,11 @@
         "category": "Fast Olympic Coding"
       },
       {
+        "command": "fastolympiccoding.showEvaluatedRunSettings",
+        "title": "Show Evaluated Run Settings",
+        "category": "Fast Olympic Coding"
+      },
+      {
         "command": "fastolympiccoding.compile",
         "title": "Compile",
         "category": "Fast Olympic Coding"

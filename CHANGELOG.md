@@ -5,6 +5,7 @@
 - Support for opened files without active workspaces
 - Icon to copy the text of the text boxes
 - Icon to drag testcase to new positions to be able to re-order them
+- Command to show the evaluated run settings for the current file
 
 ### Changed
 
