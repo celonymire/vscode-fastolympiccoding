@@ -621,7 +621,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
         const extensionRunSettings = runSettingsRecord[extension];
         if (!extensionRunSettings) {
           await vscode.window.showErrorMessage(
-            `No evaluated run settings found for extension \"${extension}\"`
+            `No evaluated run settings found for extension "${extension}"`
           );
           return;
         }
