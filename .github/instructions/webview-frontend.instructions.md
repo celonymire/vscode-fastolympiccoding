@@ -23,15 +23,15 @@ Receive messages in `App.svelte` via `window.addEventListener("message", ...)` i
 
 ### Judge View (`src/webview/judge/`)
 
-- **App.svelte**: Entry point, message handling, testcase list rendering
-- **TestcaseToolbar.svelte**: Status badges, action buttons (run, stop, debug, delete)
-- **Testcase.svelte**: Stdio textareas (stdin, stdout, stderr, acceptedStdout, interactorSecret)
+- **App.svelte**: Entry point, message handling, testcase list rendering, drag-and-drop reorder
+- **TestcaseToolbar.svelte**: Status badges, action buttons (run, stop, debug, delete, skip, drag handle)
+- **Testcase.svelte**: Stdio textareas (stdin, stdout, stderr, acceptedStdout, interactorSecret). Exports a `reset()` function called before re-running a testcase.
 
 Rendering pattern:
 
 ```svelte
 {#each testcases as testcase, index (testcase.uuid)}
-  <div class="testcase-item">
+  <div class="testcase-item" data-uuid={testcase.uuid}>
     <TestcaseToolbar {testcase} onprerun={() => handlePrerun(testcase.uuid)} />
     {#if testcase.status === "COMPILING" || testcase.skipped}
       <div class="half-opacity">
@@ -43,6 +43,15 @@ Rendering pattern:
   </div>
 {/each}
 ```
+
+### Drag-and-Drop Reorder (Judge)
+
+Testcases support reordering via drag-and-drop and keyboard (Alt+Arrow). The flow:
+
+1. `handleDragStart`: Sets `draggingUuid` and `dataTransfer`
+2. `handleDragOver`: Calculates drop position (before/after) relative to hovered testcase, updates `separatorIndex`
+3. `handleDrop`: Calls `reorderTestcasesLocally()` for immediate UI update, then sends `REORDER` message to extension
+4. Keyboard: Alt+ArrowUp/Down in `handleTestcaseKeydown` calls `commitReorder()` directly
 
 ### Stress View (`src/webview/stress/`)
 

@@ -68,6 +68,8 @@ The `handleMessage` method dispatches based on `msg.type`. Top-level message typ
 - `NEW_INTERACTOR_SECRET`: Generates a new interactor secret
 - `ACTION`: Calls `this._action(msg)` which dispatches based on the `action` field
 
+- `REORDER`: Reorders a testcase to a new index position
+
 Actions handled by `_action`:
 
 - `RUN`: Execute single testcase
@@ -79,8 +81,9 @@ Actions handled by `_action`:
 - `TOGGLE_SKIP`: Toggle skip flag
 - `COMPARE`: Open diff view
 - `DEBUG`: Run in debug mode
-- `OPEN_INTERACTOR`: Open interactor file
 - `TOGGLE_INTERACTIVE`: Toggle interactive mode
+
+> Note: `REQUEST_DATA` exists in `ActionValues` but is not handled in `_action`.
 
 ## Background Task Tracking
 
@@ -101,3 +104,17 @@ Actions handled by `_action`:
 - `addTestcaseToFile(file, testcase, timeLimit?, memoryLimit?)`: Adds testcase from external source (Competitive Companion)
 - `exportTestcasesForFile(file)`: Serializes and exports testcases for a given file
 - `appendImportedTestcasesForFile(file, rawData)`: Parses, imports, and appends testcases to a file
+
+## Public API Methods
+
+- `getActiveFilePath()`: Returns the currently active file path
+- `runAll()` / `debugAll()` / `stopAll()`: Batch operations on all testcases for the current file
+- `deleteAll(file?)`: Delete all testcases for a file (defaults to current file)
+- `toggleWebviewSettings()`: Sends `SETTINGS_TOGGLE` to toggle the webview settings panel
+- `openInteractorFile()`: Opens the interactor file from run settings (separate from action dispatch)
+
+## Debounced Save Pattern
+
+- `requestSave()`: Schedules a bulk save after 200ms (debounced)
+- `forceSave()`: Immediately saves all state, used during `onDispose()`
+- `_saveAllState()`: Writes all contexts to workspaceState in a single bulk update

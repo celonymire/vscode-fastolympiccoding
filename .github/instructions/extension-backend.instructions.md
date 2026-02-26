@@ -10,21 +10,40 @@ applyTo: "src/extension/**/*.ts"
 
 ## File Persistence Lifecycle
 
-Both Judge and Stress implement the same file-switching pattern:
+Both Judge and Stress implement the same file-switching pattern defined in `BaseViewProvider`:
 
 1. `loadCurrentFileData()` is the entry point when the webview becomes visible
 2. `_ensureActiveEditorListener()` subscribes to editor changes
-3. `_handleActiveEditorChange()` filters non-file schemes and calls `_switchToFile()`
-4. `_switchToFile(file)` loads persisted data from workspaceState, creates in-memory state, and rehydrates the webview
-5. `_switchToNoFile()` handles cases where no valid file is open
-6. `_rehydrateWebviewFromState()` sends current in-memory state to the webview
+3. `_handleActiveEditorChange()` filters non-file/untitled schemes and calls `_switchToFile()`
+4. `_syncOrSwitchToTargetFile()` decides between rehydrating the current file or switching:
+   - Same file with existing state → `_rehydrateWebviewFromState()`
+   - Different file → `_switchToFile(file)`
+   - No file → `_sendShowMessage(false)`
+5. `_switchToFile(file)` loads persisted data from workspaceState, creates in-memory state, and rehydrates the webview
+6. `_switchToNoFile()` handles cases where no valid file is open
+7. `_rehydrateWebviewFromState()` sends current in-memory state to the webview
+
+Subclasses must implement these abstract methods:
+
+- `_switchToFile(file)` / `_switchToNoFile()` / `_rehydrateWebviewFromState()` / `_sendShowMessage(visible)`
+- `_hasState()`: Override to control same-file rehydration (e.g., Judge checks `_runtime.state.length > 0`)
 
 When switching files, processes are **not** stopped. Instead, they are moved to the background (e.g., via `_moveCurrentStateToBackground`) and trigger `_onDidChangeBackgroundTasks`. The `PanelViewProvider` monitors and displays these running background tasks.
 
 ## Run Settings
 
-- **`runSettingsCommands.ts`**: Registers commands (`editRunSettings`, `resetRunSettings`) and provides default `languageTemplates`.
+- **`runSettingsCommands.ts`**: Registers commands (`editRunSettings`, `resetRunSettings`) and provides default `languageTemplates` for various languages (C++/GCC, C++/Clang, Python, PyPy, Java, Go, Rust, JavaScript, etc.).
 - **`vscode.ts`**: Provides `getFileRunSettings`, `initializeRunSettingsWatcher`, and `resolveVariables` to parse and resolve VS Code variables (like `${fileDirname}`) in commands.
+
+### Hierarchical Run Settings Merging
+
+`getFileRunSettings(file)` traverses from the file's directory up to the workspace root, loading and merging `runSettings.json` files along the way via `deepMerge()`. Closer-to-file settings override ancestor settings. The function also:
+
+- Applies defaults from the `runSettings.schema.json` schema file
+- Resolves VS Code variables via `resolveVariables()`
+- Validates via `RunSettingsSchema` (Valibot)
+- Caches loaded settings per directory; cache is invalidated by a `FileSystemWatcher`
+- Returns `FileRunSettings` which includes the merged settings plus the resolved `languageSettings` for the file's extension
 
 ## Extended VS Code Utilities (`vscode.ts`)
 
@@ -32,6 +51,9 @@ When switching files, processes are **not** stopped. Instead, they are moved to 
 - **`ReadonlyStringProvider`**: Manages the custom `fastolympiccoding` URI scheme for displaying read-only text documents.
 - **`openInNewEditor` / `openInTerminalTab`**: Helpers for displaying output. Terminal tabs support ANSI colors and native clickable file links.
 - **`openOrCreateFile`**: Helper for file management.
+- **`getFileWorkspace`**: Returns workspace folder or file directory. Used for run settings and CC target resolution.
+- **`getAttachDebugConfiguration`**: Looks up a named debug configuration from workspace `launch.json`.
+- **`showOpenRunSettingsErrorWindow` / `showAddLanguageSettingsError`**: Error UI helpers that offer quick-fix actions.
 
 ## UI/UX Features
 
@@ -58,6 +80,16 @@ Termination mapping helpers:
 - `severityNumberToInteractiveStatus()`: For interactive testcases with multiple processes
 
 Use `compile()` for compilation (caches by file checksum and compile command).
+
+### Debounced Saving
+
+JudgeViewProvider uses a debounced save pattern:
+
+- `requestSave()`: Schedules a bulk save after 200ms (resets timer on repeated calls)
+- `forceSave()`: Immediately saves all state (used during `onDispose()`)
+- `_saveAllState()`: Writes all contexts to workspaceState in a single bulk update
+
+StressViewProvider saves state synchronously via `_saveState(file)` after each operation.
 
 ## Debug Workflow
 

@@ -71,7 +71,8 @@ In interactive mode:
 - Generator produces a "secret" (like interactor in Judge)
 - The **Judge** acts as the interactor (running `interactorFile`), communicating back and forth with the **Solution** (the user's solution).
 - The **Generator** provides the initial secret to the Judge.
-- Uses `interactiveSecretPromise` to wait for webview to receive the secret
+- The secret is resolved immediately when the Generator emits stdout data (not when the webview receives it)
+- Uses `interactiveSecretPromise` to ensure the secret is sent before Solution stdout is forwarded to Judge
 
 ## State Persistence
 
@@ -100,8 +101,15 @@ The stdio content, status, state, and visibility are all persisted for each comp
 
 - `getRunningStressSessions()`: Returns array of file paths with running stress
 - `stopStressSession(file)`: Stop stress for a specific file
-- `stopAll()`: Stops all stress sessions across all files in the workspace
+- `stopAll()`: Stops all stress sessions across all files
 - `onDidChangeBackgroundTasks`: Event for PanelViewProvider
+
+## Public API Methods
+
+- `run()`: Public entry point, calls `_doRun`
+- `stop()`: Set stopFlag for the current file
+- `clear()`: Stop and clear all state, or set `clearFlag` if running
+- `toggleWebviewSettings()`: Sends `SETTINGS_TOGGLE` to toggle the webview settings panel
 
 ## Key Methods
 

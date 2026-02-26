@@ -114,6 +114,17 @@ Derive property types from schemas using TypeScript utility types. For example:
 export type TestcaseProperty = Exclude<keyof Testcase, "uuid">;
 ```
 
+## Data Schemas (`schemas.ts`)
+
+Key schemas for persisted and exchanged data:
+
+- **`TestcaseSchema`**: Judge testcase with `uuid`, stdio fields, `elapsed`, `memoryBytes`, `status`, `shown`, `toggled`, `skipped`, `mode`, `interactorSecret`. Uses `v.fallback()` for all fields.
+- **`StressDataSchema`**: Stress state snapshot with `stdin`, `stdout`, `stderr`, `status`, `state` (StateId), `shown`.
+- **`RunSettingsSchema`**: Validated via `v.pipe()` with `v.looseObject()` and `v.check()`. Known keys: `interactorFile`, `goodSolutionFile`, `generatorFile`. Additional properties must be file extensions (starting with `.`) and match `LanguageSettingsSchema`.
+- **`LanguageSettingsSchema`**: Per-language config with optional `compileCommand`, `runCommand`, `currentWorkingDirectory`, `debugCommand`, `debugAttachConfig`.
+- **`ProblemSchema`**: Competitive Companion problem data with `name`, `group`, `url`, `tests`, `timeLimit`, `memoryLimit`, `interactive`, `batch`, `input`, `output`.
+- **`TestSchema`**: Simple `{ input, output }` for CC test pairs.
+
 ## Append-Only Rule
 
 When adding new enum values or message types, **append to the end** of arrays. Never rename or reorder existing values—they may be persisted in workspaceState.
