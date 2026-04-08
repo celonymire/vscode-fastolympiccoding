@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
     "strict": true,
-    "verbatimModuleSyntax": true,
     "outDir": "./dist/types",
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "verbatimModuleSyntax": true
   },
   "references": [
     {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ClassValue, HTMLButtonAttributes } from "svelte/elements";
+  import type { ClassValue } from "svelte/elements";
 
   import Button from "./Button.svelte";
   import { onMount } from "svelte";
@@ -9,7 +9,7 @@
     onclick: (event: Event) => void;
   }
 
-  interface Props extends HTMLButtonAttributes {
+  interface Props {
     text?: string;
     codicon?: string;
     class?: ClassValue;
@@ -17,7 +17,7 @@
     options: DropdownItem[];
   }
 
-  let { text, codicon, class: extraClass, onclick, options, ...rest }: Props = $props();
+  let { text, codicon, class: extraClass, onclick, options }: Props = $props();
   let showDropdownMenu = $state(false);
 
   onMount(() => {
@@ -53,7 +53,6 @@
       onclick?.(event);
       showDropdownMenu = false;
     }}
-    {...rest}
   />
   <div class="dropdown-separator"></div>
   <Button

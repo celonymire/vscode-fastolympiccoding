@@ -1,16 +1,17 @@
 <script lang="ts">
-  import type { ClassValue, HTMLButtonAttributes } from "svelte/elements";
+  import type { ClassValue } from "svelte/elements";
 
-  interface Props extends HTMLButtonAttributes {
+  interface Props {
     text?: string;
     codicon?: string;
     class?: ClassValue;
+    onclick?: (event: MouseEvent) => void;
   }
 
-  let { text, codicon, class: extraClass, ...rest }: Props = $props();
+  let { text, codicon, class: extraClass, onclick }: Props = $props();
 </script>
 
-<button type="button" class={["text-button", extraClass]} {...rest}>
+<button type="button" class={["text-button", extraClass]} {onclick}>
   {#if codicon}
     <div class={"codicon " + codicon}></div>
   {/if}

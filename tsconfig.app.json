@@ -5,7 +5,8 @@
     "moduleResolution": "Bundler",
     "types": ["vscode-webview"],
     "target": "ESNext",
-    "lib": ["ESNext", "DOM"]
+    "lib": ["ESNext", "DOM"],
+    "verbatimModuleSyntax": true
   },
   "extends": "./tsconfig.json",
   "include": ["src/webview/**/*.ts", "src/webview/**/*.svelte", "src/shared/**/*.ts"]
