@@ -81,6 +81,7 @@ export class TextHandler {
 
   private _appendPendingCharacter(char: string) {
     if (
+      this._finalWritten ||
       this._shortDataLength >= TextHandler._maxDisplayCharacters ||
       this._newlineCount >= TextHandler._maxDisplayLines
     ) {
@@ -92,7 +93,7 @@ export class TextHandler {
   }
 
   private _sendPendingIfNeeded(last: boolean) {
-    if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
+    if (this._finalWritten || this._shortDataLength > TextHandler._maxDisplayCharacters) {
       return;
     }
 
@@ -125,10 +126,6 @@ export class TextHandler {
   }
 
   write(_data: string, mode: WriteMode) {
-    if (this._finalWritten) {
-      return;
-    }
-
     const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
 
     // Update the "full" version
