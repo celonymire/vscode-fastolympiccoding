@@ -81,7 +81,6 @@ export class TextHandler {
 
   private _appendPendingCharacter(char: string) {
     if (
-      this._finalWritten ||
       this._shortDataLength >= TextHandler._maxDisplayCharacters ||
       this._newlineCount >= TextHandler._maxDisplayLines
     ) {
@@ -93,7 +92,7 @@ export class TextHandler {
   }
 
   private _sendPendingIfNeeded(last: boolean) {
-    if (this._finalWritten || this._shortDataLength > TextHandler._maxDisplayCharacters) {
+    if (this._shortDataLength > TextHandler._maxDisplayCharacters) {
       return;
     }
 
@@ -109,7 +108,6 @@ export class TextHandler {
     ) {
       this._pending += "...";
       this._shortDataLength = TextHandler._maxDisplayCharacters + 1; // prevent further appends
-      this._finalWritten = true;
     }
     if (this._callback) {
       this._callback(this._pending);
@@ -126,6 +124,10 @@ export class TextHandler {
   }
 
   write(_data: string, mode: WriteMode) {
+    if (this._finalWritten) {
+      return;
+    }
+
     const data = _data.replace(/\r\n/g, "\n"); // just avoid \r\n entirely
 
     // Update the "full" version
@@ -148,9 +150,12 @@ export class TextHandler {
       }
     }
 
-    if (mode === "final" && this._data.at(-1) !== "\n") {
-      this._appendPendingCharacter("\n");
-      this._data += "\n";
+    if (mode === "final") {
+      this._finalWritten = true;
+      if (this._data.at(-1) !== "\n") {
+        this._appendPendingCharacter("\n");
+        this._data += "\n";
+      }
     }
     this._sendPendingIfNeeded(mode === "force" || mode === "final");
   }
