@@ -1,3 +1,9 @@
+# 4.0.5
+
+### Fixed
+
+- Additional text not being written to testcase after exceeding configured display limits
+
 # 4.0.4
 
 ### Added
