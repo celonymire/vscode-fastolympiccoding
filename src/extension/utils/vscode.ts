@@ -192,6 +192,9 @@ export async function getDefaultBuildTaskName() {
 export class ReadonlyStringProvider implements vscode.TextDocumentContentProvider {
   static SCHEME = "fastolympiccoding";
   private static _contents = new Map<string, string>();
+  private static _onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
+
+  readonly onDidChange = ReadonlyStringProvider._onDidChangeEmitter.event;
 
   private static _buildId(uuid: string, title: string): string {
     return `${uuid}:${title}`;
@@ -199,12 +202,21 @@ export class ReadonlyStringProvider implements vscode.TextDocumentContentProvide
 
   static createUri(content: string, title: string, uuid: string): vscode.Uri {
     const id = this._buildId(uuid, title);
-    this._contents.set(id, content);
-    return vscode.Uri.from({
+    const oldContent = this._contents.get(id);
+
+    const uri = vscode.Uri.from({
       scheme: this.SCHEME,
       path: `${title}`,
       query: `id=${encodeURIComponent(id)}`,
     });
+
+    this._contents.set(id, content);
+
+    if (oldContent !== undefined && oldContent !== content) {
+      this._onDidChangeEmitter.fire(uri);
+    }
+
+    return uri;
   }
 
   static cleanup(uri: vscode.Uri): void {

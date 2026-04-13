@@ -3,6 +3,7 @@
 ### Fixed
 
 - Additional text not being written to testcase after exceeding configured display limits
+- Readonly editors not updating to new content
 
 # 4.0.4
 
