@@ -127,8 +127,10 @@ function registerDocumentContentProviders(context: vscode.ExtensionContext): voi
   // Clean up the content map when documents are closed to prevent memory leaks
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument((document) => {
-      ReadonlyStringProvider.cleanup(document.uri);
-      // Also clean up template ranges for closed documents
+      if (document.uri.scheme === ReadonlyStringProvider.SCHEME) {
+        ReadonlyStringProvider.cleanup(document.uri);
+      }
+
       templateRangesByUri.delete(document.uri.toString());
     })
   );
