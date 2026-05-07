@@ -1,3 +1,9 @@
+# 4.0.6
+
+### Fixed
+
+- [Regression] Stress tester status not being preserved when adding to judge
+
 # 4.0.5
 
 ### Fixed

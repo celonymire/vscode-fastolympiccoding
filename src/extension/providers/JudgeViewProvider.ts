@@ -254,11 +254,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
     if (file === this._currentFile) {
       for (const testcase of importedTestcases) {
-        const uuid = this._addTestcase(testcase.mode, testcase);
-        const state = this._findTestcase(uuid);
-        if (state) {
-          this._syncTestcaseState(state);
-        }
+        const state = this._addTestcase(testcase.mode, testcase);
+        this._syncTestcaseState(state);
       }
       this.requestSave();
       return importedTestcases.length;
@@ -882,7 +879,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         });
       }
 
-      this._addTestcase(testcase.mode, testcase);
+      const state = this._addTestcase(testcase.mode, testcase);
+      this._syncTestcaseState(state);
       this.requestSave();
     } else if (this._contexts.has(file)) {
       const ctx = this._contexts.get(file)!;
@@ -1035,7 +1033,8 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   private _nextTestcase({ mode }: v.InferOutput<typeof NextMessageSchema>) {
-    void this._run(this._addTestcase(mode, undefined), true);
+    const testcase = this._addTestcase(mode, undefined);
+    void this._run(testcase.uuid, true);
   }
 
   private _action({ uuid, action }: v.InferOutput<typeof ActionMessageSchema>) {
@@ -1114,7 +1113,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const newState = this._createTestcaseState(mode, testcase, this._currentFile!);
     this._runtime.state.push(newState);
 
-    return newState.uuid;
+    return newState;
   }
 
   private _reorder({ sourceUuid, targetIndex }: v.InferOutput<typeof ReorderMessageSchema>) {
