@@ -160,7 +160,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   onShow() {
     this._ensureActiveEditorListener();
-    this._syncOrSwitchToTargetFile();
+    this._syncOrSwitchToCurrentFile();
   }
 
   constructor(

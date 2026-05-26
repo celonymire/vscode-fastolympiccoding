@@ -15,7 +15,7 @@ Both Judge and Stress implement the same file-switching pattern defined in `Base
 1. `loadCurrentFileData()` is the entry point when the webview becomes visible
 2. `_ensureActiveEditorListener()` subscribes to editor changes
 3. `_handleActiveEditorChange()` filters non-file/untitled schemes and calls `_switchToFile()`
-4. `_syncOrSwitchToTargetFile()` decides between rehydrating the current file or switching:
+4. `_syncOrSwitchToCurrentFile()` decides between rehydrating the current file or switching:
    - Same file with existing state → `_rehydrateWebviewFromState()`
    - Different file → `_switchToFile(file)`
    - No file → `_sendShowMessage(false)`

@@ -18,8 +18,7 @@ export default abstract class BaseViewProvider<
   Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>,
   WebviewMessageType,
 >
-  implements vscode.WebviewViewProvider
-{
+  implements vscode.WebviewViewProvider {
   private _webview?: vscode.Webview = undefined;
   private _onDidChangeActiveTextEditorDisposable?: vscode.Disposable;
   protected _currentFile?: string;
@@ -72,7 +71,7 @@ export default abstract class BaseViewProvider<
 
   loadCurrentFileData(): void {
     this._ensureActiveEditorListener();
-    this._syncOrSwitchToTargetFile();
+    this._syncOrSwitchToCurrentFile();
   }
 
   protected _ensureActiveEditorListener(): void {
@@ -105,12 +104,12 @@ export default abstract class BaseViewProvider<
     }
   }
 
-  protected _getTargetFile(): string | undefined {
+  getCurrentFile(): string | undefined {
     return vscode.window.activeTextEditor?.document.fileName ?? this._currentFile;
   }
 
-  protected _syncOrSwitchToTargetFile(): void {
-    const file = this._getTargetFile();
+  protected _syncOrSwitchToCurrentFile(): void {
+    const file = this.getCurrentFile();
     if (!file) {
       this._sendShowMessage(false);
       return;

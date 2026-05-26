@@ -384,7 +384,7 @@ function getActiveFileExtension(): string | null {
   return path.extname(activeEditor.document.fileName);
 }
 
-function getTargetFilePath(uri?: vscode.Uri): string | undefined {
+function getCurrentFilePath(uri?: vscode.Uri): string | undefined {
   if (uri?.scheme === "file") {
     return uri.fsPath;
   }
@@ -596,7 +596,7 @@ export function registerRunSettingsCommands(context: vscode.ExtensionContext): v
     vscode.commands.registerCommand(
       "fastolympiccoding.showEvaluatedRunSettings",
       async (uri?: vscode.Uri) => {
-        let file = getTargetFilePath(uri);
+        let file = getCurrentFilePath(uri);
         if (!file) {
           const selectedFile = await vscode.window.showOpenDialog({
             canSelectMany: false,

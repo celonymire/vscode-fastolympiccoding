@@ -207,7 +207,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("fastolympiccoding.importTestcases", async () => {
-      const file = judgeViewProvider.getActiveFilePath();
+      const file = judgeViewProvider.getCurrentFile();
       if (!file) {
         await vscode.window.showWarningMessage("Open a file in Judge before importing testcases");
         return;
@@ -245,7 +245,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("fastolympiccoding.exportTestcases", async () => {
-      const file = judgeViewProvider.getActiveFilePath();
+      const file = judgeViewProvider.getCurrentFile();
       if (!file) {
         await vscode.window.showWarningMessage("Open a file in Judge before exporting testcases");
         return;

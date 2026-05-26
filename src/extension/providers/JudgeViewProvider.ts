@@ -202,10 +202,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     return context;
   }
 
-  public getActiveFilePath(): string | undefined {
-    return this._currentFile;
-  }
-
   public exportTestcasesForFile(file: string): ExportTestcase[] {
     if (file === this._currentFile) {
       return this._serializeStateForExport(
@@ -730,7 +726,7 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
 
   onShow() {
     this._ensureActiveEditorListener();
-    this._syncOrSwitchToTargetFile();
+    this._syncOrSwitchToCurrentFile();
   }
 
   constructor(context: vscode.ExtensionContext) {
@@ -932,18 +928,18 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
   }
 
   deleteAll(file?: string) {
-    const targetFile = file ?? this._currentFile;
-    if (!targetFile) {
+    const currentFile = file ?? this._currentFile;
+    if (!currentFile) {
       return;
     }
 
-    if (targetFile === this._currentFile) {
+    if (currentFile === this._currentFile) {
       const uuids = [...this._runtime.state.map((testcase) => testcase.uuid)];
       for (const uuid of uuids) {
         this._delete(uuid);
       }
-    } else if (this._contexts.has(targetFile)) {
-      const ctx = this._contexts.get(targetFile)!;
+    } else if (this._contexts.has(currentFile)) {
+      const ctx = this._contexts.get(currentFile)!;
       for (const testcase of ctx.state) {
         testcase.process.stop();
         testcase.interactorProcess.stop();
@@ -953,10 +949,10 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       ctx.state.length = 0;
       this.requestSave();
     } else {
-      const storageData = super.readStorage()[targetFile];
+      const storageData = super.readStorage()[currentFile];
       const fileData = v.parse(FileDataSchema, storageData ?? {});
       fileData.testcases.length = 0;
-      void super.writeStorage(targetFile, fileData);
+      void super.writeStorage(currentFile, fileData);
     }
   }
 
