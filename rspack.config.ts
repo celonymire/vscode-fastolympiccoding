@@ -71,7 +71,9 @@ const extensionConfig = (isProd: boolean, mode: Configuration["mode"]): Configur
   output: {
     path: path.resolve("./dist"),
     filename: "[name].js",
-    libraryTarget: "commonjs2",
+    library: {
+      type: "commonjs2"
+    },
   },
   externals: {
     vscode: "commonjs vscode",
@@ -148,6 +150,10 @@ const webviewsConfig = (isProd: boolean, mode: Configuration["mode"]): Configura
             },
           },
         ],
+      },
+      {
+        test: /\.css$/,
+        type: "css",
       },
       {
         test: /\.ts$/,
