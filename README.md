@@ -1,5 +1,3 @@
-<!-- <h1 align="center">⚡ Fast Olympic Coding ⚡</h1> -->
-
 ![Testcases Gif](media/banner.png)
 
 <p align="center">

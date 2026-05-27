@@ -523,7 +523,6 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         ctx.interactorSecretResolver = resolve;
       });
 
-      // Determine per-component enforcement of testcase limits
       const judgeTimeArg = ctx.enforceJudgeTime ? testcaseTimeLimit : 0;
       const judgeMemArg = ctx.enforceJudgeMemory ? testcaseMemoryLimit : 0;
       const genTimeArg = ctx.enforceGeneratorTime ? testcaseTimeLimit : 0;
