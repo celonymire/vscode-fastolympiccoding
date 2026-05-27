@@ -38,6 +38,12 @@ import { StressDataSchema, type StateId } from "../../shared/schemas";
 
 const FileDataSchema = v.object({
   interactiveMode: v.fallback(v.boolean(), false),
+  enforceGeneratorTime: v.fallback(v.boolean(), true),
+  enforceSolutionTime: v.fallback(v.boolean(), true),
+  enforceJudgeTime: v.fallback(v.boolean(), true),
+  enforceGeneratorMemory: v.fallback(v.boolean(), true),
+  enforceSolutionMemory: v.fallback(v.boolean(), true),
+  enforceJudgeMemory: v.fallback(v.boolean(), true),
   states: v.fallback(v.array(StressDataSchema), []),
 });
 
@@ -70,6 +76,12 @@ interface StressContext {
   clearFlag: boolean;
   running: boolean;
   interactiveMode: boolean;
+  enforceGeneratorTime: boolean;
+  enforceSolutionTime: boolean;
+  enforceJudgeTime: boolean;
+  enforceGeneratorMemory: boolean;
+  enforceSolutionMemory: boolean;
+  enforceJudgeMemory: boolean;
   interactiveSecretPromise: Promise<void> | null;
   interactorSecretResolver?: () => void;
   donePromise: Promise<void> | null;
@@ -224,6 +236,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       combinedInteractiveStderr: "",
       combinedInteractiveStdout: "",
       interactiveMode: persistedState.interactiveMode,
+      enforceGeneratorTime: persistedState.enforceGeneratorTime,
+      enforceSolutionTime: persistedState.enforceSolutionTime,
+      enforceJudgeTime: persistedState.enforceJudgeTime,
+      enforceGeneratorMemory: persistedState.enforceGeneratorMemory,
+      enforceSolutionMemory: persistedState.enforceSolutionMemory,
+      enforceJudgeMemory: persistedState.enforceJudgeMemory,
       interactiveSecretPromise: null,
       donePromise: null,
     };
@@ -270,7 +288,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const ctx = this._currentContext;
     if (!ctx) return;
 
-    super._postMessage({ type: "INIT", interactiveMode: ctx.interactiveMode });
+    super._postMessage({
+      type: "INIT",
+      interactiveMode: ctx.interactiveMode,
+      enforceGeneratorTime: ctx.enforceGeneratorTime,
+      enforceSolutionTime: ctx.enforceSolutionTime,
+      enforceJudgeTime: ctx.enforceJudgeTime,
+      enforceGeneratorMemory: ctx.enforceGeneratorMemory,
+      enforceSolutionMemory: ctx.enforceSolutionMemory,
+      enforceJudgeMemory: ctx.enforceJudgeMemory,
+    });
 
     const resendTruncatedData = (handler: TextHandler) => {
       const data = handler.data;
@@ -496,11 +523,19 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
         ctx.interactorSecretResolver = resolve;
       });
 
+      // Determine per-component enforcement of testcase limits
+      const judgeTimeArg = ctx.enforceJudgeTime ? testcaseTimeLimit : 0;
+      const judgeMemArg = ctx.enforceJudgeMemory ? testcaseMemoryLimit : 0;
+      const genTimeArg = ctx.enforceGeneratorTime ? testcaseTimeLimit : 0;
+      const genMemArg = ctx.enforceGeneratorMemory ? testcaseMemoryLimit : 0;
+      const solTimeArg = ctx.enforceSolutionTime ? testcaseTimeLimit : 0;
+      const solMemArg = ctx.enforceSolutionMemory ? testcaseMemoryLimit : 0;
+
       setupProcess(judgeState);
       judgeState.process.run(
         judgeSettings.languageSettings.runCommand,
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
+        judgeTimeArg,
+        judgeMemArg,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
 
@@ -510,16 +545,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
       });
       generatorState.process.run(
         generatorSettings.languageSettings.runCommand,
-        0,
-        0,
+        genTimeArg,
+        genMemArg,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
 
       setupProcess(solutionState);
       solutionState.process.run(
         solutionSettings.languageSettings.runCommand,
-        testcaseTimeLimit,
-        testcaseMemoryLimit,
+        solTimeArg,
+        solMemArg,
         solutionSettings.languageSettings.currentWorkingDirectory
       );
 
@@ -786,13 +821,27 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     }
   }
 
-  _save({ interactiveMode }: v.InferOutput<typeof SaveMessageSchema>) {
+  _save({
+    interactiveMode,
+    enforceGeneratorTime,
+    enforceSolutionTime,
+    enforceJudgeTime,
+    enforceGeneratorMemory,
+    enforceSolutionMemory,
+    enforceJudgeMemory,
+  }: v.InferOutput<typeof SaveMessageSchema>) {
     const ctx = this._currentContext;
     if (!ctx) {
       return;
     }
 
     ctx.interactiveMode = interactiveMode;
+    ctx.enforceGeneratorTime = enforceGeneratorTime;
+    ctx.enforceSolutionTime = enforceSolutionTime;
+    ctx.enforceJudgeTime = enforceJudgeTime;
+    ctx.enforceGeneratorMemory = enforceGeneratorMemory;
+    ctx.enforceSolutionMemory = enforceSolutionMemory;
+    ctx.enforceJudgeMemory = enforceJudgeMemory;
     if (this._currentFile) {
       void this._saveState(this._currentFile);
     }
@@ -835,7 +884,16 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     ctx.interactiveMode = !ctx.interactiveMode;
 
     // Notify webview
-    super._postMessage({ type: "INIT", interactiveMode: ctx.interactiveMode });
+    super._postMessage({
+      type: "INIT",
+      interactiveMode: ctx.interactiveMode,
+      enforceGeneratorTime: ctx.enforceGeneratorTime,
+      enforceSolutionTime: ctx.enforceSolutionTime,
+      enforceJudgeTime: ctx.enforceJudgeTime,
+      enforceGeneratorMemory: ctx.enforceGeneratorMemory,
+      enforceSolutionMemory: ctx.enforceSolutionMemory,
+      enforceJudgeMemory: ctx.enforceJudgeMemory,
+    });
 
     if (this._currentFile) {
       void this._saveState(this._currentFile);
@@ -851,6 +909,12 @@ export default class extends BaseViewProvider<typeof ProviderMessageSchema, Webv
     const defaultData = v.parse(FileDataSchema, {});
     const data: FileData = {
       interactiveMode: ctx.interactiveMode,
+      enforceGeneratorTime: ctx.enforceGeneratorTime,
+      enforceSolutionTime: ctx.enforceSolutionTime,
+      enforceJudgeTime: ctx.enforceJudgeTime,
+      enforceGeneratorMemory: ctx.enforceGeneratorMemory,
+      enforceSolutionMemory: ctx.enforceSolutionMemory,
+      enforceJudgeMemory: ctx.enforceJudgeMemory,
       states: [],
     };
     for (const state of ctx.state) {

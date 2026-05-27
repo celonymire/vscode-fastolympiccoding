@@ -1,5 +1,9 @@
 # 4.0.6
 
+### Added
+
+- Option to toggle time and memory limit enforcement for Generator, Solution, and Judge individually in Stress Tester.
+
 ### Fixed
 
 - [Regression] Stress tester status not being preserved when adding to judge

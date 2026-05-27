@@ -19,6 +19,12 @@ export const WebviewMessageTypeSchema = v.picklist(WebviewMessageTypeValues);
 export const InitMessageSchema = v.object({
   type: v.literal("INIT"),
   interactiveMode: v.boolean(),
+  enforceGeneratorTime: v.boolean(),
+  enforceSolutionTime: v.boolean(),
+  enforceJudgeTime: v.boolean(),
+  enforceGeneratorMemory: v.boolean(),
+  enforceSolutionMemory: v.boolean(),
+  enforceJudgeMemory: v.boolean(),
 });
 
 export const StatusMessageSchema = v.object({
@@ -126,6 +132,12 @@ export const ResetMessageSchema = v.object({
 export const SaveMessageSchema = v.object({
   type: v.literal("SAVE"),
   interactiveMode: v.boolean(),
+  enforceGeneratorTime: v.boolean(),
+  enforceSolutionTime: v.boolean(),
+  enforceJudgeTime: v.boolean(),
+  enforceGeneratorMemory: v.boolean(),
+  enforceSolutionMemory: v.boolean(),
+  enforceJudgeMemory: v.boolean(),
 });
 
 export const ToggleVisibilityMessageSchema = v.object({

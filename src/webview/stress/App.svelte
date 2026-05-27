@@ -50,6 +50,12 @@
   let showView = $state(true);
   let showSettings = $state(false);
   let interactiveMode = $state(false);
+  let enforceGeneratorTime = $state(true);
+  let enforceSolutionTime = $state(true);
+  let enforceJudgeTime = $state(true);
+  let enforceGeneratorMemory = $state(true);
+  let enforceSolutionMemory = $state(true);
+  let enforceJudgeMemory = $state(true);
 
   function findStateIndex(id: StateId): number {
     return states.findIndex((item) => item.id === id);
@@ -76,8 +82,22 @@
     postProviderMessage({ type: "OPEN", id });
   }
 
-  function handleInit({ interactiveMode: mode }: v.InferOutput<typeof InitMessageSchema>) {
+  function handleInit({
+    interactiveMode: mode,
+    enforceGeneratorTime: eGT,
+    enforceSolutionTime: eST,
+    enforceJudgeTime: eJT,
+    enforceGeneratorMemory: eGM,
+    enforceSolutionMemory: eSM,
+    enforceJudgeMemory: eJM,
+  }: v.InferOutput<typeof InitMessageSchema>) {
     interactiveMode = mode;
+    enforceGeneratorTime = eGT;
+    enforceSolutionTime = eST;
+    enforceJudgeTime = eJT;
+    enforceGeneratorMemory = eGM;
+    enforceSolutionMemory = eSM;
+    enforceJudgeMemory = eJM;
   }
 
   function handleStatus({ id, status }: v.InferOutput<typeof StatusMessageSchema>) {
@@ -142,9 +162,48 @@
     interactiveMode = target.checked;
   }
 
+  function handleEnforceGeneratorTimeChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    enforceGeneratorTime = target.checked;
+  }
+
+  function handleEnforceSolutionTimeChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    enforceSolutionTime = target.checked;
+  }
+
+  function handleEnforceJudgeTimeChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    enforceJudgeTime = target.checked;
+  }
+
+  function handleEnforceGeneratorMemoryChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    enforceGeneratorMemory = target.checked;
+  }
+
+  function handleEnforceSolutionMemoryChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    enforceSolutionMemory = target.checked;
+  }
+
+  function handleEnforceJudgeMemoryChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    enforceJudgeMemory = target.checked;
+  }
+
   function handleSaveSettings() {
     handleSettingsToggle();
-    postProviderMessage({ type: "SAVE", interactiveMode });
+    postProviderMessage({
+      type: "SAVE",
+      interactiveMode,
+      enforceGeneratorTime,
+      enforceSolutionTime,
+      enforceJudgeTime,
+      enforceGeneratorMemory,
+      enforceSolutionMemory,
+      enforceJudgeMemory,
+    });
   }
 
   onMount(() => {
@@ -202,6 +261,83 @@
         <p class="settings-additional-info">
           Enable interactive mode for stress testing with interactive problems.
         </p>
+        <div class="settings-group">
+          <h4>Time Enforcement</h4>
+          <div class="checkbox-group">
+            <input
+              id="enforce-gen-time"
+              type="checkbox"
+              checked={enforceGeneratorTime}
+              onchange={handleEnforceGeneratorTimeChange}
+              class="settings-checkbox"
+            />
+            <label for="enforce-gen-time" class="settings-checkbox-label"
+              >Enforce Generator Time Limit</label
+            >
+          </div>
+          <div class="checkbox-group">
+            <input
+              id="enforce-sol-time"
+              type="checkbox"
+              checked={enforceSolutionTime}
+              onchange={handleEnforceSolutionTimeChange}
+              class="settings-checkbox"
+            />
+            <label for="enforce-sol-time" class="settings-checkbox-label"
+              >Enforce Solution Time Limit</label
+            >
+          </div>
+          <div class="checkbox-group">
+            <input
+              id="enforce-judge-time"
+              type="checkbox"
+              checked={enforceJudgeTime}
+              onchange={handleEnforceJudgeTimeChange}
+              class="settings-checkbox"
+            />
+            <label for="enforce-judge-time" class="settings-checkbox-label"
+              >Enforce Judge Time Limit</label
+            >
+          </div>
+
+          <h4>Memory Enforcement</h4>
+          <div class="checkbox-group">
+            <input
+              id="enforce-gen-mem"
+              type="checkbox"
+              checked={enforceGeneratorMemory}
+              onchange={handleEnforceGeneratorMemoryChange}
+              class="settings-checkbox"
+            />
+            <label for="enforce-gen-mem" class="settings-checkbox-label"
+              >Enforce Generator Memory Limit</label
+            >
+          </div>
+          <div class="checkbox-group">
+            <input
+              id="enforce-sol-mem"
+              type="checkbox"
+              checked={enforceSolutionMemory}
+              onchange={handleEnforceSolutionMemoryChange}
+              class="settings-checkbox"
+            />
+            <label for="enforce-sol-mem" class="settings-checkbox-label"
+              >Enforce Solution Memory Limit</label
+            >
+          </div>
+          <div class="checkbox-group">
+            <input
+              id="enforce-judge-mem"
+              type="checkbox"
+              checked={enforceJudgeMemory}
+              onchange={handleEnforceJudgeMemoryChange}
+              class="settings-checkbox"
+            />
+            <label for="enforce-judge-mem" class="settings-checkbox-label"
+              >Enforce Judge Memory Limit</label
+            >
+          </div>
+        </div>
       </div>
       <Button text="Save" codicon="codicon-save" onclick={handleSaveSettings} />
     {:else}
@@ -329,6 +465,7 @@
     cursor: pointer;
     font-size: 13px;
     user-select: none;
+    margin-left: 6px;
   }
 
   .settings-additional-info {
@@ -336,6 +473,17 @@
     font-size: 12px;
     margin-top: 2px;
     margin-bottom: 16px;
+  }
+
+  .settings-group h4 {
+    margin: 8px 0 6px;
+    font-size: 13px;
+    color: var(--vscode-foreground);
+    font-weight: 600;
+  }
+
+  .settings-group .checkbox-group {
+    margin-bottom: 6px;
   }
 
   .half-opacity {
