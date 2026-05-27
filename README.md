@@ -1,4 +1,4 @@
-<h1 align="center">⚡ Fast Olympic Coding ⚡</h1>
+<!-- <h1 align="center">⚡ Fast Olympic Coding ⚡</h1> -->
 
 ![Testcases Gif](media/banner.png)
 
@@ -21,12 +21,12 @@
 
 <p align="center"><i>Once a mighty Competitive Programming plugin... Reborn with the powers of VSCode!</i></p>
 
-## ⚡ Overview
+## ⚡ Fast Olympic Coding - Overview
 
 - [📜](#-judge) Minimal and **adaptive** UI for maximized functionality and view utilization
 - [🪲](#-debugging) Extension agnostic configuration for VSCode debugging UX with real-time inputs
-- [🐞](#-stress-tester) Built-in stress tester as a first-class feature
-- [🗨️](#️-interactive-mode) First-class support for interactive problems within **both** [Judge](#-judge) and [Stress Tester](#-stress-tester)!
+- [🐞](#-stress-tester) Built-in utility to test and debug your code efficiently
+- [🗨️](#️-interactive-mode) Interactive problem type within **both** [Judge](#-judge) and [Stress Tester](#-stress-tester)!
 - [🛜](#-competitive-companion) Support for [Competitive Companion](https://github.com/jmerle/competitive-companion) to gather problem inputs easily
 - [👜](#-inserting-prewritten-code) Insert file templates without leaving your code
 - ⚡ **_BLAZINGLY FAST!_** Asynchronous design + optimizations = **99%** spam proof!
